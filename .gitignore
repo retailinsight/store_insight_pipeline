@@ -46,3 +46,9 @@ logs/
 .coverage
 htmlcov/
 .pytest_cache/
+
+# node
+ui/node_modules/
+ui/.env
+api/node_modules/
+api/.env
