@@ -17,7 +17,7 @@ Public API
     extract_facts(signal, raw_result, projection_weeks) -> dict
 """
 
-from store_insight.alerts.stages._2_facts.config import GathererInfo
+from store_insight.pipeline.stages._2_facts.config import GathererInfo
 
 
 METADATA = GathererInfo(

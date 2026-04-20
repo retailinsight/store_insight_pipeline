@@ -37,8 +37,8 @@ from pathlib import Path
 
 import yaml
 
-from store_insight.alerts.stages._2_facts.config import GathererInfo
-from store_insight.alerts.stages._2_facts.protocols import GathererModule
+from store_insight.pipeline.stages._2_facts.config import GathererInfo
+from store_insight.pipeline.stages._2_facts.protocols import GathererModule
 
 _HERE              = Path(__file__).parent
 _GATHERERS_DIR     = _HERE / 'gatherers'

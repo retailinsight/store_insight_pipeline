@@ -2,7 +2,7 @@
 Snowflake Stored Procedure Handler
 ====================================
 Thin entrypoint called by the Snowflake Task.  All pipeline logic lives in
-``store_insight.alerts.pipeline.pipeline`` — this file only handles the Snowflake-specific
+``store_insight.pipeline.pipeline.pipeline`` — this file only handles the Snowflake-specific
 plumbing (session injection, date derivation, Cortex engine activation).
 
 To run on a different platform (Azure DevOps, GitHub Actions, Airflow, etc.),
@@ -46,7 +46,7 @@ def run(session, client: str = None, analysis_date: str = None, overwrite: bool 
     str — summary of cards written
     """
     # ── load config ────────────────────────────────────────────────────
-    from store_insight.alerts.config.loader import load_config
+    from store_insight.pipeline.config.loader import load_config
     cfg = load_config(client)
     print(f'[handler] Config loaded: client={cfg["client_name"]}')
 
@@ -55,8 +55,8 @@ def run(session, client: str = None, analysis_date: str = None, overwrite: bool 
         analysis_date = str(datetime.date.today())
 
     # ── import pipeline (available via the uploaded zip) ─────────────────────
-    from store_insight.alerts.pipeline.run_batch import load_osa, load_feedback, load_wmd
-    from store_insight.alerts.pipeline.pipeline  import (
+    from store_insight.pipeline.pipeline.run_batch import load_osa, load_feedback, load_wmd
+    from store_insight.pipeline.pipeline.pipeline  import (
         derive_windows, run_pipeline, write_alerts,
     )
 
@@ -71,9 +71,9 @@ def run(session, client: str = None, analysis_date: str = None, overwrite: bool 
     print(f'[handler] wmd lookback  : {w["wmd_lookback"]} – {w["this_week_end"]}')
 
     # ── enable Cortex LLM narrative engine ───────────────────────────────────
-    import store_insight.alerts.stages._3_investigate.investigate as _investigate
+    import store_insight.pipeline.stages._3_investigate.investigate as _investigate
     _investigate._engine     = __import__(
-        'store_insight.alerts.stages._3_investigate.cortex', fromlist=['cortex']
+        'store_insight.pipeline.stages._3_investigate.cortex', fromlist=['cortex']
     )
     _investigate._USE_CORTEX = True
     print('[handler] Cortex narrative engine enabled.')

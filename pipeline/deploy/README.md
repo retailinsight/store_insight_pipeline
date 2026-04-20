@@ -8,7 +8,7 @@ Deploys the Alerts Pipeline as a Snowflake Stored Procedure + scheduled Task.
 
 | Requirement | Detail |
 |---|---|
-| `.env` file | `store_insight/alerts/.env` — same file used by `run_batch.py` |
+| `.env` file | `store_insight/pipeline/.env` — same file used by `run_batch.py` |
 | Snowflake role | Must have `CREATE STAGE`, `CREATE PROCEDURE`, `CREATE TASK` on the target schema |
 | Cortex privilege | SP owner needs `SNOWFLAKE.CORTEX_USER` (for LLM narratives) |
 | Python | 3.9+ with `snowflake-snowpark-python` installed locally (for the deploy script) |
@@ -25,7 +25,7 @@ GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE <your_role>;
 Run once from the workspace root whenever pipeline code changes:
 
 ```bash
-python store_insight/alerts/deploy/deploy.py
+python store_insight/pipeline/deploy/deploy.py
 ```
 
 This will:
@@ -38,13 +38,13 @@ This will:
 
 ```bash
 # Custom schedule
-python store_insight/alerts/deploy/deploy.py --cron "0 4 * * SAT" --tz "UTC"
+python store_insight/pipeline/deploy/deploy.py --cron "0 4 * * SAT" --tz "UTC"
 
 # Different warehouse
-python store_insight/alerts/deploy/deploy.py --warehouse MY_LARGE_WH
+python store_insight/pipeline/deploy/deploy.py --warehouse MY_LARGE_WH
 
 # Deploy SP only, no Task (useful for first-time setup before enabling the schedule)
-python store_insight/alerts/deploy/deploy.py --task-off
+python store_insight/pipeline/deploy/deploy.py --task-off
 ```
 
 ---
@@ -53,14 +53,15 @@ python store_insight/alerts/deploy/deploy.py --task-off
 
 Trigger the pipeline for a specific week:
 ```sql
-CALL RUN_ALERTS_PIPELINE('2025-06-14', FALSE);
+CALL RUN_ALERTS_PIPELINE(NULL, '2025-06-14', FALSE);
+-- client        = client config name (subfolder under config/clients/); NULL = base defaults
 -- analysis_date = last day of the week (YYYY-MM-DD)
 -- overwrite     = FALSE to append, TRUE to replace all rows for this run_date
 ```
 
-Use `NULL` to default to the most recent Saturday:
+Use `NULL` for `analysis_date` to default to today:
 ```sql
-CALL RUN_ALERTS_PIPELINE(NULL, FALSE);
+CALL RUN_ALERTS_PIPELINE(NULL, NULL, FALSE);
 ```
 
 Check recent Task run history:
@@ -98,8 +99,8 @@ To move to Azure DevOps, GitHub Actions, Airflow, etc.:
 
 1. Write a new `<platform>_handler.py` that calls the same functions:
     ```python
-    from store_insight.alerts.pipeline.run_batch import load_osa, load_feedback
-    from store_insight.alerts.pipeline.pipeline  import run_pipeline, write_alerts
+    from store_insight.pipeline.pipeline.run_batch import load_osa, load_feedback
+    from store_insight.pipeline.pipeline.pipeline  import run_pipeline, write_alerts
     ```
 2. Handle session creation, date derivation, and scheduling in that new file.
 3. Nothing in `pipeline.py` or any stage module needs to change.
@@ -117,6 +118,6 @@ deploy/
 
 Snowflake objects (created by deploy.py):
   STAGE  <DB>.<SCHEMA>.ALERTS_PIPELINE_STAGE
-  SPROC  <DB>.<SCHEMA>.RUN_ALERTS_PIPELINE(analysis_date STRING, overwrite BOOLEAN)
-  TASK   <DB>.<SCHEMA>.RUN_ALERTS_PIPELINE_TASK  → weekly cron → CALL RUN_ALERTS_PIPELINE
+  SPROC  <DB>.<SCHEMA>.RUN_ALERTS_PIPELINE(client STRING, analysis_date STRING, overwrite BOOLEAN)
+  TASK   <DB>.<SCHEMA>.RUN_ALERTS_PIPELINE_TASK  → daily cron (0 6 * * * Europe/London) → CALL RUN_ALERTS_PIPELINE
 ```

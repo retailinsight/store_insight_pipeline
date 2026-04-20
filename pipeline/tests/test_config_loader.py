@@ -1,5 +1,5 @@
 """
-Tests for store_insight.alerts.config.loader
+Tests for store_insight.pipeline.config.loader
 =============================================
 All tests use tmp_path fixtures to create isolated YAML/env files so they
 never depend on the real client configs or any external services.
@@ -10,7 +10,7 @@ import textwrap
 
 import pytest
 
-from store_insight.alerts.config.loader import _deep_merge, load_config
+from store_insight.pipeline.config.loader import _deep_merge, load_config
 
 
 # ---------------------------------------------------------------------------
@@ -97,7 +97,7 @@ class TestLoadConfigBaseOnly:
         base_yaml = base_dir / "default.yaml"
         _write_yaml(base_yaml, self.BASE_YAML)
 
-        import store_insight.alerts.config.loader as loader_module
+        import store_insight.pipeline.config.loader as loader_module
         monkeypatch.setattr(loader_module, "_BASE_PATH", base_yaml)
         monkeypatch.setattr(loader_module, "_CLIENTS_DIR", tmp_path / "clients")
         return loader_module
@@ -163,7 +163,7 @@ class TestLoadConfigWithClient:
         client_dir.mkdir(parents=True)
         _write_yaml(client_dir / "client.yaml", self.CLIENT_YAML)
 
-        import store_insight.alerts.config.loader as loader_module
+        import store_insight.pipeline.config.loader as loader_module
         monkeypatch.setattr(loader_module, "_BASE_PATH", base_dir / "default.yaml")
         monkeypatch.setattr(loader_module, "_CLIENTS_DIR", tmp_path / "clients")
         return loader_module
@@ -207,7 +207,7 @@ class TestLoadConfigErrors:
         base_dir.mkdir()
         _write_yaml(base_dir / "default.yaml", "connection:\n  database: X\n")
 
-        import store_insight.alerts.config.loader as loader_module
+        import store_insight.pipeline.config.loader as loader_module
         monkeypatch.setattr(loader_module, "_BASE_PATH", base_dir / "default.yaml")
         monkeypatch.setattr(loader_module, "_CLIENTS_DIR", tmp_path / "clients")
         return loader_module
@@ -231,7 +231,7 @@ class TestEnvLoading:
         base_dir.mkdir()
         _write_yaml(base_dir / "default.yaml", self.BASE_YAML)
 
-        import store_insight.alerts.config.loader as loader_module
+        import store_insight.pipeline.config.loader as loader_module
         monkeypatch.setattr(loader_module, "_BASE_PATH", base_dir / "default.yaml")
         monkeypatch.setattr(loader_module, "_CLIENTS_DIR", tmp_path / "clients")
         return loader_module, tmp_path

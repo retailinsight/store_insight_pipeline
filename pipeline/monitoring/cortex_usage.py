@@ -6,9 +6,9 @@ summary of Cortex LLM token spend over a rolling window.
 
 Usage
 -----
-    python -m store_insight.alerts.monitoring.cortex_usage            # last 7 days
-    python -m store_insight.alerts.monitoring.cortex_usage --days 30
-    python -m store_insight.alerts.monitoring.cortex_usage --days 7 --credit-price 3.0
+    python -m store_insight.pipeline.monitoring.cortex_usage            # last 7 days
+    python -m store_insight.pipeline.monitoring.cortex_usage --days 30
+    python -m store_insight.pipeline.monitoring.cortex_usage --days 7 --credit-price 3.0
 
 Notes
 -----

@@ -1,4 +1,4 @@
-# Semantic Model — `store_insight.alerts` Snowflake Tables
+# Semantic Model — `store_insight.pipeline` Snowflake Tables
 
 ## Source Tables
 

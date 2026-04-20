@@ -34,8 +34,8 @@ import importlib
 import pkgutil
 from pathlib import Path
 
-from store_insight.alerts.stages._1_detect.detector_info import DetectorInfo
-from store_insight.alerts.stages._1_detect.protocols import DetectorModule
+from store_insight.pipeline.stages._1_detect.detector_info import DetectorInfo
+from store_insight.pipeline.stages._1_detect.protocols import DetectorModule
 
 _DETECTORS_DIR = Path(__file__).parent / 'detectors'
 _BASE_PACKAGE  = __name__.rsplit('.', 1)[0]

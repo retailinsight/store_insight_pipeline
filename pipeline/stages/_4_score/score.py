@@ -34,7 +34,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from store_insight.alerts.stages._4_score.lsv_trigger_weight import compute as _default_scorer
+from store_insight.pipeline.stages._4_score.lsv_trigger_weight import compute as _default_scorer
 
 
 def score(signal: dict, scorer: Callable[[dict], float] | None = None) -> float:

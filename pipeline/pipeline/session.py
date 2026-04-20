@@ -6,15 +6,15 @@ environment variables.
 
 Preferred usage (with config system)
 ------------------------------------
-    from store_insight.alerts.config.loader import load_config
-    from store_insight.alerts.pipeline.session import create_session
+    from store_insight.pipeline.config.loader import load_config
+    from store_insight.pipeline.pipeline.session import create_session
 
     cfg     = load_config('eastofengland')   # loads .env + merges YAML
     session = create_session(cfg)
 
 Legacy usage (env vars only)
 ----------------------------
-    from store_insight.alerts.pipeline.session import load_env, create_session
+    from store_insight.pipeline.pipeline.session import load_env, create_session
 
     load_env()            # reads alerts/.env into os.environ
     session = create_session()
@@ -36,7 +36,7 @@ def load_env(env_path=None):
 
     Parameters
     ----------
-    env_path : str | None — path to .env file; defaults to store_insight/alerts/.env
+    env_path : str | None — path to .env file; defaults to store_insight/pipeline/.env
                (one level above this module's directory)
     """
     if env_path is None:

@@ -11,13 +11,13 @@ with no configuration.
 
 Example — tighten the WoW trigger for a noisy customer
 -------------------------------------------------------
-    from store_insight.alerts.pipeline.config import DetectorConfig
+    from store_insight.pipeline.pipeline.config import DetectorConfig
     cfg = DetectorConfig(min_wow_drop=0.03, min_lost_sales_value=500)
     cards = run_pipeline(osa, ..., config=cfg)
 
 Example — build from a config dict (loaded by config.loader)
 --------------------------------------------------------------
-    from store_insight.alerts.pipeline.config import DetectorConfig
+    from store_insight.pipeline.pipeline.config import DetectorConfig
     det_cfg = DetectorConfig.from_config(cfg)
 """
 

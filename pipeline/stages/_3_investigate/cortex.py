@@ -18,7 +18,7 @@ Usage
 To switch the pipeline to use Cortex narratives, change one line in
 ``investigate.py``:
 
-    from store_insight.alerts.stages._3_investigate.cortex import generate
+    from store_insight.pipeline.stages._3_investigate.cortex import generate
 
 The function signature is identical to ``rule_based.generate`` but requires
 the Snowpark session to be passed as a second argument.  ``investigate.py``
@@ -34,7 +34,7 @@ import json
 import re
 from pathlib import Path
 
-from store_insight.alerts.stages._3_investigate.rule_based import generate as rule_based_generate
+from store_insight.pipeline.stages._3_investigate.rule_based import generate as rule_based_generate
 
 
 _HERE             = Path(__file__).parent

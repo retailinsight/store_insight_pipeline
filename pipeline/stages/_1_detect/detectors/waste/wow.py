@@ -26,8 +26,8 @@ Public API
 
 from snowflake.snowpark import functions as F
 
-from store_insight.alerts.stages._1_detect.detector_info import DetectorInfo
-from store_insight.alerts.stages._1_detect.signals import make_waste_signal
+from store_insight.pipeline.stages._1_detect.detector_info import DetectorInfo
+from store_insight.pipeline.stages._1_detect.signals import make_waste_signal
 
 
 METADATA = DetectorInfo(

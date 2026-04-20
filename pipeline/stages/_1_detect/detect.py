@@ -36,15 +36,15 @@ Public API
 import datetime
 from dataclasses import asdict
 
-from store_insight.alerts.stages._1_detect import registry as _registry
-from store_insight.alerts.pipeline.config import DetectorConfig
+from store_insight.pipeline.stages._1_detect import registry as _registry
+from store_insight.pipeline.pipeline.config import DetectorConfig
 
 
 def _detector_module_name(mod) -> str:
     """
     Derive the short config name for a detector module.
 
-    ``store_insight.alerts.stages._1_detect.detectors.osa.wow`` → ``'osa.wow'``
+    ``store_insight.pipeline.stages._1_detect.detectors.osa.wow`` → ``'osa.wow'``
     """
     parts = mod.__name__.split('.')
     # Find 'detectors' in the path and take everything after it

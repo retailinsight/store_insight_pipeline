@@ -7,18 +7,18 @@ and writes the results to the output table.
 Usage
 -----
     # Single date (base defaults)
-    python store_insight/alerts/pipeline/run_batch.py --analysis-date 2025-06-14
+    python store_insight/pipeline/pipeline/run_batch.py --analysis-date 2025-06-14
 
     # With client config
-    python store_insight/alerts/pipeline/run_batch.py --client eastofengland --analysis-date 2025-06-14
+    python store_insight/pipeline/pipeline/run_batch.py --client eastofengland --analysis-date 2025-06-14
 
     # Historical backfill — runs every day from start-date to analysis-date,
     # skipping dates that already have rows in the output table.
-    python store_insight/alerts/pipeline/run_batch.py \
+    python store_insight/pipeline/pipeline/run_batch.py \
         --client eastofengland --start-date 2025-01-01 --analysis-date 2025-06-14
 
-    python store_insight/alerts/pipeline/run_batch.py --analysis-date 2025-06-14 --overwrite
-    python store_insight/alerts/pipeline/run_batch.py --analysis-date 2025-06-14 --store-id 242
+    python store_insight/pipeline/pipeline/run_batch.py --analysis-date 2025-06-14 --overwrite
+    python store_insight/pipeline/pipeline/run_batch.py --analysis-date 2025-06-14 --store-id 242
 
 Arguments
 ---------
@@ -46,13 +46,13 @@ import os
 import sys
 
 # Allow running from the workspace root without installing the package.
-# __file__ = .../ds-common-tools/store_insight/alerts/pipeline/run_batch.py
+# __file__ = .../ds-common-tools/store_insight/pipeline/pipeline/run_batch.py
 # We need .../ds-common-tools/ on sys.path so `import store_insight` resolves.
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
 
-from store_insight.alerts.config.loader      import load_config
-from store_insight.alerts.pipeline.session   import load_env, create_session
-from store_insight.alerts.pipeline.pipeline  import (
+from store_insight.pipeline.config.loader      import load_config
+from store_insight.pipeline.pipeline.session   import load_env, create_session
+from store_insight.pipeline.pipeline.pipeline  import (
     derive_windows, run_pipeline, write_alerts,
 )
 from snowflake.snowpark import Window
