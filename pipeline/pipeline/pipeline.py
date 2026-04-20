@@ -14,7 +14,7 @@ to checkpoint after Stage 1 and resume from Stage 2 without re-running detection
 
 Usage
 -----
-    from store_insight.alerts.pipeline.pipeline import run_pipeline, write_alerts
+    from store_insight.pipeline.pipeline.pipeline import run_pipeline, write_alerts
 
     cards = run_pipeline(
         osa,
@@ -27,7 +27,7 @@ Usage
 
 Checkpointing after detection
 -----------------------------
-    from store_insight.alerts.pipeline.pipeline import (
+    from store_insight.pipeline.pipeline.pipeline import (
         detect_signals, save_signals, load_signals, run_pipeline_from_signals,
     )
 
@@ -50,11 +50,11 @@ import datetime
 import json
 import os
 
-from store_insight.alerts.stages._1_detect.detect          import detect_signals
-from store_insight.alerts.pipeline.config                   import DetectorConfig
-from store_insight.alerts.stages._2_facts.facts             import enrich_signals
-from store_insight.alerts.stages._3_investigate.investigate import investigate
-from store_insight.alerts.stages._4_score.score             import score
+from store_insight.pipeline.stages._1_detect.detect          import detect_signals
+from store_insight.pipeline.pipeline.config                   import DetectorConfig
+from store_insight.pipeline.stages._2_facts.facts             import enrich_signals
+from store_insight.pipeline.stages._3_investigate.investigate import investigate
+from store_insight.pipeline.stages._4_score.score             import score
 
 _DEFAULT_OUTPUT_TABLE = 'SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_PIPELINE'
 

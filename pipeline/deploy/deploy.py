@@ -8,14 +8,14 @@ Run once from a developer's machine whenever the pipeline code changes.
 
 Usage
 -----
-    python store_insight/alerts/deploy/deploy.py
-    python store_insight/alerts/deploy/deploy.py --cron "0 6 * * SAT" --tz "Europe/London"
-    python store_insight/alerts/deploy/deploy.py --task-off
+    python store_insight/pipeline/deploy/deploy.py
+    python store_insight/pipeline/deploy/deploy.py --cron "0 6 * * SAT" --tz "Europe/London"
+    python store_insight/pipeline/deploy/deploy.py --task-off
 
 Arguments
 ---------
 --cron       Cron expression for the Task schedule.
-             Default: "0 6 * * SAT"  (every Saturday at 06:00)
+             Default: "0 6 * * *"  (daily at 06:00)
 --tz         Timezone for the cron schedule.
              Default: "Europe/London"
 --warehouse  Snowflake warehouse to use for the Task.
@@ -51,12 +51,12 @@ from pathlib import Path
 # Paths
 # ---------------------------------------------------------------------------
 
-_HERE       = Path(__file__).parent                          # deploy/
-_ALERTS_DIR = _HERE.parent                                   # store_insight/alerts/
-_PKG_ROOT   = _ALERTS_DIR.parent.parent                     # ds-common-tools/
-_SI_PKG     = _PKG_ROOT / 'store_insight'                   # store_insight/
+_HERE       = Path(__file__).parent                          # store_insight/pipeline/deploy/
+_PKG_DIR    = _HERE.parent                                   # store_insight/pipeline/
+_SI_PKG     = _PKG_DIR.parent                                # store_insight/
+_ZIP_ROOT   = _SI_PKG.parent                                 # workspace parent (zip arcname root)
 
-_ENV_PATH   = _ALERTS_DIR / '.env'
+_ENV_PATH   = _PKG_DIR / '.env'
 _ZIP_NAME   = 'store_insight.zip'
 
 
@@ -77,16 +77,21 @@ def _load_env():
 
 
 def _zip_package(dest_path: str) -> None:
-    """Zip the store_insight package tree into dest_path."""
+    """Zip the store_insight/pipeline/ subpackage into dest_path.
+
+    Arcnames are rooted so paths inside the zip are of the form
+    ``store_insight/pipeline/...`` — matching the import path
+    ``store_insight.pipeline.*`` used at runtime in the SP.
+    """
     excludes = {'__pycache__', '.pyc', '.ipynb_checkpoints', '.env'}
     with zipfile.ZipFile(dest_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for path in _SI_PKG.rglob('*'):
+        for path in _PKG_DIR.rglob('*'):
             if any(ex in str(path) for ex in excludes):
                 continue
             if path.is_file():
-                arcname = path.relative_to(_PKG_ROOT)
+                arcname = path.relative_to(_ZIP_ROOT)
                 zf.write(path, arcname)
-    print(f'[deploy] Zipped store_insight/ → {dest_path}')
+    print(f'[deploy] Zipped store_insight/pipeline/ → {dest_path}')
 
 
 def _create_session():
@@ -140,7 +145,7 @@ LANGUAGE PYTHON
 RUNTIME_VERSION = '3.11'
 PACKAGES = ('snowflake-snowpark-python', 'snowflake-ml-python')
 IMPORTS   = ('@{stage}/{_ZIP_NAME}')
-HANDLER   = 'store_insight.alerts.deploy.handler.run'
+HANDLER   = 'store_insight.pipeline.deploy.handler.run'
 EXECUTE AS CALLER
 COMMENT   = 'Runs the full Alerts Pipeline (detect → facts → investigate → score → write).'
 """
@@ -195,7 +200,7 @@ def main():
     args = parser.parse_args()
 
     # ── Load config ─────────────────────────────────────────────────────
-    from store_insight.alerts.config.loader import load_config
+    from store_insight.pipeline.config.loader import load_config
     cfg = load_config(args.client)
     print(f'[deploy] Config loaded: client={cfg["client_name"]}')
 

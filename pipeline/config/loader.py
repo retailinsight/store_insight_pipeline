@@ -7,7 +7,7 @@ table names, and optionally loads the client's ``.env`` for secrets.
 
 Usage
 -----
-    from store_insight.alerts.config.loader import load_config
+    from store_insight.pipeline.config.loader import load_config
 
     # Base defaults only (backward-compatible)
     cfg = load_config()

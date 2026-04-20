@@ -115,7 +115,7 @@ Only keys that differ from the defaults need to be listed â€” everything else is
 
 To load config for a client:
 ```python
-from store_insight.alerts.config.loader import load_config
+from store_insight.pipeline.config.loader import load_config
 
 cfg = load_config('eastofengland')
 ```
@@ -125,7 +125,7 @@ cfg = load_config('eastofengland')
 ## Running locally
 
 ```python
-from store_insight.alerts.pipeline.run_batch import run_batch
+from store_insight.pipeline.pipeline.run_batch import run_batch
 
 run_batch(client='eastofengland', analysis_date='2025-06-14')
 ```
@@ -151,5 +151,5 @@ The registry auto-discovers any module placed in `stages/_1_detect/detectors/` â
 ## Tests
 
 ```bash
-python -m pytest store_insight/alerts/tests/ -v
+python -m pytest store_insight/pipeline/tests/ -v
 ```

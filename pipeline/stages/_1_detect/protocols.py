@@ -10,7 +10,7 @@ mismatches are caught by editors and mypy rather than at runtime.
 
 Usage
 -----
-    from store_insight.alerts.stages._1_detect.protocols import DetectorModule
+    from store_insight.pipeline.stages._1_detect.protocols import DetectorModule
 
     ALL_DETECTORS: list[DetectorModule] = []
 """
@@ -19,8 +19,8 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from store_insight.alerts.stages._1_detect.detector_info import DetectorInfo
-from store_insight.alerts.stages._1_detect.signals import Signal
+from store_insight.pipeline.stages._1_detect.detector_info import DetectorInfo
+from store_insight.pipeline.stages._1_detect.signals import Signal
 
 
 @runtime_checkable

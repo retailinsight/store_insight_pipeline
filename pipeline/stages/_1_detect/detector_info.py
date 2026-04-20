@@ -7,7 +7,7 @@ module as ``METADATA``.  It is collected by the registry to build
 
 This is fixed, code-level documentation about what a detector does.
 It is not customer-configurable (thresholds live in
-``store_insight.alerts.pipeline.config.DetectorConfig``).
+``store_insight.pipeline.pipeline.config.DetectorConfig``).
 """
 
 from dataclasses import dataclass, field

@@ -10,7 +10,7 @@ mismatches are caught by editors and mypy rather than at runtime.
 
 Usage
 -----
-    from store_insight.alerts.stages._2_facts.protocols import GathererModule
+    from store_insight.pipeline.stages._2_facts.protocols import GathererModule
 
     ALL_GATHERERS: list[GathererModule] = []
 """
@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from store_insight.alerts.stages._2_facts.config import GathererInfo
+from store_insight.pipeline.stages._2_facts.config import GathererInfo
 
 
 @runtime_checkable

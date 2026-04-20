@@ -33,7 +33,7 @@ from pathlib import Path
 
 import yaml
 
-from store_insight.alerts.stages._3_investigate import rule_based, cortex
+from store_insight.pipeline.stages._3_investigate import rule_based, cortex
 
 _HERE     = Path(__file__).parent
 _YAML_PATH = _HERE / 'signal_type_investigators.yaml'

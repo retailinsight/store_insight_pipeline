@@ -5,7 +5,7 @@ Reads rows from ``ALERTS_PIPELINE`` and assembles the JSON response matching
 ``ActionsResponse`` in the frontend's ``shared/api.ts``.
 
 The table is written by the alerts batch pipeline
-(``store_insight.alerts.pipeline.run_batch``).
+(``store_insight.pipeline.pipeline.run_batch``).
 
 Response shape:
     {
