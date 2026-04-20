@@ -2,6 +2,10 @@
 .env
 .env.*
 !.env.example
+*.p8
+*.pem
+*.key
+rsa_key*
 
 # Python
 __pycache__/
@@ -41,6 +45,8 @@ desktop.ini
 # Logs
 *.log
 logs/
+snowflake.log
+snowflake_*.log
 
 # Coverage / testing
 .coverage

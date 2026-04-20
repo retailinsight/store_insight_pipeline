@@ -14,7 +14,8 @@ export default defineConfig(({ mode }) => ({
     proxy: {
       "/api": {
         //target: "https://store-insight-api-production-13c5.up.railway.app",
-        target: "http://localhost:3000",
+        //target: "http://localhost:3001",
+        target: "http://localhost:8000",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ""),
         secure: false,
