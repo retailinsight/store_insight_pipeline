@@ -1,0 +1,121 @@
+{"level":"INFO","message":"[4:21:09.578 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[4:24:16.023 PM]: Connection[id: 88d0e327-d849-4837-bf0d-58bbe58b4546] - Unable to connect. Error: Network error. Could not reach Snowflake."}
+{"level":"ERROR","message":"[4:24:16.026 PM]: Connection pool factory creation failed: Network error. Could not reach Snowflake."}
+{"level":"INFO","message":"[7:59:12.451 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[8:00:15.700 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[8:02:39.765 AM]: Connection[id: cb1b35c2-f88e-4e21-b532-873e49c1b1b2] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[8:02:39.768 AM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[4:18:54.118 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[4:22:05.818 PM]: Connection[id: 6263a087-63b7-4636-b40a-fa624c78abf7] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[4:22:05.820 PM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[4:25:03.813 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[4:27:46.731 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[4:30:59.004 PM]: Connection[id: 74ee582d-f2cb-4714-9526-220e463485f8] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[4:30:59.006 PM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[4:31:40.476 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[4:33:20.858 PM]: Connection[id: e12b6817-9244-4f78-b871-599de22d0e1c] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[4:33:20.861 PM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[4:41:40.238 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[4:43:11.002 PM]: Connection[id: d54dafa1-78d4-4fa3-bb4b-a51b3e41c4b9] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[4:43:11.005 PM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[5:40:20.629 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[5:43:27.323 PM]: Connection[id: b1c70729-762f-47de-8a19-ed5576462219] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[5:43:27.324 PM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[7:08:41.583 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[7:11:23.644 PM]: Connection[id: 078a0511-d8f1-41ab-9640-cfcbd903125c] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[7:11:23.646 PM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[7:15:32.982 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[7:19:21.844 PM]: Connection[id: b0c92eec-8f5d-4614-bdf1-bc9be36c940a] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[7:19:21.845 PM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[10:28:53.256 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[10:32:30.126 AM]: Connection[id: 7a8e93cd-811f-41d6-9018-e1d0c285b45c] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[10:32:30.128 AM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[10:07:57.642 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[10:10:33.680 AM]: Connection[id: e948db6e-eb58-4ff6-9dcd-bd4402706049] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[10:10:33.684 AM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[10:11:07.276 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[10:11:11.509 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[10:13:40.507 AM]: Connection[id: 066e8018-c44a-42e9-bdbb-d55910e8bfb3] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[10:13:40.510 AM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[10:15:16.507 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[10:16:21.418 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[10:18:45.450 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[10:18:55.842 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[10:20:47.226 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[10:20:53.687 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[10:20:57.011 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[10:21:02.327 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[10:22:58.277 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[10:25:58.481 AM]: Connection[id: bdd930d7-2167-4a39-8da4-cdb76892ce3b] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[10:25:58.484 AM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[1:05:09.208 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[1:07:35.581 PM]: Connection[id: 83b8358c-e924-4309-9c6c-2f57da6770f1] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[1:07:35.585 PM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[1:08:01.851 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[1:09:28.804 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[1:11:41.760 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[1:14:56.859 PM]: Connection[id: 7d38249d-be6a-4da4-85d6-de46982019e1] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[1:14:56.861 PM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[1:35:09.110 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[1:35:25.599 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[1:35:50.786 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[1:38:55.762 PM]: Connection[id: 0fe95827-39bf-47b5-9351-2551dfef5b5f] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[1:38:55.764 PM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[3:00:07.071 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[3:00:16.870 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[3:01:53.258 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[3:05:04.448 PM]: Connection[id: a5da5bde-630c-46f1-958a-24dda74d5620] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[3:05:04.451 PM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[3:16:42.495 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[3:17:16.873 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[3:20:02.715 PM]: Connection[id: 49632850-f774-4874-9040-2dd36918e1fc] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[3:20:02.718 PM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[6:39:44.330 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[6:39:49.345 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[6:39:54.905 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[6:40:07.933 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[6:43:26.025 PM]: Connection[id: 1c7229d5-10f3-44f6-897f-59eedd8e7850] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[6:43:26.026 PM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[6:59:46.328 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[6:59:57.029 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[7:00:15.995 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[7:02:44.524 AM]: Connection[id: 6ed57bc8-f50e-417d-9ceb-6829f06d322c] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[7:02:44.526 AM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[10:59:24.590 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[11:02:08.402 AM]: Connection[id: f5d762f2-364b-43d7-9815-6aa97b1b422f] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[11:02:08.405 AM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[11:03:19.821 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[11:05:47.188 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[11:06:15.706 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[11:08:48.801 AM]: Connection[id: 6cc82138-0043-4935-8b85-bfb53a24e41a] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[11:08:48.805 AM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[11:10:37.313 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[11:12:19.821 AM]: Connection[id: 05f11e99-369a-4016-b955-f3f9b7b1e499] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[11:12:19.824 AM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[12:17:44.155 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[12:20:43.742 PM]: Connection[id: a9aaaedf-c13c-4c1e-aa6c-ff751d842e09] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[12:20:43.745 PM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[9:34:31.774 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[9:37:16.055 AM]: Connection[id: 6419af8c-8e6f-46cf-b58b-131456851a7b] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[9:37:16.056 AM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[11:49:27.981 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[11:52:47.778 AM]: Connection[id: b452d79f-9b3a-4bd4-8abd-f08f68be7982] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[11:52:47.780 AM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[11:53:00.494 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[11:56:36.119 AM]: Connection[id: a671f155-5674-4421-919d-3b1ee2acee9d] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[11:56:36.122 AM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[12:01:15.070 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[12:03:18.874 PM]: Connection[id: 1b5733b3-cc95-47e4-9a2b-7682565f4b1d] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[12:03:18.876 PM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[12:10:10.547 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[12:12:19.860 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[12:15:03.814 PM]: Connection[id: 49445c3f-3a89-4e5d-bbbe-59c226b4a04e] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[12:15:03.817 PM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[9:33:51.634 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[9:36:54.683 AM]: Connection[id: 539152d9-2af7-4666-b256-ff1d7799e1dc] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[9:36:54.684 AM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[2:58:19.626 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"INFO","message":"[2:59:00.013 PM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
+{"level":"ERROR","message":"[3:01:37.160 PM]: Connection[id: 41a7f472-e85a-4d3d-9d65-8c6e3b1c7629] - Unable to connect. Error: Request to Snowflake failed."}
+{"level":"ERROR","message":"[3:01:37.165 PM]: Connection pool factory creation failed: Request to Snowflake failed."}
+{"level":"INFO","message":"[11:04:10.555 AM]: Configuring logger with level: 1, filePath: undefined, additionalLogToConsole: undefined"}
