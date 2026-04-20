@@ -3,11 +3,13 @@ Snowflake session factory.
 Reads connection parameters from environment variables (or a .env file).
 """
 
+import base64
 import os
+
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.serialization import (
     Encoding, NoEncryption, PrivateFormat,
-    load_pem_private_key, load_der_private_key,
+    load_der_private_key, load_pem_private_key,
 )
 from dotenv import load_dotenv
 from snowflake.snowpark import Session
@@ -31,10 +33,9 @@ def get_session() -> Session:
     """
     Return a cached Snowpark session, creating (or rebuilding) one if needed.
 
-    The session is health-checked with a ``SELECT 1`` round-trip.  If that
-    fails — which happens when SSO tokens expire, the network drops, or
-    Snowflake times out the connection — the cached session is discarded and
-    a fresh one is created transparently.  Callers don't need to care.
+    The session is health-checked with a ``SELECT 1`` round-trip. If that
+    fails — token expiry, dropped network, Snowflake timeout — the cached
+    session is discarded and a fresh one is created transparently.
     """
     global _session
     if _session is not None and not _is_alive(_session):
@@ -65,20 +66,23 @@ def _load_private_key_bytes() -> bytes | None:
     Load the private key as DER bytes for Snowflake's ``private_key`` param.
 
     Priority:
-      1. SNOWFLAKE_PRIVATE_KEY  — the raw PEM text (use in cloud deployments).
-      2. SNOWFLAKE_PRIVATE_KEY_PATH — path to a .p8/.pem file (use locally).
+      1. SNOWFLAKE_PRIVATE_KEY_B64 — base64-encoded PEM (safest for cloud).
+      2. SNOWFLAKE_PRIVATE_KEY     — raw PEM text (\\n escapes also accepted).
+      3. SNOWFLAKE_PRIVATE_KEY_PATH — path to a .p8/.pem file (local only).
 
     If the key is passphrase-protected, set SNOWFLAKE_PRIVATE_KEY_PASSPHRASE.
-    Returns None if neither env var is set.
+    Returns None if none of the env vars are set.
     """
     passphrase_str = os.getenv("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE")
     passphrase = passphrase_str.encode() if passphrase_str else None
 
+    key_b64 = os.getenv("SNOWFLAKE_PRIVATE_KEY_B64")
     key_pem = os.getenv("SNOWFLAKE_PRIVATE_KEY")
     key_path = os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH")
 
-    if key_pem:
-        # Allow \n-escaped single-line values (common in cloud env var UIs).
+    if key_b64:
+        key_data = base64.b64decode(key_b64.strip())
+    elif key_pem:
         key_data = key_pem.replace("\\n", "\n").encode()
     elif key_path:
         with open(key_path, "rb") as f:

@@ -6,6 +6,7 @@
 *.pem
 *.key
 rsa_key*
+key_b64*
 
 # Python
 __pycache__/
