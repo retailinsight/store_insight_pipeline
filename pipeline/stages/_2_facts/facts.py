@@ -42,7 +42,7 @@ Public API
 
 import inspect
 
-from store_insight.alerts.stages._2_facts import registry as _registry
+from store_insight.pipeline.stages._2_facts import registry as _registry
 
 
 def enrich_signals(
