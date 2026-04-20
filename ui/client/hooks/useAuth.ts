@@ -16,6 +16,14 @@ import {
   getErrorMessage,
   setSessionExpiredHandler,
 } from "@/lib/api";
+import {
+  applyAnalyticsUserContext,
+  clearAnalyticsUserContext,
+  clearPersistedRoleName,
+  getEffectiveRoleName,
+  loadPersistedRoleName,
+  persistRoleName,
+} from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
 
 // Storage keys for persistence
@@ -80,9 +88,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (hasTokens()) {
           console.log("[useAuth] Has existing tokens, restoring store data");
           const { selectedStore, availableStores } = loadStoreData();
+          const persistedRoleName = loadPersistedRoleName();
           console.log("[useAuth] Restored from localStorage:", { selectedStore, availableStores });
           setSelectedStore(selectedStore);
           setAvailableStores(availableStores);
+          if (persistedRoleName) {
+            applyAnalyticsUserContext(persistedRoleName, { eventName: "auth_restored" });
+          }
           setIsAuthenticated(true);
         } else {
           // No tokens - just mark as not authenticated, don't auto-login
@@ -112,6 +124,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log("[useAuth] Session expired, logging out and redirecting");
       clearTokens();
       saveStoreData(null, []);
+      clearPersistedRoleName();
+      clearAnalyticsUserContext();
       setIsAuthenticated(false);
       setUser(null);
       setSelectedStore(null);
@@ -144,6 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const response = await login(username, password);
         console.log("[useAuth] Login response user:", response.user);
+        const roleName = getEffectiveRoleName(response.user);
         setUser(response.user);
         // Use stores array from response
         const storesArray = response.user.stores || [];
@@ -155,6 +170,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAvailableStores(storesArray);
           // Persist store data to localStorage
           saveStoreData(selectedStore, storesArray);
+          persistRoleName(roleName);
+          applyAnalyticsUserContext(roleName, {
+            eventName: "login",
+            includeGaEvent: true,
+          });
           setIsAuthenticated(true);
           setError(null);
         } else {
@@ -184,6 +204,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const handleLogout = useCallback((showSuccessMessage: boolean = true) => {
     clearTokens();
     saveStoreData(null, []); // Clear stored store data
+    clearPersistedRoleName();
+    clearAnalyticsUserContext();
     setIsAuthenticated(false);
     setUser(null);
     setSelectedStore(null);

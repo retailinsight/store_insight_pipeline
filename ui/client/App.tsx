@@ -5,17 +5,38 @@ import { createRoot } from "react-dom/client";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { SmartActionsProvider } from "@/contexts/SmartActionsContext";
-import { AuthProvider } from "@/hooks/useAuth";
+import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Login from "./pages/Login";
 import Index from "./pages/Index";
 import SmartActionsPage from "./pages/SmartActionsPage";
 import SuccessesPage from "./pages/SuccessesPage";
 import NotFound from "./pages/NotFound";
+import { useEffect } from "react";
 
 const queryClient = new QueryClient();
+
+function RouteAnalyticsTracker() {
+  const location = useLocation();
+  const { isLoading } = useAuth();
+
+  useEffect(() => {
+    if (isLoading || typeof window.gtag !== "function") {
+      return;
+    }
+
+    const pagePath = `${location.pathname}${location.search}`;
+    window.gtag("event", "page_view", {
+      page_path: pagePath,
+      page_location: window.location.href,
+      page_title: document.title,
+    });
+  }, [isLoading, location.pathname, location.search]);
+
+  return null;
+}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -24,6 +45,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          <RouteAnalyticsTracker />
           <SmartActionsProvider>
             <Routes>
               {/* Public Routes */}
