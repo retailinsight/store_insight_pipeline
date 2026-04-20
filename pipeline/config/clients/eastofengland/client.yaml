@@ -1,0 +1,10 @@
+# East of England Co-op — client overrides
+# ==========================================
+# Only settings that differ from base/default.yaml need to be listed here.
+# Everything else is inherited automatically.
+
+client_name: eastofengland
+
+connection:
+  database: SNOWFLAKE_LEARNING_DB
+  schema:   STORE_INSIGHT

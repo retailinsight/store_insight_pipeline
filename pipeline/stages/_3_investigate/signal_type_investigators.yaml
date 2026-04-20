@@ -1,0 +1,49 @@
+# Signal Type → Narrative Engine Mapping
+# ========================================
+# Defines which narrative engine and investigation skill runs for each alert
+# signal type.  This is the single source of truth for the Stage 3 dispatch.
+#
+# Engines
+# -------
+# rule_based : Deterministic string templates. No external dependencies.
+#              Always produces output, never fails. Default.
+# cortex     : Snowflake Cortex LLM (mistral-large). Requires a Snowpark
+#              session. Falls back to rule_based on any failure.
+#
+# skill_file : Path (relative to this file's directory) to the investigation
+#              skill markdown for this alert type.  Loaded by cortex.py as
+#              part of the LLM prompt.  Also used for documentation display.
+#
+# To switch an alert type to Cortex, change its engine value.
+# To add a new signal type, add a block here and ensure both engine modules
+# handle it internally.
+
+OSA:
+  engine: rule_based
+  skill_file: skills/osa_investigation_skill.md
+  description: OSA availability alerts — WOW, VS_CHAIN, and REPEAT triggers
+
+COMPLIANCE:
+  engine: rule_based
+  skill_file: skills/compliance_investigation_skill.md
+  description: Tick-and-flick compliance alerts
+
+MARKDOWN_OVERRIDE:
+  engine: rule_based
+  skill_file: skills/markdown_override_investigation_skill.md
+  description: Markdown override rate alerts — VS_CHAIN and WOW triggers
+
+WASTE:
+  engine: rule_based
+  skill_file: skills/waste_investigation_skill.md
+  description: Straight-to-bin waste rate alerts — VS_CHAIN and WOW triggers
+
+MARKDOWN_SELLTHROUGH:
+  engine: rule_based
+  skill_file: skills/markdown_sellthrough_investigation_skill.md
+  description: Markdown sell-through rate alerts — VS_CHAIN and WOW triggers
+
+MARKDOWN_SKU:
+  engine: rule_based
+  skill_file: skills/markdown_sku_investigation_skill.md
+  description: SKU-level markdown alerts — REPEAT_REQUEST and EXCESSIVE_OVERRIDE triggers

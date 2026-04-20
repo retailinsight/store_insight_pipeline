@@ -1,0 +1,50 @@
+# Signal Type → Fact Gatherer Mapping
+# =====================================
+# Defines which fact gatherers run for each alert signal type.
+# This is the single source of truth for the Stage 2 dispatch.
+#
+# Rules
+# -----
+# - Gatherers run in the order listed.
+# - Each name must match a module in the gatherers/ sub-package.
+# - A gatherer can appear under multiple signal types.
+# - Add a new signal type block here when a new detector is introduced.
+#
+# Displayed in the pipeline docs and QC notebooks to show what evidence
+# is collected per alert type.
+
+OSA:
+  - name: osa_ppg_drilldown
+    description: Top-N product profile groups by this-week lost sales value and WoW increase
+
+  - name: osa_dow
+    description: Lost sales broken down by day-of-week for the current week
+
+  - name: osa_chain_drift
+    description: Chain-wide week-on-week OSA drift per department (requires full-chain DataFrame)
+
+  - name: osa_repeat_history
+    description: Per-item week-by-week OSA and LSV history (runs only for REPEAT trigger signals)
+
+  - name: osa_cost_projection
+    description: Cost-of-doing-nothing projection (this_week_lsv * projection_weeks, pure Python)
+
+COMPLIANCE:
+  - name: tick_and_flick_breakdown
+    description: Tick-and-flick alert-type breakdown for each flagged store (requires feedback DataFrame)
+
+MARKDOWN_OVERRIDE:
+  - name: markdown_override_dept_breakdown
+    description: Top-N departments by override count and override rate this week (requires item_hierarchy DataFrame)
+
+WASTE:
+  - name: waste_dept_breakdown
+    description: Top-N departments by straight-to-bin quantity and waste value this week (requires item_hierarchy DataFrame)
+
+MARKDOWN_SELLTHROUGH:
+  - name: markdown_sellthrough_dept_breakdown
+    description: Top-N departments by lowest sell-through rate this week (requires markdown_sales, markdown_log, item_hierarchy DataFrames)
+
+MARKDOWN_SKU:
+  - name: markdown_sku_history
+    description: Week-by-week markdown request and override history for each flagged store-SKU combination
