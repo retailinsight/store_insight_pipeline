@@ -1,0 +1,19 @@
+{
+    "stores": [
+        {
+            "id": 1,
+            "name": "Norwich Station",
+            "location": "Station Approach, Norwich, Norfolk"
+        },
+        {
+            "id": 2,
+            "name": "Mersea Road, Colchester",
+            "location": "Mersea Road, Colchester, Essex"
+        },
+        {
+            "id": 3,
+            "name": "Swines Green, Beccles",
+            "location": "Rigbourne Hill, Beccles, Suffolk"
+        }
+    ]
+}

@@ -1,0 +1,20 @@
+{
+  "users": [
+    {
+      "id": "dummy-manager-1",
+      "username": "manager@storeinsight.io",
+      "password": "manager123",
+      "roleId": 1,
+      "role": "store manager",
+      "storeId": 1
+    },
+    {
+      "id": "dummy-clusterlead-2",
+      "username": "clusterlead@storeinsight.io",
+      "password": "clusterlead123",
+      "roleId": 2,
+      "role": "cluster lead",
+      "storeId": "all"
+    }
+  ]
+}
