@@ -10,15 +10,33 @@ Endpoints:
     GET  /health
 """
 
+import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.actions_builder import get_actions
 from app.kpi_builder import get_kpis
 from app.snowflake_session import get_session
+
+
+# ── Simple shared-secret auth ────────────────────────────────────────────────
+# Set ``STORE_INSIGHT_API_KEY`` in the environment (e.g. Railway variables) to
+# require an ``X-API-Key`` header on protected routes. If unset (local dev), the
+# check is skipped so contributors don't need to configure anything.
+_API_KEY = os.getenv("STORE_INSIGHT_API_KEY")
+
+
+def require_api_key(x_api_key: str | None = Header(default=None)) -> None:
+    if not _API_KEY:
+        return
+    if x_api_key != _API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key.",
+        )
 
 
 @asynccontextmanager
@@ -40,10 +58,19 @@ app = FastAPI(
 )
 
 # ── CORS ─────────────────────────────────────────────────────────────────────
-# Permissive CORS for local development. Tighten allow_origins before deploying.
+# Set ``ALLOWED_ORIGINS`` to a comma-separated list of origins
+# (e.g. ``https://store-insight.vercel.app,http://localhost:8080``) to restrict
+# which browser origins may call the API. Defaults to ``*`` for local dev.
+_allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "*").strip()
+_allowed_origins = (
+    ["*"]
+    if _allowed_origins_env == "*"
+    else [o.strip() for o in _allowed_origins_env.split(",") if o.strip()]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -57,7 +84,7 @@ class LoginRequest(BaseModel):
     password: str | None = None
 
 
-@app.post("/auth/login")
+@app.post("/auth/login", dependencies=[Depends(require_api_key)])
 def login(body: LoginRequest):
     """
     **Dev stub.** Accepts any credentials and returns a fixed token pair plus a
@@ -89,7 +116,7 @@ def login(body: LoginRequest):
     }
 
 
-@app.get("/data/kpis")
+@app.get("/data/kpis", dependencies=[Depends(require_api_key)])
 def kpis(
     store_id: int | None = Query(None, description="Store ID (SITE_ID in Snowflake). Defaults to the latest store in the table."),
     date: str | None     = Query(None, description="Week end date in YYYY-MM-DD format (e.g. 2025-06-14). Defaults to the latest ANALYSIS_DATE for the store."),
@@ -113,7 +140,7 @@ def kpis(
         raise HTTPException(status_code=500, detail=f"Unexpected error: {exc}")
 
 
-@app.get("/data/actions")
+@app.get("/data/actions", dependencies=[Depends(require_api_key)])
 def actions(
     store_id: int | None = Query(None, description="Store ID. Omit to return all stores for the run_date."),
     run_date: str | None = Query(None, description="RUN_DATE in YYYY-MM-DD format. Defaults to the latest RUN_DATE in ALERTS_PIPELINE."),
@@ -145,7 +172,7 @@ def actions(
         raise HTTPException(status_code=500, detail=f"Unexpected error: {exc}")
 
 
-@app.get("/data/successes")
+@app.get("/data/successes", dependencies=[Depends(require_api_key)])
 def successes():
     """
     Stub endpoint — successes data not yet available from Snowflake.

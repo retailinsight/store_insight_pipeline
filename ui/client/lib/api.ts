@@ -29,6 +29,10 @@ function normalizeApiBaseUrl(rawBaseUrl: string): string {
 
 const API_BASE_URL = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL || "");
 
+// Shared-secret key sent as the ``X-API-Key`` header. Set ``VITE_API_KEY`` in
+// the frontend env to match ``STORE_INSIGHT_API_KEY`` on the backend.
+const API_KEY = (import.meta.env.VITE_API_KEY || "").trim();
+
 function buildApiUrl(endpoint: string): string {
   if (endpoint.startsWith("http://") || endpoint.startsWith("https://")) {
     return endpoint;
@@ -36,6 +40,10 @@ function buildApiUrl(endpoint: string): string {
 
   const normalizedEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   return `${API_BASE_URL}${normalizedEndpoint}`;
+}
+
+function apiKeyHeader(): Record<string, string> {
+  return API_KEY ? { "X-API-Key": API_KEY } : {};
 }
 
 console.log("[API] Base URL set to:", API_BASE_URL);
@@ -96,6 +104,7 @@ export async function login(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...apiKeyHeader(),
       },
       body: JSON.stringify({ username, password }),
     });
@@ -160,6 +169,7 @@ async function authenticatedFetch<T>(
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
+        ...apiKeyHeader(),
         ...options.headers,
       },
     });
