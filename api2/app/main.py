@@ -10,6 +10,7 @@ Endpoints:
     GET  /health
 """
 
+import hmac
 import os
 from contextlib import asynccontextmanager
 
@@ -23,16 +24,28 @@ from app.snowflake_session import get_session
 
 
 # ── Simple shared-secret auth ────────────────────────────────────────────────
-# Set ``STORE_INSIGHT_API_KEY`` in the environment (e.g. Railway variables) to
-# require an ``X-API-Key`` header on protected routes. If unset (local dev), the
-# check is skipped so contributors don't need to configure anything.
+# Protected routes require an ``X-API-Key`` header matching
+# ``STORE_INSIGHT_API_KEY``. If that env var is unset the API refuses to serve
+# protected routes (fail-closed) unless ``STORE_INSIGHT_ALLOW_NO_AUTH=1`` is
+# explicitly set for local development.
 _API_KEY = os.getenv("STORE_INSIGHT_API_KEY")
+_ALLOW_NO_AUTH = os.getenv("STORE_INSIGHT_ALLOW_NO_AUTH") == "1"
+
+# Shared POC credentials for the /auth/login stub. If either is unset, login is
+# disabled rather than silently accepting anything.
+_POC_USERNAME = os.getenv("POC_USERNAME")
+_POC_PASSWORD = os.getenv("POC_PASSWORD")
 
 
 def require_api_key(x_api_key: str | None = Header(default=None)) -> None:
     if not _API_KEY:
-        return
-    if x_api_key != _API_KEY:
+        if _ALLOW_NO_AUTH:
+            return
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="API auth is not configured (STORE_INSIGHT_API_KEY missing).",
+        )
+    if x_api_key is None or not hmac.compare_digest(x_api_key, _API_KEY):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API key.",
@@ -87,21 +100,41 @@ class LoginRequest(BaseModel):
 @app.post("/auth/login", dependencies=[Depends(require_api_key)])
 def login(body: LoginRequest):
     """
-    **Dev stub.** Accepts any credentials and returns a fixed token pair plus a
-    mock user. The other endpoints in this API do not validate the token; this
-    route exists purely so the frontend's ``authenticatedFetch`` has something
-    to store and echo back.
+    **POC login.** Verifies ``username``/``password`` against the
+    ``POC_USERNAME`` / ``POC_PASSWORD`` environment variables. Returns a stub
+    token pair plus a mock user on success.
 
-    Do not deploy this to production as-is.
+    The returned token is *not* a real bearer token — the ``/data/*`` endpoints
+    continue to authenticate via the shared ``X-API-Key`` header. This route
+    exists so the frontend's login flow has something to call.
+
+    If the POC credentials are not configured the endpoint returns 503 rather
+    than accepting arbitrary input.
     """
-    username = body.username or "dev-user"
+    if not _POC_USERNAME or not _POC_PASSWORD:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Login is not configured (POC_USERNAME/POC_PASSWORD missing).",
+        )
+
+    submitted_user = body.username or ""
+    submitted_pass = body.password or ""
+    # Constant-time compare on both fields to avoid leaking which one was wrong.
+    user_ok = hmac.compare_digest(submitted_user, _POC_USERNAME)
+    pass_ok = hmac.compare_digest(submitted_pass, _POC_PASSWORD)
+    if not (user_ok and pass_ok):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password.",
+        )
+
     return {
-        "accessToken":  "dev-access-token",
-        "refreshToken": "dev-refresh-token",
+        "accessToken":  "poc-access-token",
+        "refreshToken": "poc-refresh-token",
         "user": {
             "id":       "1",
-            "username": username,
-            "role":     "admin",
+            "username": _POC_USERNAME,
+            "role":     "user",
             "roleId":   1,
             "storeId":  408,
             "store": {
