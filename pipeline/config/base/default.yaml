@@ -21,19 +21,17 @@ tables:
   hierarchy:          ANALYSIS.FINAL.LSM_ITEM_HIERARCHY
   feedback:           ANALYSIS.FINAL.LSM_ALERT_FEEDBACK
   # WMD tables — required for markdown_override, waste, markdown_sellthrough, markdown_sku detectors
-  markdown_log:       INBOUND.SOURCE.SOURCE_WMD_MARKDOWN_LOG_CONVERTED
-  markdown_sales:     INBOUND.SOURCE.SOURCE_WMD_MARKDOWN_SALES
-  wastage:            INBOUND.SOURCE.SOURCE_WMD_WASTAGE
-  wmd_item_hierarchy: INBOUND.SOURCE.SOURCE_WMD_ITEM_HIERARCHY
-  wmd_store_hierarchy: INBOUND.SOURCE.SOURCE_WMD_STORE_HIERARCHY
+  markdown_log:       ANALYSIS.FINAL.WMD_MARKDOWN_API
+  markdown_sales:     ANALYSIS.FINAL.WMD_SALES
+  wastage:            ANALYSIS.FINAL.WMD_WASTAGE
+  wmd_item_hierarchy: ANALYSIS.FINAL.WMD_ITEM_HIERARCHY
+  wmd_store_hierarchy: ANALYSIS.FINAL.WMD_SITE_HIERARCHY
 
 # ── Output tables ─────────────────────────────────────────────────────────────
 # {database} and {schema} are interpolated from the connection block above.
 output:
-  alerts:    "{database}.{schema}.ALERTS_PIPELINE"
-  signals:   "{database}.{schema}.ALERTS_SIGNALS"
-  enriched:  "{database}.{schema}.ALERTS_ENRICHED"
-  run_log:   "{database}.{schema}.ALERTS_RUN_LOG"
+  alerts:          "{database}.{schema}.ALERTS_PIPELINE"
+  top_n_per_store: 10   # 0 = no limit; set to e.g. 10 to cap alerts per store
 
 # ── Detectors ─────────────────────────────────────────────────────────────────
 # Module names relative to stages/_1_detect/detectors/.
@@ -140,7 +138,8 @@ schedule:
   timezone: Europe/London
 
 # ── Logging / intermediate writes ────────────────────────────────────────────
+# Only the final alerts table is written. Intermediate tables are not saved.
 logging:
-  write_signals:  true
-  write_enriched: true
-  write_run_log:  true
+  write_signals:  false
+  write_enriched: false
+  write_run_log:  false

@@ -70,7 +70,7 @@ export function SmartActionsProvider({ children }: { children: ReactNode }) {
     new Map()
   );
 
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, selectedStore } = useAuth();
   const { toast } = useToast();
 
   // Fetch actions on mount or when authenticated
@@ -91,7 +91,7 @@ export function SmartActionsProvider({ children }: { children: ReactNode }) {
 
       try {
         setIsLoading(true);
-        const response = await fetchActions();
+        const response = await fetchActions(selectedStore?.id);
         const transformedActions = transformActions(response.data);
         setActions(transformedActions);
         setError(null);
@@ -113,7 +113,7 @@ export function SmartActionsProvider({ children }: { children: ReactNode }) {
     };
 
     loadActions();
-  }, [isAuthenticated, authLoading, toast]);
+  }, [isAuthenticated, authLoading, selectedStore, toast]);
 
   const updateActionStatus = useCallback(
     (id: number, status: ActionStatus, reminderDate?: Date) => {

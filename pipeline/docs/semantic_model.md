@@ -126,89 +126,92 @@ Source table names, output table names, detector thresholds, which detectors/gat
 
 # Semantic Model — WMD (Waste & Markdown) Tables
 
-All tables live in `INBOUND.SOURCE`. These tables power the **MARKDOWN_OVERRIDE**, **WASTE**, **MARKDOWN_SELLTHROUGH**, and **MARKDOWN_SKU** alert types.
+All tables live in `ANALYSIS.FINAL` (dbt-published views over `ANALYSIS.GOLD`). These tables power the **MARKDOWN_OVERRIDE**, **WASTE**, **MARKDOWN_SELLTHROUGH**, and **MARKDOWN_SKU** alert types.
+
+> **Column aliasing note:** All five ANALYSIS.FINAL WMD tables use `SITE_ID` instead of `STORE_ID`. The pipeline's `load_wmd()` function in `run_batch.py` normalises all renamed columns back to the names expected by detectors/gatherers, so no downstream code needed to change.
 
 ## Source Tables — Core Transactional
 
-### `INBOUND.SOURCE.SOURCE_WMD_MARKDOWN_LOG_CONVERTED` — *Markdown event log*
+### `ANALYSIS.FINAL.WMD_MARKDOWN_API` — *Markdown event log*
 
-The primary transactional table for markdown alerts. Each row is a single markdown request/event for a store-item.
+The primary transactional table for markdown alerts. Each row is a single markdown request/event for a site-item. This is a dbt view over `ANALYSIS.GOLD.GLD_WMD_MARKDOWN_API`.
 
-| Column | Type | Description |
-|---|---|---|
-| `STORE_ID` | LONG | Store identifier (join key to store hierarchy & cluster mapping) |
-| `ITEM_ID` | LONG | Item identifier (join key to item hierarchy & PPG cluster mapping) |
-| `LOCAL_TIME` | TIMESTAMP_NTZ | Timestamp of the markdown action |
-| `LOCAL_DATE` | TIMESTAMP_NTZ | Date of the markdown action |
-| `QTY_MARKDOWN` | LONG | Quantity being marked down |
-| `ORIGINAL_PRICE` | DECIMAL(38,17) | Original retail price before markdown |
-| `CURRENT_PRICE` | DECIMAL(38,17) | Price at time of markdown event |
-| `MARKDOWN_TYPE` | STRING | Type of markdown (e.g. `'Head Office Instruction'`) |
-| `MARKDOWN_ITERATION` | LONG | Which markdown pass (1st, 2nd, etc.) |
-| `MARKDOWN_PERCENTAGE` | LONG | % markdown applied |
-| `MARKDOWN_TO_PRICE` | STRING | Target price after markdown |
-| `IS_OVERRIDDEN` | BOOLEAN | **Key field** — `True` if the store overrode the algorithm recommendation |
-| `IS_PRINTED` | BOOLEAN | Whether a markdown label was printed |
-| `EXPIRY_TIME` | TIMESTAMP_NTZ | Product expiry timestamp |
-| `SELL_BY_TIME` | TIMESTAMP_NTZ | Sell-by timestamp |
-| `QTY_ON_HAND` | STRING | Stock on hand at time of markdown |
-| `QTY_SOLD_TODAY` | STRING | Units sold on that day |
-| `BARCODE` | STRING | Product barcode |
-| `ERROR_CODE` | LONG | Error code (NULL = success) |
-| `MESSAGE` | STRING | Error/status message |
-| `ID` | LONG | Row identifier |
-| `MARKDOWN_START` | STRING | Markdown window start |
-| `UOM` | STRING | Unit of measure |
-| `REQUEST_ID` | STRING | UUID — unique markdown request ID |
-| `DATE_CREATED` | TIMESTAMP_NTZ | Record creation timestamp |
-| `ITEM_GROUP_ID` | STRING | Item group identifier |
-| `ITEM_GROUP_TYPE` | STRING | Item group type |
-| `RTCBARCODE` | LONG | RTC barcode |
+| Physical Column | Aliased As (in pipeline) | Type | Description |
+|---|---|---|---|
+| `SITE_ID` | `STORE_ID` | LONG | Store identifier |
+| `ITEM_ID` | — | LONG | Item identifier |
+| `MARKDOWN_DATETIME` | — | TIMESTAMP_NTZ | Timestamp of the markdown action |
+| `MARKDOWN_DATE` | `LOCAL_DATE` | DATE | Date of the markdown action |
+| `MARKDOWN_QUANTITY` | `QTY_MARKDOWN` | LONG | Quantity being marked down |
+| `ORIGINAL_PRICE` | — | DECIMAL(38,17) | Original retail price before markdown |
+| `CURRENT_PRICE` | — | DECIMAL(38,17) | Price at time of markdown event |
+| `MARKDOWN_TYPE` | — | STRING | Type of markdown (e.g. `'Head Office Instruction'`) |
+| `MARKDOWN_ITERATION` | — | LONG | Which markdown pass (1st, 2nd, etc.) |
+| `MARKDOWN_PERCENTAGE` | — | LONG | % markdown applied |
+| `MARKDOWN_TO_PRICE` | — | STRING | Target price after markdown |
+| `IS_OVERRIDDEN` | — | BOOLEAN | **Key field** — `True` if the store overrode the algorithm recommendation |
+| `IS_PRINTED` | — | BOOLEAN | Whether a markdown label was printed |
+| `EXPIRY_DATETIME` | — | TIMESTAMP_NTZ | Product expiry timestamp |
+| `SELL_BY_TIME` | — | TIMESTAMP_NTZ | Sell-by timestamp |
+| `QUANTITY_ON_HAND` | — | STRING | Stock on hand at time of markdown |
+| `QUANTITY_SOLD_TODAY` | — | STRING | Units sold on that day |
+| `BARCODE` | — | STRING | Product barcode |
+| `ERROR_CODE` | — | LONG | Error code (NULL = success) |
+| `ERROR_MESSAGE` | — | STRING | Error/status message |
+| `ID` | — | LONG | Row identifier |
+| `MARKDOWN_START` | — | STRING | Markdown window start |
+| `UOM` | — | STRING | Unit of measure |
+| `REQUEST_ID` | — | STRING | UUID — unique markdown request ID |
+| `CREATED_DATETIME` | — | TIMESTAMP_NTZ | Record creation timestamp |
+| `ITEM_GROUP_ID` | — | STRING | Item group identifier |
+| `ITEM_GROUP_TYPE` | — | STRING | Item group type |
+| `RTC_BARCODE` | — | LONG | RTC barcode |
 
-> 16.7M rows. Key columns for alerts: `STORE_ID`, `ITEM_ID`, `LOCAL_DATE`, `IS_OVERRIDDEN`, `ORIGINAL_PRICE`, `MARKDOWN_TO_PRICE`, `MARKDOWN_PERCENTAGE`.
-
----
-
-### `INBOUND.SOURCE.SOURCE_WMD_MARKDOWN_SALES` — *Markdown sell-through*
-
-Each row is a markdown sale transaction. Used to measure whether marked-down items actually sold.
-
-| Column | Type | Description |
-|---|---|---|
-| `STORE_ID` | LONG | Store identifier |
-| `ITEM_ID` | LONG | Item identifier |
-| `EAN` | STRING | European Article Number |
-| `DATE` | DATE | Sale date |
-| `TIME` | TIME | Sale time |
-| `ORIGINAL_RETAIL_PRICE` | DECIMAL(38,2) | Original price before markdown |
-| `MARKDOWN_QUANTITY` | DECIMAL(38,4) | Quantity sold at markdown price |
-| `MARKDOWN_VALUE` | DECIMAL(38,2) | £ value of markdown sale |
-| `MARKDOWN_REASON` | STRING | Reason for markdown |
-| `REDUCTION_VALUE` | DECIMAL(38,2) | £ discount given |
-| `PROMO_DISCOUNT` | STRING | Promotional discount applied |
-| `GLOBAL_DISCOUNT` | STRING | Global discount applied |
-
-> 38.2M rows. Key columns for sell-through alerts: `STORE_ID`, `ITEM_ID`, `DATE`, `MARKDOWN_QUANTITY`, `MARKDOWN_VALUE`, `REDUCTION_VALUE`.
+> Key columns for alerts: `SITE_ID` (→`STORE_ID`), `ITEM_ID`, `MARKDOWN_DATE` (→`LOCAL_DATE`), `IS_OVERRIDDEN`, `ORIGINAL_PRICE`, `MARKDOWN_TO_PRICE`, `MARKDOWN_PERCENTAGE`, `MARKDOWN_QUANTITY` (→`QTY_MARKDOWN`).
 
 ---
 
-### `INBOUND.SOURCE.SOURCE_WMD_WASTAGE` — *Waste / straight-to-bin events*
+### `ANALYSIS.FINAL.WMD_SALES` — *Markdown sell-through*
 
-Each row is a waste event. Items that were discarded rather than (or after) being marked down.
+Each row is a markdown sale transaction. Used to measure whether marked-down items actually sold. dbt view over `ANALYSIS.GOLD.GLD_WMD_SALES`.
 
-| Column | Type | Description |
-|---|---|---|
-| `STORE_ID` | LONG | Store identifier |
-| `ITEM_ID` | LONG | Item identifier |
-| `EAN` | LONG | European Article Number |
-| `DATE` | DATE | Waste event date |
-| `TIME` | STRING | Waste event time |
-| `ORIGINAL_PRICE` | DECIMAL(38,2) | Original retail price |
-| `FINAL_PRICE` | STRING | Price at disposal (NULL if not marked down before waste) |
-| `WASTE_QUANTITY` | DECIMAL(38,4) | Units wasted |
-| `WASTE_REASON` | STRING | Reason for waste (e.g. `'OUT OF DATE'`) |
+| Physical Column | Aliased As (in pipeline) | Type | Description |
+|---|---|---|---|
+| `SITE_ID` | `STORE_ID` | LONG | Store identifier |
+| `ITEM_ID` | — | LONG | Item identifier |
+| `EAN` | — | STRING | European Article Number |
+| `DATE` | — | DATE | Sale date |
+| `TIME` | — | TIME | Sale time |
+| `ORIGINAL_RETAIL_PRICE` | — | DECIMAL(38,2) | Original price before markdown |
+| `MARKDOWN_QUANTITY` | — | DECIMAL(38,4) | Quantity sold at markdown price |
+| `MARKDOWN_VALUE` | — | DECIMAL(38,2) | £ value of markdown sale |
+| `MARKDOWN_REASON` | — | STRING | Reason for markdown |
+| `REDUCTION_VALUE` | — | DECIMAL(38,2) | £ discount given |
+| `PROMO_DISCOUNT` | — | STRING | Promotional discount applied |
+| `GLOBAL_DISCOUNT` | — | STRING | Global discount applied |
 
-> 4.6M rows. Key columns for waste alerts: `STORE_ID`, `ITEM_ID`, `DATE`, `WASTE_QUANTITY`, `ORIGINAL_PRICE`, `FINAL_PRICE`, `WASTE_REASON`.
+> Key columns for sell-through alerts: `SITE_ID` (→`STORE_ID`), `ITEM_ID`, `DATE`, `MARKDOWN_QUANTITY`, `MARKDOWN_VALUE`, `REDUCTION_VALUE`.
+
+---
+
+### `ANALYSIS.FINAL.WMD_WASTAGE` — *Waste / straight-to-bin events*
+
+Each row is a waste event. dbt view over `ANALYSIS.GOLD.GLD_WMD_WASTAGE`.
+
+| Physical Column | Aliased As (in pipeline) | Type | Description |
+|---|---|---|---|
+| `SITE_ID` | `STORE_ID` | LONG | Store identifier |
+| `ITEM_ID` | — | LONG | Item identifier |
+| `EAN` | — | STRING | European Article Number |
+| `WASTE_DATE` | `DATE` | DATE | Waste event date |
+| `WASTE_TIME` | — | STRING | Waste event time |
+| `WASTE_DATETIME` | — | TIMESTAMP_NTZ | Waste event timestamp |
+| `ORIGINAL_PRICE` | — | DECIMAL(38,2) | Original retail price |
+| `FINAL_PRICE` | — | STRING | Price at disposal (NULL if not marked down before waste) |
+| `WASTE_QUANTITY` | — | DECIMAL(38,4) | Units wasted |
+| `WASTE_REASON` | — | STRING | Reason for waste (e.g. `'OUT OF DATE'`) |
+
+> Key columns for waste alerts: `SITE_ID` (→`STORE_ID`), `ITEM_ID`, `WASTE_DATE` (→`DATE`), `WASTE_QUANTITY`, `ORIGINAL_PRICE`, `FINAL_PRICE`, `WASTE_REASON`.
 
 > ⚠️ **Data quality finding (confirmed 2026-04-09):** `FINAL_PRICE` is `NULL` for **100% of rows** in this client's data (11,084 rows checked for week 2025-06-08 → 2025-06-14). The intended semantic was `NULL = straight-to-bin`, but the column carries no discriminatory power here.
 >
@@ -218,159 +221,71 @@ Each row is a waste event. Items that were discarded rather than (or after) bein
 
 ---
 
-### `INBOUND.SOURCE.SOURCE_WMD_SALES` — *General sales transactions*
-
-Regular (non-markdown) sales. Context table for sell-through rate calculations.
-
-| Column | Type | Description |
-|---|---|---|
-| `STORE_ID` | LONG | Store identifier |
-| `ITEM_ID` | STRING | Item identifier |
-| `EAN` | STRING | European Article Number |
-| `DATE` | DATE | Sale date |
-| `TIME` | TIME | Sale time |
-| `SALE_QUANTITY` | DECIMAL(38,4) | Units sold |
-| `SALE_VALUE` | DECIMAL(38,2) | £ sale value |
-| `ACTUAL_SALE_VALUE` | STRING | Actual £ received |
-| `REDUCTION_VALUE` | STRING | Any reduction applied |
-| `PROMO_DISCOUNT` | STRING | Promotional discount |
-| `GLOBAL_DISCOUNT` | STRING | Global discount |
-
-> 626M rows. Used as denominator/context for sell-through rates.
-
----
-
 ## Source Tables — Dimension / Mapping
 
-### `INBOUND.SOURCE.SOURCE_WMD_ITEM_HIERARCHY` — *Item master*
+### `ANALYSIS.FINAL.WMD_ITEM_HIERARCHY` — *Item master*
 
-| Column | Type | Description |
-|---|---|---|
-| `ITEM_ID` | STRING | Item identifier (join key to transactional tables) |
-| `ITEM_DESCRIPTION` | STRING | Human-readable item name |
-| `BARCODE` | STRING | Barcode |
-| `UNIT_OF_MEASURE` | STRING | UOM (e.g. `'ITEM'`, `'K4'`) |
-| `WEIGHED_ITEM` | STRING | Whether item is sold by weight |
-| `RETAIL_PRICE` | STRING | Current retail price |
-| `SECTION` | STRING | Top-level product grouping |
-| `SUB_SECTION` | STRING | Sub-grouping within section |
-| `DEPARTMENT` | STRING | **Department** — primary grouping dimension for alerts |
-| `HIERARCHY_LEVEL1ID` | LONG | Hierarchy level 1 ID |
-| `VMECODE` | LONG | VME code |
-| `EAN` | STRING | European Article Number |
-| `PACKSIZE` | STRING | Pack size |
-| `SUPPLIER_CODE` | STRING | Supplier identifier |
+dbt view over `ANALYSIS.GOLD.GLD_WMD_ITEM_HIERARCHY`. Still snapshot-based; pipeline deduplicates to latest row per `VME_CODE` at load time.
 
-> 109.6M rows (includes historical snapshots). Key columns: `ITEM_ID`, `DEPARTMENT`, `SECTION`, `SUB_SECTION`, `ITEM_DESCRIPTION`.
+| Physical Column | Aliased As (in pipeline) | Type | Description |
+|---|---|---|---|
+| `VME_CODE` | `ITEM_ID` (cast to LONG) | LONG | Internal numeric item ID — **join key to transactional tables** |
+| `ITEM_NAME` | `ITEM_DESCRIPTION` | STRING | Human-readable item name |
+| `BARCODE` | — | STRING | Barcode |
+| `UNIT_OF_MEASURE` | — | STRING | UOM (e.g. `'ITEM'`, `'K4'`) |
+| `WEIGHED_ITEM` | — | STRING | Whether item is sold by weight |
+| `RETAIL_PRICE` | — | STRING | Current retail price |
+| `SECTION` | — | STRING | Top-level product grouping |
+| `SUB_SECTION` | — | STRING | Sub-grouping within section |
+| `DEPARTMENT` | — | STRING | **Department** — primary grouping dimension for alerts |
+| `HIERARCHY_LEVEL_1_ID` | — | LONG | Hierarchy level 1 ID |
+| `EAN` | — | STRING | European Article Number |
+| `PACK_SIZE` | — | STRING | Pack size |
+| `SUPPLIER_CODE` | — | STRING | Supplier identifier |
+| `FILE_TIMESTAMP` | — | TIMESTAMP_NTZ | Used for snapshot deduplication (`PARTITION BY VME_CODE ORDER BY FILE_TIMESTAMP DESC`) |
 
----
-
-### `INBOUND.SOURCE.SOURCE_WMD_PPG_CLUSTER_MAPPING` — *Item → PPG cluster mapping*
-
-Maps items to product profile group clusters, with full category hierarchy.
-
-| Column | Type | Description |
-|---|---|---|
-| `ITEM_NUMBER` | STRING | Item identifier (join key — maps to `ITEM_ID`) |
-| `DEPARTMENT_NAME` | STRING | Department name |
-| `DEPARTMENT_CODE` | STRING | Department code |
-| `CATEGORY_NAME` | STRING | Category within department |
-| `CATEGORY_CODE` | STRING | Category code |
-| `SUB_CATEGORY_NAME` | STRING | Sub-category (finest hierarchy level) |
-| `SUB_CATEGORY_CODE` | STRING | Sub-category code |
-| `PPGCLUSTER_ID` | LONG | PPG cluster identifier |
-
-> 108.2M rows. Provides the hierarchy for department → category → sub-category drilldown in alert detail boxes.
+> Key columns after dedup: `VME_CODE` (→`ITEM_ID`), `DEPARTMENT`, `SECTION`, `SUB_SECTION`, `ITEM_NAME` (→`ITEM_DESCRIPTION`).
 
 ---
 
-### `INBOUND.SOURCE.SOURCE_WMD_STORE_CLUSTER_MAPPING` — *Store → cluster membership*
+### `ANALYSIS.FINAL.WMD_SITE_HIERARCHY` — *Store master*
 
-Maps stores to clusters for "vs chain" comparisons.
+dbt view over `ANALYSIS.GOLD.GLD_WMD_SITE_HIERARCHY`.
 
-| Column | Type | Description |
-|---|---|---|
-| `STORE_ID` | LONG | Store identifier |
-| `CLUSTER_ID` | LONG | Cluster the store belongs to |
-| `MON_OPEN_TIME` | LONG | Monday opening time |
-| `MON_CLOSE_TIME` | LONG | Monday closing time |
-| `SAT_OPEN_TIME` | LONG | Saturday opening time |
-| `SAT_CLOSE_TIME` | LONG | Saturday closing time |
-| `SUN_OPEN_TIME` | LONG | Sunday opening time |
-| `SUN_CLOSE_TIME` | LONG | Sunday closing time |
-| `MIN_OPEN_TIME` | LONG | Earliest opening time across all days |
-| `MAX_CLOSE_TIME` | LONG | Latest closing time across all days |
+| Physical Column | Aliased As (in pipeline) | Type | Description |
+|---|---|---|---|
+| `SITE_ID` | `STORE_ID` | LONG | Store identifier |
+| `SITE_NAME` | `STORE_NAME` | STRING | Human-readable store name (e.g. `'West Mersea Supermarket'`) |
+| `STORE_TYPE` | — | STRING | Store format |
+| `ADDRESS` | — | STRING | Street address |
+| `CITY` | — | STRING | City |
+| `POSTCODE` | — | STRING | Postcode |
+| `PHONE_NUMBER` | — | STRING | Phone |
+| `AREA_NUMBER` | — | STRING | Area code (e.g. `'5 S'`, `'6 E'`) |
+| `REGION` | — | LONG | Region ID |
+| `SQUARE_FOOTAGE` | — | STRING | Store size |
+| `NUMBER_OF_BASKETS` | — | STRING | Basket count |
 
-> 96K rows. **Note**: `CLUSTER_ID` is available but the agreed alert design uses **chain-wide averages** rather than cluster-level comparisons.
-
----
-
-### `INBOUND.SOURCE.SOURCE_WMD_STORE_HIERARCHY` — *Store master*
-
-| Column | Type | Description |
-|---|---|---|
-| `STORE_ID` | LONG | Store identifier |
-| `STORE_NAME` | STRING | Human-readable store name (e.g. `'West Mersea Supermarket'`) |
-| `STORE_TYPE` | STRING | Store format |
-| `ADDRESS` | STRING | Street address |
-| `CITY` | STRING | City |
-| `POSTCODE` | STRING | Postcode |
-| `PHONE_NUMBER` | STRING | Phone |
-| `AREA_NUMBER` | STRING | Area code (e.g. `'5 S'`, `'6 E'`) |
-| `REGION` | LONG | Region ID |
-| `SQUARE_FOOTAGE` | STRING | Store size |
-| `NUMBER_OF_BASKETS` | STRING | Basket count |
-
-> 96K rows. Key columns: `STORE_ID`, `STORE_NAME`, `REGION`, `AREA_NUMBER`.
-
----
-
-### `INBOUND.SOURCE.SOURCE_WMD_STORE_TRADING_HOUR` — *Standard trading hours*
-
-| Column | Type | Description |
-|---|---|---|
-| `STORE_ID` | LONG | Store identifier |
-| `DAY_OF_WEEK_ID` | LONG | Day of week (1-7) |
-| `STORE_OPEN` | TIME | Opening time |
-| `STORE_CLOSE` | TIME | Closing time |
-
-> 675K rows. Context for time-of-day analysis (e.g. are overrides happening before/after recommended markdown windows).
-
----
-
-### `INBOUND.SOURCE.SOURCE_WMD_STORE_TRADING_HOUR_HOLIDAY` — *Holiday trading hours*
-
-| Column | Type | Description |
-|---|---|---|
-| `STORE_CODE` | LONG | Store identifier (note: `STORE_CODE` not `STORE_ID`) |
-| `DATE` | DATE | Holiday date |
-| `OPEN` | STRING | Opening time |
-| `CLOSE` | STRING | Closing time |
-
-> 2.4M rows. Holiday overrides for trading hours.
+> Key columns: `SITE_ID` (→`STORE_ID`), `SITE_NAME` (→`STORE_NAME`), `REGION`, `AREA_NUMBER`.
 
 ---
 
 ## Table Relationships
 
+Joins use pipeline-normalised column names (i.e. after aliasing in `load_wmd`).
+
 ```
-SOURCE_WMD_MARKDOWN_LOG_CONVERTED (markdown events)
-    STORE_ID ──→ SOURCE_WMD_STORE_HIERARCHY.STORE_ID
-    STORE_ID ──→ SOURCE_WMD_STORE_CLUSTER_MAPPING.STORE_ID
-    ITEM_ID  ──→ SOURCE_WMD_ITEM_HIERARCHY.ITEM_ID
-    ITEM_ID  ──→ SOURCE_WMD_PPG_CLUSTER_MAPPING.ITEM_NUMBER
+WMD_MARKDOWN_API (markdown events)          [physical: SITE_ID, MARKDOWN_DATE, MARKDOWN_QUANTITY]
+    STORE_ID ──→ WMD_SITE_HIERARCHY.STORE_ID
+    ITEM_ID  ──→ WMD_ITEM_HIERARCHY.ITEM_ID  (VME_CODE cast to LONG)
 
-SOURCE_WMD_MARKDOWN_SALES (markdown sell-through)
-    STORE_ID ──→ SOURCE_WMD_STORE_HIERARCHY.STORE_ID
-    ITEM_ID  ──→ SOURCE_WMD_ITEM_HIERARCHY.ITEM_ID
+WMD_SALES (markdown sell-through)           [physical: SITE_ID; DATE unchanged]
+    STORE_ID ──→ WMD_SITE_HIERARCHY.STORE_ID
+    ITEM_ID  ──→ WMD_ITEM_HIERARCHY.ITEM_ID
 
-SOURCE_WMD_WASTAGE (waste events)
-    STORE_ID ──→ SOURCE_WMD_STORE_HIERARCHY.STORE_ID
-    ITEM_ID  ──→ SOURCE_WMD_ITEM_HIERARCHY.ITEM_ID
-
-SOURCE_WMD_SALES (general sales)
-    STORE_ID ──→ SOURCE_WMD_STORE_HIERARCHY.STORE_ID
-    ITEM_ID  ──→ SOURCE_WMD_ITEM_HIERARCHY.ITEM_ID
+WMD_WASTAGE (waste events)                  [physical: SITE_ID, WASTE_DATE]
+    STORE_ID ──→ WMD_SITE_HIERARCHY.STORE_ID
+    ITEM_ID  ──→ WMD_ITEM_HIERARCHY.ITEM_ID
 ```
 
 All joins are logical — no enforced FKs in Snowflake.
@@ -381,12 +296,10 @@ All joins are logical — no enforced FKs in Snowflake.
 
 | Signal Type | Primary Table | Supporting Tables |
 |---|---|---|
-| `MARKDOWN_OVERRIDE` | `MARKDOWN_LOG_CONVERTED` (`IS_OVERRIDDEN`) | Item hierarchy (department), Store hierarchy (name), PPG cluster (drilldown) |
-| `WASTE` | `WASTAGE` | Item hierarchy (department), Store hierarchy (name), Markdown log (was it marked down first?) |
-| `MARKDOWN_SELLTHROUGH` | `MARKDOWN_SALES` (qty sold at markdown) | Item hierarchy (department), Store hierarchy (name), Sales (denominator) |
-| `MARKDOWN_SKU` | `MARKDOWN_LOG_CONVERTED` (per-SKU aggregation) | Item hierarchy (name, department) |
-
-> ⚠️ **Design note (WASTE):** The `FINAL_PRICE IS NULL = STB` heuristic is invalid for this client (see WASTAGE table note above). The WASTE detectors currently treat all waste as STB, producing a chain average of 100% and zero VS_CHAIN signals. **The WASTE detector logic needs to be revised** using one of the alternative approaches documented on the WASTAGE table.
+| `MARKDOWN_OVERRIDE` | `WMD_MARKDOWN_API` (`IS_OVERRIDDEN`) | `WMD_ITEM_HIERARCHY` (department), `WMD_SITE_HIERARCHY` (name) |
+| `WASTE` | `WMD_WASTAGE` | `WMD_ITEM_HIERARCHY` (department), `WMD_SITE_HIERARCHY` (name), `WMD_MARKDOWN_API` (denominator for waste rate) |
+| `MARKDOWN_SELLTHROUGH` | `WMD_SALES` (qty sold at markdown) | `WMD_ITEM_HIERARCHY` (department), `WMD_SITE_HIERARCHY` (name), `WMD_WASTAGE` (denominator) |
+| `MARKDOWN_SKU` | `WMD_MARKDOWN_API` (per-SKU aggregation) | `WMD_ITEM_HIERARCHY` (name, department), `WMD_SITE_HIERARCHY` (name) |
 
 ---
 

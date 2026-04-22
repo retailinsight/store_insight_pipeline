@@ -209,6 +209,7 @@ def run_pipeline(
     lookback_start=None,
     projection_weeks=4,
     drilldown_top_n=3,
+    top_n_per_store=None,
     store_id=None,
     session=None,
     feedback=None,
@@ -232,6 +233,8 @@ def run_pipeline(
                        defaults to 10 weeks before this_week_end
     projection_weeks : weeks for cost-of-doing-nothing projection (default: 4)
     drilldown_top_n  : top N PPGs in drilldown lists (default: 3)
+    top_n_per_store  : optional int — keep only the top N cards per store_id
+                       by SORT_VALUE; None = no limit (default)
     store_id         : optional int — restrict to a single store
     session          : Snowpark Session — required only for Cortex narratives
     feedback         : optional cached Snowpark DataFrame from LSM_ALERT_FEEDBACK;
@@ -288,6 +291,7 @@ def run_pipeline(
         lookback_start=lookback_start,
         projection_weeks=projection_weeks,
         drilldown_top_n=drilldown_top_n,
+        top_n_per_store=top_n_per_store,
         session=session,
         feedback=feedback,
         markdown_log=markdown_log,
@@ -349,6 +353,7 @@ def run_pipeline_from_signals(
     lookback_start=None,
     projection_weeks=4,
     drilldown_top_n=3,
+    top_n_per_store=None,
     session=None,
     feedback=None,
     markdown_log=None,
@@ -375,6 +380,8 @@ def run_pipeline_from_signals(
     lookback_start   : start of 10-week window; defaults to 10 weeks before this_week_end
     projection_weeks : weeks for cost-of-doing-nothing projection (default: 4)
     drilldown_top_n  : top N PPGs in drilldown lists (default: 3)
+    top_n_per_store  : optional int — keep only the top N cards per store_id
+                       by SORT_VALUE; None = no limit (default)
     session          : Snowpark Session — required only for Cortex narratives
     feedback         : optional cached Snowpark DataFrame from LSM_ALERT_FEEDBACK
     markdown_log     : optional cached Snowpark DataFrame — SOURCE_WMD_MARKDOWN_LOG_CONVERTED;
@@ -438,6 +445,19 @@ def run_pipeline_from_signals(
         cards.append(_build_card(sig, narrative, sort_value))
 
     cards.sort(key=lambda x: x['sort_value'], reverse=True)
+
+    top_n = top_n_per_store if top_n_per_store is not None else int((cfg or {}).get('output', {}).get('top_n_per_store', 0)) or None
+    if top_n:
+        store_counts: dict[int, int] = {}
+        filtered = []
+        for card in cards:
+            sid = card['store_id']
+            if store_counts.get(sid, 0) < top_n:
+                filtered.append(card)
+                store_counts[sid] = store_counts.get(sid, 0) + 1
+        print(f'[pipeline] top_n_per_store={top_n}: {len(cards)} → {len(filtered)} cards')
+        cards = filtered
+
     print(f'[pipeline] {len(cards)} alert cards produced')
     return cards
 

@@ -143,7 +143,7 @@ export default function Index() {
       }
 
       try {
-        const response = await fetchKpis();
+        const response = await fetchKpis(selectedStore?.id);
         setKpisData(response.data);
         setKpisError(null);
       } catch (err) {
@@ -164,7 +164,7 @@ export default function Index() {
     };
 
     loadKpis();
-  }, [isAuthenticated, ensureAuthenticated, toast]);
+  }, [isAuthenticated, ensureAuthenticated, selectedStore, toast]);
 
   // Fetch successes data
   useEffect(() => {

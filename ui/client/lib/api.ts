@@ -203,9 +203,10 @@ async function authenticatedFetch<T>(
 /**
  * Fetch KPI data
  */
-export async function fetchKpis(): Promise<KpisResponse> {
-  const primaryEndpoint = "/data/kpis";
-  const fallbackEndpoint = "/data/kpi";
+export async function fetchKpis(storeId?: number): Promise<KpisResponse> {
+  const params = storeId != null ? `?store_id=${storeId}` : "";
+  const primaryEndpoint = `/data/kpis${params}`;
+  const fallbackEndpoint = `/data/kpi${params}`;
 
   console.log("[API] Fetching KPIs from:", buildApiUrl(primaryEndpoint));
 
@@ -251,9 +252,11 @@ export async function fetchSuccesses(): Promise<SuccessesResponse> {
 /**
  * Fetch action data
  */
-export async function fetchActions(): Promise<ActionsResponse> {
-  console.log("[API] Fetching actions from:", buildApiUrl("/data/actions"));
-  const result = await authenticatedFetch<ActionsResponse>("/data/actions");
+export async function fetchActions(storeId?: number): Promise<ActionsResponse> {
+  const params = storeId != null ? `?store_id=${storeId}` : "";
+  const endpoint = `/data/actions${params}`;
+  console.log("[API] Fetching actions from:", buildApiUrl(endpoint));
+  const result = await authenticatedFetch<ActionsResponse>(endpoint);
   console.log("[API] Actions fetched successfully:", result.data.length, "items");
   return result;
 }

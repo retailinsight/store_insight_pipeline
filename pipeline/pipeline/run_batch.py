@@ -68,11 +68,11 @@ from snowflake.snowpark.types import LongType
 _DEFAULT_OSA_TABLE            = 'ANALYSIS.FINAL.LSM_ITEM_STORE_DAY_REPORTING_PERIOD'
 _DEFAULT_HIERARCHY_TABLE      = 'ANALYSIS.FINAL.LSM_ITEM_HIERARCHY'
 _DEFAULT_FEEDBACK_TABLE       = 'ANALYSIS.FINAL.LSM_ALERT_FEEDBACK'
-_DEFAULT_MARKDOWN_LOG_TABLE   = 'INBOUND.SOURCE.SOURCE_WMD_MARKDOWN_LOG_CONVERTED'
-_DEFAULT_MARKDOWN_SALES_TABLE = 'INBOUND.SOURCE.SOURCE_WMD_MARKDOWN_SALES'
-_DEFAULT_WASTAGE_TABLE        = 'INBOUND.SOURCE.SOURCE_WMD_WASTAGE'
-_DEFAULT_WMD_ITEM_HIER_TABLE  = 'INBOUND.SOURCE.SOURCE_WMD_ITEM_HIERARCHY'
-_DEFAULT_WMD_STORE_HIER_TABLE = 'INBOUND.SOURCE.SOURCE_WMD_STORE_HIERARCHY'
+_DEFAULT_MARKDOWN_LOG_TABLE   = 'ANALYSIS.FINAL.WMD_MARKDOWN_API'
+_DEFAULT_MARKDOWN_SALES_TABLE = 'ANALYSIS.FINAL.WMD_SALES'
+_DEFAULT_WASTAGE_TABLE        = 'ANALYSIS.FINAL.WMD_WASTAGE'
+_DEFAULT_WMD_ITEM_HIER_TABLE  = 'ANALYSIS.FINAL.WMD_ITEM_HIERARCHY'
+_DEFAULT_WMD_STORE_HIER_TABLE = 'ANALYSIS.FINAL.WMD_SITE_HIERARCHY'
 
 
 def _table(cfg: dict, key: str, default: str) -> str:
@@ -170,35 +170,49 @@ def load_wmd(session, wmd_lookback, analysis_date, cfg: dict = None):
     item_hier_table = _table(cfg, 'wmd_item_hierarchy',  _DEFAULT_WMD_ITEM_HIER_TABLE)
     store_hier_table = _table(cfg, 'wmd_store_hierarchy', _DEFAULT_WMD_STORE_HIER_TABLE)
 
+    # WMD_MARKDOWN_API renames STORE_ID→SITE_ID, LOCAL_DATE→MARKDOWN_DATE,
+    # QTY_MARKDOWN→MARKDOWN_QUANTITY vs the old SOURCE table.  Alias back here
+    # so all downstream detectors/gatherers are unchanged.
     markdown_log = (
         session.table(md_log_table)
+        .with_column('STORE_ID',    F.col('SITE_ID'))
+        .with_column('LOCAL_DATE',  F.col('MARKDOWN_DATE'))
+        .with_column('QTY_MARKDOWN', F.col('MARKDOWN_QUANTITY'))
         .filter(F.col('LOCAL_DATE') >= wmd_lookback)
         .filter(F.col('LOCAL_DATE') <= analysis_date)
         .cache_result()
     )
+    # WMD_SALES renames SITE_ID→STORE_ID, SALE_QUANTITY→MARKDOWN_QUANTITY, SALE_VALUE→MARKDOWN_VALUE.
     markdown_sales = (
         session.table(md_sales_table)
+        .with_column('STORE_ID',          F.col('SITE_ID'))
+        .with_column('MARKDOWN_QUANTITY', F.col('SALE_QUANTITY'))
+        .with_column('MARKDOWN_VALUE',    F.col('SALE_VALUE'))
         .filter(F.col('DATE') >= wmd_lookback)
         .filter(F.col('DATE') <= analysis_date)
         .cache_result()
     )
+    # WMD_WASTAGE renames STORE_ID→SITE_ID and DATE→WASTE_DATE.
     wastage = (
         session.table(wastage_table)
+        .with_column('STORE_ID', F.col('SITE_ID'))
+        .with_column('DATE',     F.col('WASTE_DATE'))
         .filter(F.col('DATE') >= wmd_lookback)
         .filter(F.col('DATE') <= analysis_date)
         .cache_result()
     )
 
-    # Item hierarchy arrives as daily snapshots — dedupe to latest per VMECODE.
-    _item_w = Window.partitionBy('VMECODE').orderBy(F.col('FILE_TIMESTAMP').desc())
+    # WMD_ITEM_HIERARCHY renames VMECODE→VME_CODE and ITEM_DESCRIPTION→ITEM_NAME.
+    # Still snapshot-based so dedupe to latest per VME_CODE.
+    _item_w = Window.partitionBy('VME_CODE').orderBy(F.col('FILE_TIMESTAMP').desc())
     item_hierarchy = (
         session.table(item_hier_table)
         .with_column('_RN', F.row_number().over(_item_w))
         .filter(F.col('_RN') == 1)
         .select(
-            F.col('VMECODE').cast(LongType()).alias('ITEM_ID'),
-            F.col('ITEM_DESCRIPTION'),
-            F.col('DEPARTMENT'),
+            F.col('VME_CODE').cast(LongType()).alias('ITEM_ID'),
+            F.col('ITEM_NAME').alias('ITEM_DESCRIPTION'),
+            F.col('HIERARCHY_LEVEL_1_ID').alias('DEPARTMENT'),
             F.col('SECTION'),
             F.col('SUB_SECTION'),
         )
@@ -206,7 +220,13 @@ def load_wmd(session, wmd_lookback, analysis_date, cfg: dict = None):
         .cache_result()
     )
 
-    store_hierarchy = session.table(store_hier_table).cache_result()
+    # WMD_SITE_HIERARCHY renames STORE_ID→SITE_ID and STORE_NAME→SITE_NAME.
+    store_hierarchy = (
+        session.table(store_hier_table)
+        .with_column('STORE_ID',   F.col('SITE_ID'))
+        .with_column('STORE_NAME', F.col('SITE_NAME'))
+        .cache_result()
+    )
 
     return {
         'markdown_log':    markdown_log,

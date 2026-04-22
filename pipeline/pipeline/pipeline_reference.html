@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alerts Pipeline Reference</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d2e;
+    --surface2: #222537;
+    --border: #2d3148;
+    --accent-avail: #3b82f6;
+    --accent-compliance: #a855f7;
+    --accent-markdown: #f59e0b;
+    --accent-waste: #ef4444;
+    --text: #e2e8f0;
+    --text-muted: #8892a4;
+    --text-dim: #6b7280;
+    --tag-bg: #2d3148;
+    --tag-radius: 4px;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --sidebar-w: 240px;
+    --header-h: 56px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.6;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ─── Header ─────────────────────────────────────────── */
+  header {
+    height: var(--header-h);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 16px;
+    flex-shrink: 0;
+    z-index: 10;
+  }
+  header h1 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: 0.01em;
+  }
+  header .sub {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  header .spacer { flex: 1; }
+  header .search-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  header .search-wrap svg {
+    position: absolute;
+    left: 10px;
+    color: var(--text-dim);
+    pointer-events: none;
+  }
+  header input[type=search] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 13px;
+    padding: 6px 12px 6px 34px;
+    width: 220px;
+    outline: none;
+  }
+  header input[type=search]::placeholder { color: var(--text-dim); }
+  header input[type=search]:focus { border-color: var(--accent-avail); }
+
+  /* ─── Layout ──────────────────────────────────────────── */
+  .layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ─── Sidebar ─────────────────────────────────────────── */
+  aside {
+    width: var(--sidebar-w);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    flex-shrink: 0;
+    padding: 12px 0;
+  }
+  .sidebar-section {
+    padding: 8px 16px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: background 0.15s;
+    color: var(--text-muted);
+    font-size: 13px;
+    user-select: none;
+  }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active {
+    border-left-color: var(--accent-color, var(--accent-avail));
+    background: var(--surface2);
+    color: var(--text);
+  }
+  .nav-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent-color, var(--accent-avail));
+    flex-shrink: 0;
+  }
+
+  /* ─── Main content ────────────────────────────────────── */
+  main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 32px 40px;
+    scroll-behavior: smooth;
+  }
+
+  .alert-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 32px;
+    overflow: hidden;
+  }
+
+  /* Card header */
+  .card-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .card-header-left { flex: 1; }
+  .card-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .bucket-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 12px;
+    letter-spacing: 0.04em;
+  }
+  .card-problem {
+    color: var(--text-muted);
+    font-size: 13px;
+    max-width: 700px;
+  }
+
+  /* Sections inside card */
+  .card-section {
+    padding: 20px 24px;
+    border-top: 1px solid var(--border);
+  }
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-title svg { opacity: 0.6; }
+
+  /* Detector rows */
+  .detector-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .detector-row {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+  }
+  .detector-name {
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .detector-name .tag {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 7px;
+    background: var(--tag-bg);
+    border-radius: var(--tag-radius);
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+  }
+  .detector-logic { color: var(--text-muted); font-size: 13px; margin-bottom: 6px; }
+  .detector-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+  }
+  .meta-pill {
+    font-size: 11px;
+    padding: 2px 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text-muted);
+  }
+  .meta-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-right: 4px;
+  }
+
+  /* Data sources */
+  .sources-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .source-block {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+  }
+  .source-table-name {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-avail);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .source-table-name svg { opacity: 0.7; }
+  .columns-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .col-row {
+    display: flex;
+    gap: 10px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .col-name {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    color: var(--text);
+    min-width: 200px;
+    flex-shrink: 0;
+  }
+  .col-desc { color: var(--text-muted); }
+
+  /* Gatherers */
+  .gatherer-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .gatherer-row {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+  }
+  .gatherer-name {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: #34d399;
+    margin-bottom: 4px;
+  }
+  .gatherer-keys {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 6px;
+  }
+  .key-tag {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 11px;
+    padding: 1px 7px;
+    background: rgba(52, 211, 153, 0.1);
+    border: 1px solid rgba(52, 211, 153, 0.25);
+    border-radius: var(--tag-radius);
+    color: #34d399;
+  }
+  .gatherer-desc { color: var(--text-muted); font-size: 13px; }
+
+  /* Skill section */
+  .skill-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 8px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    user-select: none;
+    transition: background 0.15s;
+    width: 100%;
+    text-align: left;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  .skill-toggle:hover { background: var(--bg); color: var(--text); }
+  .skill-toggle svg { transition: transform 0.2s; flex-shrink: 0; }
+  .skill-toggle.open svg.chevron { transform: rotate(180deg); }
+  .skill-name {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 12px;
+    color: #fb923c;
+  }
+  .skill-engine {
+    font-size: 11px;
+    padding: 1px 7px;
+    background: rgba(251, 146, 60, 0.1);
+    border: 1px solid rgba(251, 146, 60, 0.25);
+    border-radius: 12px;
+    color: #fb923c;
+    margin-left: auto;
+  }
+  .skill-content {
+    display: none;
+    margin-top: 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 20px 24px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .skill-content.open { display: block; }
+
+  .skill-section-h { font-weight: 600; color: var(--text); margin: 14px 0 6px; font-size: 13px; }
+  .skill-section-h:first-child { margin-top: 0; }
+  .skill-purpose { line-height: 1.7; }
+
+  .skill-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0 12px;
+  }
+  .skill-table th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    padding: 6px 10px 6px 0;
+  }
+  .skill-table td {
+    padding: 5px 10px 5px 0;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .skill-table tr:last-child td { border-bottom: none; }
+  .skill-table td:first-child {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    color: #93c5fd;
+    white-space: nowrap;
+    padding-right: 16px;
+  }
+  .skill-rule-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+  .skill-rule-list li { padding-left: 14px; position: relative; line-height: 1.6; }
+  .skill-rule-list li::before { content: '—'; position: absolute; left: 0; color: var(--text-dim); }
+
+  /* Colour palette by bucket */
+  .bucket-avail    { --accent-color: var(--accent-avail); }
+  .bucket-compliance { --accent-color: var(--accent-compliance); }
+  .bucket-markdown { --accent-color: var(--accent-markdown); }
+  .bucket-waste    { --accent-color: var(--accent-waste); }
+
+  .badge-avail     { background: rgba(59,130,246,0.15); color: #93c5fd; }
+  .badge-compliance { background: rgba(168,85,247,0.15); color: #d8b4fe; }
+  .badge-markdown  { background: rgba(245,158,11,0.15); color: #fcd34d; }
+  .badge-waste     { background: rgba(239,68,68,0.15); color: #fca5a5; }
+
+  /* Search hide */
+  .alert-card.hidden { display: none; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  code {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 11px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: #93c5fd;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <svg width="20" height="20" fill="none" stroke="#3b82f6" stroke-width="2" viewBox="0 0 24 24">
+    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+  </svg>
+  <h1>Alerts Pipeline Reference</h1>
+  <span class="sub">6 alert types · 11 detectors · 10 gatherers · 6 skills</span>
+  <div class="spacer"></div>
+  <div class="search-wrap">
+    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+    </svg>
+    <input type="search" id="search" placeholder="Search alerts, detectors, tables…">
+  </div>
+</header>
+
+<div class="layout">
+  <aside>
+    <div class="sidebar-section">Availability</div>
+    <div class="nav-item bucket-avail" onclick="scrollTo('osa')" id="nav-osa">
+      <span class="nav-dot"></span>OSA
+    </div>
+
+    <div class="sidebar-section">Compliance</div>
+    <div class="nav-item bucket-compliance" onclick="scrollTo('compliance')" id="nav-compliance">
+      <span class="nav-dot"></span>Compliance
+    </div>
+
+    <div class="sidebar-section">Markdown</div>
+    <div class="nav-item bucket-markdown" onclick="scrollTo('markdown_override')" id="nav-markdown_override">
+      <span class="nav-dot"></span>Markdown Override
+    </div>
+    <div class="nav-item bucket-markdown" onclick="scrollTo('markdown_sellthrough')" id="nav-markdown_sellthrough">
+      <span class="nav-dot"></span>Markdown Sell-Through
+    </div>
+    <div class="nav-item bucket-markdown" onclick="scrollTo('markdown_sku')" id="nav-markdown_sku">
+      <span class="nav-dot"></span>Markdown SKU
+    </div>
+
+    <div class="sidebar-section">Waste</div>
+    <div class="nav-item bucket-waste" onclick="scrollTo('waste')" id="nav-waste">
+      <span class="nav-dot"></span>Waste
+    </div>
+  </aside>
+
+  <main id="main">
+
+    <!-- ═══════════════════════════════════════════════════════
+         OSA
+    ═══════════════════════════════════════════════════════ -->
+    <div class="alert-card bucket-avail" id="card-osa" data-searchtext="osa availability wow vs_chain repeat osa_ppg_drilldown osa_dow osa_chain_drift osa_repeat_history osa_cost_projection ACTUAL_SALES_VOLUME LOST_SALES_VOLUME LOST_SALES_VALUE ANALYSIS_DATE ITEM_CODE SUBCLASS_NAME PRODUCT_PROFILE_GROUP_NAME DEPARTMENT_NAME osa_investigation_skill">
+      <div class="card-header">
+        <div class="card-header-left">
+          <div class="card-title">
+            OSA
+            <span class="bucket-badge badge-avail">Availability</span>
+          </div>
+          <div class="card-problem">Fires when a store-department's on-shelf availability is materially below the chain average, drops sharply week-on-week, or contains items that have failed persistently across multiple weeks.</div>
+        </div>
+      </div>
+
+      <!-- Detection -->
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          Detection Methods
+        </div>
+        <div class="detector-grid">
+
+          <div class="detector-row">
+            <div class="detector-name">WOW <span class="tag">Week-on-Week</span></div>
+            <div class="detector-logic">Fires when OSA falls more than <code>min_wow_drop</code> percentage points compared to the previous week, and lost sales value this week exceeds <code>min_lost_sales_value</code>.</div>
+            <div class="detector-meta">
+              <span class="meta-pill"><span class="meta-label">Baseline</span>Same store-department OSA last week</span>
+              <span class="meta-pill"><span class="meta-label">Thresholds</span>min_wow_drop · min_lost_sales_value</span>
+            </div>
+          </div>
+
+          <div class="detector-row">
+            <div class="detector-name">VS_CHAIN <span class="tag">vs Chain Average</span></div>
+            <div class="detector-logic">Fires when the store OSA is more than <code>min_chain_gap</code> percentage points below the chain-wide average for the same department this week, and lost sales value exceeds <code>min_lost_sales_value</code>.</div>
+            <div class="detector-meta">
+              <span class="meta-pill"><span class="meta-label">Baseline</span>Chain-wide average OSA this week</span>
+              <span class="meta-pill"><span class="meta-label">Thresholds</span>min_chain_gap · min_lost_sales_value</span>
+            </div>
+          </div>
+
+          <div class="detector-row">
+            <div class="detector-name">REPEAT <span class="tag">Persistent Failure</span></div>
+            <div class="detector-logic">Fires when one or more items in a store-department have triggered an availability alert in at least <code>min_alert_weeks</code> of the rolling lookback window (default 10 weeks). An alert week = weekly OSA &lt; (1 − <code>min_osa_drop</code>) AND weekly LSV &gt; <code>min_weekly_lsv</code>.</div>
+            <div class="detector-meta">
+              <span class="meta-pill"><span class="meta-label">Baseline</span>Item OSA over rolling 10-week lookback</span>
+              <span class="meta-pill"><span class="meta-label">Thresholds</span>min_alert_weeks · min_osa_drop · min_weekly_lsv</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Data Sources -->
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          Data Sources
+        </div>
+        <div class="sources-grid">
+
+          <div class="source-block">
+            <div class="source-table-name">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              OSA DataFrame (pre-joined, full chain)
+            </div>
+            <div class="columns-list">
+              <div class="col-row"><span class="col-name">STORE_ID</span><span class="col-desc">Store identifier</span></div>
+              <div class="col-row"><span class="col-name">DEPARTMENT_NAME</span><span class="col-desc">Department grouping used as the alert section</span></div>
+              <div class="col-row"><span class="col-name">ANALYSIS_DATE</span><span class="col-desc">Date of the observation row — used to window into weeks</span></div>
+              <div class="col-row"><span class="col-name">ACTUAL_SALES_VOLUME</span><span class="col-desc">Units actually sold — numerator of OSA score</span></div>
+              <div class="col-row"><span class="col-name">LOST_SALES_VOLUME</span><span class="col-desc">Estimated units that could have sold but were unavailable — denominator addition for OSA score</span></div>
+              <div class="col-row"><span class="col-name">LOST_SALES_VALUE</span><span class="col-desc">£ value of lost sales — used as the commercial gate threshold</span></div>
+              <div class="col-row"><span class="col-name">ITEM_CODE</span><span class="col-desc">Item identifier — used by REPEAT detector to track per-item history</span></div>
+              <div class="col-row"><span class="col-name">SUBCLASS_NAME</span><span class="col-desc">Product subclass grouping — used in PPG drilldown gatherer</span></div>
+              <div class="col-row"><span class="col-name">PRODUCT_PROFILE_GROUP_NAME</span><span class="col-desc">Product profile group — used in PPG drilldown gatherer</span></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Gatherers -->
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          Facts Gathered
+        </div>
+        <div class="gatherer-grid">
+
+          <div class="gatherer-row">
+            <div class="gatherer-name">osa_ppg_drilldown</div>
+            <div class="gatherer-keys"><span class="key-tag">subclass_contributors</span><span class="key-tag">subclass_changes</span></div>
+            <div class="gatherer-desc">Top-N product profile groups by this-week lost sales value (<em>subclass_contributors</em>) and by week-on-week LSV increase (<em>subclass_changes</em>). Answers: which products are driving the problem and which are getting worse.</div>
+          </div>
+
+          <div class="gatherer-row">
+            <div class="gatherer-name">osa_dow</div>
+            <div class="gatherer-keys"><span class="key-tag">dow_pattern</span><span class="key-tag">worst_day</span></div>
+            <div class="gatherer-desc">Lost sales broken down by day-of-week for the current week, sorted descending. Used to anchor the recommended action to the worst day.</div>
+          </div>
+
+          <div class="gatherer-row">
+            <div class="gatherer-name">osa_chain_drift</div>
+            <div class="gatherer-keys"><span class="key-tag">chain_drift_pp</span></div>
+            <div class="gatherer-desc">Chain-wide week-on-week OSA drift per department. Used to distinguish isolated store issues from chain-wide movements.</div>
+          </div>
+
+          <div class="gatherer-row">
+            <div class="gatherer-name">osa_repeat_history</div>
+            <div class="gatherer-keys"><span class="key-tag">repeat_item_history</span></div>
+            <div class="gatherer-desc">Per-item week-by-week OSA and LSV history. Runs only for signals carrying the REPEAT trigger. Used to build root-cause narrative for chronic failures.</div>
+          </div>
+
+          <div class="gatherer-row">
+            <div class="gatherer-name">osa_cost_projection</div>
+            <div class="gatherer-keys"><span class="key-tag">cost_projection</span></div>
+            <div class="gatherer-desc">Cost-of-doing-nothing projection: <code>this_week_lsv × projection_weeks</code>. Pure Python — no Snowflake query. Used in the Cost if Not Fixed card slot.</div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Skill -->
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Investigation Skill
+        </div>
+        <button class="skill-toggle" onclick="toggleSkill(this)">
+          <svg class="chevron" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+          <span class="skill-name">osa_investigation_skill.md</span>
+          <span class="skill-engine">rule_based</span>
+        </button>
+        <div class="skill-content">
+          <div class="skill-section-h">Purpose</div>
+          <div class="skill-purpose">Guide the investigation of an OSA (on-shelf availability) alert for a store-department. Generates card content that is specific, commercially grounded, and actionable for a store manager.</div>
+
+          <div class="skill-section-h">Key Signal Fields</div>
+          <table class="skill-table">
+            <tr><th>Field</th><th>Description</th></tr>
+            <tr><td>this_week_lsv</td><td>Total lost sales value for the department this week</td></tr>
+            <tr><td>this_week_osa</td><td>Store-department OSA % this week</td></tr>
+            <tr><td>last_week_osa</td><td>Store-department OSA % last week (WOW trigger)</td></tr>
+            <tr><td>wow_drift_pp</td><td>Signed OSA change week-on-week in percentage points</td></tr>
+            <tr><td>chain_this_week_osa</td><td>Chain average OSA % this week (VS_CHAIN trigger)</td></tr>
+            <tr><td>chain_gap_pp</td><td>Gap between store and chain OSA in pp (VS_CHAIN trigger)</td></tr>
+            <tr><td>repeat_item_count</td><td>Number of persistently failing items (REPEAT trigger)</td></tr>
+            <tr><td>repeat_item_details</td><td>List of failing items with alert_weeks and cumulative_lsv</td></tr>
+          </table>
+
+          <div class="skill-section-h">Narrative Construction</div>
+          <ul class="skill-rule-list">
+            <li>Lead with strongest trigger: REPEAT &gt; VS_CHAIN &gt; WOW</li>
+            <li>Open explanation with the £ lost sales figure and OSA context</li>
+            <li>Use <code>subclass_contributors</code> and <code>subclass_changes</code> to name top 1–3 products</li>
+            <li>Use <code>worst_day</code> from DOW facts to anchor recommended action timing</li>
+            <li>For REPEAT: focus recommended action on root cause (parameters, lead times, capacity)</li>
+            <li>Cost if Not Fixed: <em>"If this continues at the same rate, the store could lose approximately £X in the next N weeks."</em></li>
+            <li>Do not reference trigger type names (WOW, VS_CHAIN, REPEAT) in card — use plain English</li>
+            <li>Do not fabricate product names or £ figures not present in signal data</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ═══════════════════════════════════════════════════════
+         COMPLIANCE
+    ═══════════════════════════════════════════════════════ -->
+    <div class="alert-card bucket-compliance" id="card-compliance" data-searchtext="compliance tick_and_flick tick-and-flick feedback LSM_ALERT_FEEDBACK STORE_ID SITE_NAME ALERT_ANALYSIS_DATE INTERVENTION_ID TICK_AND_FLICK_FLAG ALERT_TYPE_NAME compliance_investigation_skill">
+      <div class="card-header">
+        <div class="card-header-left">
+          <div class="card-title">
+            Compliance
+            <span class="bucket-badge badge-compliance">Compliance</span>
+          </div>
+          <div class="card-problem">Fires when a store's rate of alerts dismissed without genuine investigation (tick-and-flick) has risen week-on-week and exceeds the chain average — indicating poor compliance with the alerting process.</div>
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          Detection Methods
+        </div>
+        <div class="detector-grid">
+          <div class="detector-row">
+            <div class="detector-name">TICK_AND_FLICK <span class="tag">Rapid Dismissal</span></div>
+            <div class="detector-logic">Fires when all three conditions hold: tick-and-flick rate rose ≥ <code>min_wow_increase</code> pp week-on-week; store rate exceeds chain average by ≥ <code>min_chain_outperform</code> pp; store worked ≥ <code>min_alerts_worked</code> alerts this week.</div>
+            <div class="detector-meta">
+              <span class="meta-pill"><span class="meta-label">Baseline</span>Chain-wide tick-and-flick rate this week</span>
+              <span class="meta-pill"><span class="meta-label">Thresholds</span>min_wow_increase · min_chain_outperform · min_alerts_worked</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          Data Sources
+        </div>
+        <div class="sources-grid">
+          <div class="source-block">
+            <div class="source-table-name">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              LSM_ALERT_FEEDBACK
+            </div>
+            <div class="columns-list">
+              <div class="col-row"><span class="col-name">STORE_ID</span><span class="col-desc">Store identifier</span></div>
+              <div class="col-row"><span class="col-name">SITE_NAME</span><span class="col-desc">Human-readable store name</span></div>
+              <div class="col-row"><span class="col-name">ALERT_ANALYSIS_DATE</span><span class="col-desc">Date the alert was worked — used to window into weeks</span></div>
+              <div class="col-row"><span class="col-name">INTERVENTION_ID</span><span class="col-desc">Unique identifier per alert intervention — counted to measure volume worked</span></div>
+              <div class="col-row"><span class="col-name">TICK_AND_FLICK_FLAG</span><span class="col-desc">Boolean — true if the alert was dismissed without genuine investigation</span></div>
+              <div class="col-row"><span class="col-name">ALERT_TYPE_NAME</span><span class="col-desc">Alert category — used in the department breakdown gatherer to identify which types are being dismissed</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          Facts Gathered
+        </div>
+        <div class="gatherer-grid">
+          <div class="gatherer-row">
+            <div class="gatherer-name">tick_and_flick_breakdown</div>
+            <div class="gatherer-keys"><span class="key-tag">tf_by_alert_type</span></div>
+            <div class="gatherer-desc">Breakdown of tick-and-flick dismissals by alert type for each flagged store — shows which alert categories are being dismissed most carelessly (worked, tf_count, tf_rate per type).</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Investigation Skill
+        </div>
+        <button class="skill-toggle" onclick="toggleSkill(this)">
+          <svg class="chevron" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+          <span class="skill-name">compliance_investigation_skill.md</span>
+          <span class="skill-engine">rule_based</span>
+        </button>
+        <div class="skill-content">
+          <div class="skill-section-h">Purpose</div>
+          <div class="skill-purpose">Guide the investigation of a COMPLIANCE alert triggered by the tick-and-flick detector. Generates card content that is specific and actionable for a store manager or area manager.</div>
+
+          <div class="skill-section-h">Key Signal Fields</div>
+          <table class="skill-table">
+            <tr><th>Field</th><th>Description</th></tr>
+            <tr><td>this_week_tf_rate</td><td>% of alerts worked this week that were tick-and-flick</td></tr>
+            <tr><td>last_week_tf_rate</td><td>Same metric last week</td></tr>
+            <tr><td>tf_rate_change</td><td>Signed week-on-week change in pp</td></tr>
+            <tr><td>chain_tf_rate</td><td>Chain average tick-and-flick rate this week</td></tr>
+            <tr><td>above_chain_by</td><td>How many pp the store is above the chain average</td></tr>
+            <tr><td>this_week_worked</td><td>Total alerts worked this week</td></tr>
+            <tr><td>this_week_tf</td><td>Number of those that were tick-and-flick</td></tr>
+          </table>
+
+          <div class="skill-section-h">Narrative Construction</div>
+          <ul class="skill-rule-list">
+            <li>Open with raw count and rate: X of Y alerts worked this week were tick-and-flick (Z%)</li>
+            <li>State week-on-week change and gap above chain average</li>
+            <li>List worst 1–3 alert types from <code>tf_by_alert_type</code></li>
+            <li>Where rate is rising, add urgency — suggest coaching session with store manager</li>
+            <li>Cost if Not Fixed: qualitative only — "Unresolved alerts mean availability issues go unaddressed, increasing the risk of lost sales." Do not fabricate a £ figure</li>
+            <li>Do not reference TICK_AND_FLICK as a technical term — use plain English</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ═══════════════════════════════════════════════════════
+         MARKDOWN OVERRIDE
+    ═══════════════════════════════════════════════════════ -->
+    <div class="alert-card bucket-markdown" id="card-markdown_override" data-searchtext="markdown override vs_chain wow SOURCE_WMD_MARKDOWN_LOG_CONVERTED SOURCE_WMD_STORE_HIERARCHY STORE_ID ITEM_ID LOCAL_DATE IS_OVERRIDDEN ORIGINAL_PRICE MARKDOWN_PERCENTAGE QTY_MARKDOWN STORE_NAME markdown_override_dept_breakdown override_dept_breakdown markdown_override_investigation_skill">
+      <div class="card-header">
+        <div class="card-header-left">
+          <div class="card-title">
+            Markdown Override
+            <span class="bucket-badge badge-markdown">Markdown</span>
+          </div>
+          <div class="card-problem">Fires when a store is overriding the markdown algorithm at a rate materially above the chain average or that has risen sharply week-on-week — indicating poor adherence to pricing guidance.</div>
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          Detection Methods
+        </div>
+        <div class="detector-grid">
+
+          <div class="detector-row">
+            <div class="detector-name">VS_CHAIN <span class="tag">vs Chain Average</span></div>
+            <div class="detector-logic">Fires when the store override rate exceeds the chain average by more than <code>min_override_chain_gap</code> pp, and the store processed at least <code>min_total_markdowns</code> markdowns this week.</div>
+            <div class="detector-meta">
+              <span class="meta-pill"><span class="meta-label">Baseline</span>Chain-wide override rate this week</span>
+              <span class="meta-pill"><span class="meta-label">Thresholds</span>min_override_chain_gap · min_total_markdowns</span>
+            </div>
+          </div>
+
+          <div class="detector-row">
+            <div class="detector-name">WOW <span class="tag">Week-on-Week</span></div>
+            <div class="detector-logic">Fires when the override rate has risen by more than <code>min_override_wow_increase</code> pp compared to last week, and the store processed at least <code>min_total_markdowns</code> markdowns this week.</div>
+            <div class="detector-meta">
+              <span class="meta-pill"><span class="meta-label">Baseline</span>Same store override rate last week</span>
+              <span class="meta-pill"><span class="meta-label">Thresholds</span>min_override_wow_increase · min_total_markdowns</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          Data Sources
+        </div>
+        <div class="sources-grid">
+
+          <div class="source-block">
+            <div class="source-table-name">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              SOURCE_WMD_MARKDOWN_LOG_CONVERTED
+            </div>
+            <div class="columns-list">
+              <div class="col-row"><span class="col-name">STORE_ID</span><span class="col-desc">Store identifier</span></div>
+              <div class="col-row"><span class="col-name">ITEM_ID</span><span class="col-desc">Internal numeric item identifier (LongType) — used in department-level breakdown join</span></div>
+              <div class="col-row"><span class="col-name">LOCAL_DATE</span><span class="col-desc">Date of the markdown event — used to window into weeks</span></div>
+              <div class="col-row"><span class="col-name">IS_OVERRIDDEN</span><span class="col-desc">Boolean — true if staff manually changed the algorithm's recommended price</span></div>
+              <div class="col-row"><span class="col-name">ORIGINAL_PRICE</span><span class="col-desc">Full retail price before markdown — used in waste value calculations</span></div>
+              <div class="col-row"><span class="col-name">MARKDOWN_PERCENTAGE</span><span class="col-desc">Depth of the markdown applied — averaged for context in SKU signals</span></div>
+              <div class="col-row"><span class="col-name">QTY_MARKDOWN</span><span class="col-desc">Units put through the markdown process — denominator for waste rate metric</span></div>
+            </div>
+          </div>
+
+          <div class="source-block">
+            <div class="source-table-name">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              SOURCE_WMD_STORE_HIERARCHY
+            </div>
+            <div class="columns-list">
+              <div class="col-row"><span class="col-name">STORE_ID</span><span class="col-desc">Store identifier — join key</span></div>
+              <div class="col-row"><span class="col-name">STORE_NAME</span><span class="col-desc">Human-readable store name — surfaced as SITE_NAME in signals</span></div>
+            </div>
+          </div>
+
+          <div class="source-block">
+            <div class="source-table-name">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              SOURCE_WMD_ITEM_HIERARCHY <span style="font-size:10px;color:var(--text-dim);font-family:sans-serif;font-weight:400">(gatherer only)</span>
+            </div>
+            <div class="columns-list">
+              <div class="col-row"><span class="col-name">VMECODE → ITEM_ID</span><span class="col-desc">Internal numeric item ID (LongType) — join key to markdown log</span></div>
+              <div class="col-row"><span class="col-name">ITEM_DESCRIPTION</span><span class="col-desc">Human-readable item name</span></div>
+              <div class="col-row"><span class="col-name">DEPARTMENT</span><span class="col-desc">Department grouping — used to produce the department breakdown fact</span></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          Facts Gathered
+        </div>
+        <div class="gatherer-grid">
+          <div class="gatherer-row">
+            <div class="gatherer-name">markdown_override_dept_breakdown</div>
+            <div class="gatherer-keys"><span class="key-tag">override_dept_breakdown</span></div>
+            <div class="gatherer-desc">Top-N departments by override count and override rate this week for each flagged store. Each entry contains: dept, total_markdowns, overrides, override_rate_pct.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Investigation Skill
+        </div>
+        <button class="skill-toggle" onclick="toggleSkill(this)">
+          <svg class="chevron" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+          <span class="skill-name">markdown_override_investigation_skill.md</span>
+          <span class="skill-engine">rule_based</span>
+        </button>
+        <div class="skill-content">
+          <div class="skill-section-h">Purpose</div>
+          <div class="skill-purpose">Guide the investigation of a MARKDOWN_OVERRIDE alert. A store is overriding the markdown algorithm at a rate that is either significantly above the chain average (VS_CHAIN) or has risen sharply week-on-week (WOW). Overriding means staff manually changed the recommended price — typically reducing it less than suggested, causing items to sit on the shelf longer and increasing waste risk.</div>
+
+          <div class="skill-section-h">Key Signal Fields</div>
+          <table class="skill-table">
+            <tr><th>Field</th><th>Description</th></tr>
+            <tr><td>this_week_override_rate</td><td>% of markdowns overridden this week</td></tr>
+            <tr><td>chain_override_rate</td><td>Chain-wide override rate this week</td></tr>
+            <tr><td>above_chain_pp</td><td>pp above chain (VS_CHAIN trigger only)</td></tr>
+            <tr><td>last_week_override_rate</td><td>% overridden last week (WOW trigger only)</td></tr>
+            <tr><td>wow_change_pp</td><td>pp change week-on-week (WOW trigger only)</td></tr>
+            <tr><td>this_week_total_markdowns</td><td>Total markdown events this week</td></tr>
+            <tr><td>this_week_overrides</td><td>Number of overrides this week</td></tr>
+          </table>
+
+          <div class="skill-section-h">Narrative Construction</div>
+          <ul class="skill-rule-list">
+            <li>State raw numbers: "{overrides} of {total_markdowns} markdowns were overridden ({rate}%)"</li>
+            <li>VS_CHAIN: "Chain average is {chain_rate}% — this store is {above_chain_pp}pp above"</li>
+            <li>WOW: "Last week the rate was {last_week_rate}% — up {wow_change_pp}pp"</li>
+            <li>Name top 1–2 departments from <code>override_dept_breakdown</code> if available</li>
+            <li>Cost if Not Fixed: qualitative — overridden items are at increased risk of reaching end-of-life unsold. Do not project a £ cost</li>
+            <li>Frame as guidance and training, not accusation — do not name individual staff</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ═══════════════════════════════════════════════════════
+         MARKDOWN SELL-THROUGH
+    ═══════════════════════════════════════════════════════ -->
+    <div class="alert-card bucket-markdown" id="card-markdown_sellthrough" data-searchtext="markdown sellthrough sell-through vs_chain wow SOURCE_WMD_MARKDOWN_SALES SOURCE_WMD_WASTAGE SOURCE_WMD_STORE_HIERARCHY DATE MARKDOWN_QUANTITY MARKDOWN_VALUE WASTE_QUANTITY STORE_NAME markdown_sellthrough_dept_breakdown sellthrough_dept_breakdown markdown_sellthrough_investigation_skill">
+      <div class="card-header">
+        <div class="card-header-left">
+          <div class="card-title">
+            Markdown Sell-Through
+            <span class="bucket-badge badge-markdown">Markdown</span>
+          </div>
+          <div class="card-problem">Fires when a store's markdown sell-through rate (proportion of marked-down items actually bought by customers) is materially below the chain average or has dropped sharply week-on-week — indicating the markdown process is not working.</div>
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          Detection Methods
+        </div>
+        <div class="detector-grid">
+
+          <div class="detector-row">
+            <div class="detector-name">VS_CHAIN <span class="tag">vs Chain Average</span></div>
+            <div class="detector-logic">Sell-through rate = SUM(MARKDOWN_QUANTITY sold) / SUM(MARKDOWN_QUANTITY + WASTE_QUANTITY). Fires when the store rate is more than <code>min_sellthrough_chain_gap</code> pp below the chain average, and the store processed at least <code>min_markdown_qty</code> markdown units this week.</div>
+            <div class="detector-meta">
+              <span class="meta-pill"><span class="meta-label">Baseline</span>Chain-wide sell-through rate this week</span>
+              <span class="meta-pill"><span class="meta-label">Thresholds</span>min_sellthrough_chain_gap · min_markdown_qty</span>
+            </div>
+          </div>
+
+          <div class="detector-row">
+            <div class="detector-name">WOW <span class="tag">Week-on-Week</span></div>
+            <div class="detector-logic">Fires when the sell-through rate has fallen by more than <code>min_sellthrough_wow_drop</code> pp compared to last week, and the store had at least <code>min_markdown_qty</code> markdown units this week.</div>
+            <div class="detector-meta">
+              <span class="meta-pill"><span class="meta-label">Baseline</span>Same store sell-through rate last week</span>
+              <span class="meta-pill"><span class="meta-label">Thresholds</span>min_sellthrough_wow_drop · min_markdown_qty</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          Data Sources
+        </div>
+        <div class="sources-grid">
+
+          <div class="source-block">
+            <div class="source-table-name">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              SOURCE_WMD_MARKDOWN_SALES
+            </div>
+            <div class="columns-list">
+              <div class="col-row"><span class="col-name">STORE_ID</span><span class="col-desc">Store identifier</span></div>
+              <div class="col-row"><span class="col-name">ITEM_ID</span><span class="col-desc">Item identifier — used in department breakdown join</span></div>
+              <div class="col-row"><span class="col-name">DATE</span><span class="col-desc">Date of the markdown sale — used to window into weeks</span></div>
+              <div class="col-row"><span class="col-name">MARKDOWN_QUANTITY</span><span class="col-desc">Units sold through the markdown programme — numerator of sell-through rate</span></div>
+              <div class="col-row"><span class="col-name">MARKDOWN_VALUE</span><span class="col-desc">£ revenue from markdown sales this period</span></div>
+            </div>
+          </div>
+
+          <div class="source-block">
+            <div class="source-table-name">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              SOURCE_WMD_WASTAGE
+            </div>
+            <div class="columns-list">
+              <div class="col-row"><span class="col-name">STORE_ID</span><span class="col-desc">Store identifier</span></div>
+              <div class="col-row"><span class="col-name">ITEM_ID</span><span class="col-desc">Item identifier — used in department breakdown join</span></div>
+              <div class="col-row"><span class="col-name">DATE</span><span class="col-desc">Date of the waste event — used to window into weeks</span></div>
+              <div class="col-row"><span class="col-name">WASTE_QUANTITY</span><span class="col-desc">Units wasted — added to MARKDOWN_QUANTITY for the sell-through denominator</span></div>
+              <div class="col-row"><span class="col-name">ORIGINAL_PRICE</span><span class="col-desc">Full retail price — used to compute waste value</span></div>
+            </div>
+          </div>
+
+          <div class="source-block">
+            <div class="source-table-name">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              SOURCE_WMD_STORE_HIERARCHY
+            </div>
+            <div class="columns-list">
+              <div class="col-row"><span class="col-name">STORE_ID</span><span class="col-desc">Store identifier — join key</span></div>
+              <div class="col-row"><span class="col-name">STORE_NAME</span><span class="col-desc">Human-readable store name — surfaced as SITE_NAME</span></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          Facts Gathered
+        </div>
+        <div class="gatherer-grid">
+          <div class="gatherer-row">
+            <div class="gatherer-name">markdown_sellthrough_dept_breakdown</div>
+            <div class="gatherer-keys"><span class="key-tag">sellthrough_dept_breakdown</span></div>
+            <div class="gatherer-desc">Top-N departments ranked by lowest sell-through rate this week. Each entry contains: dept, requested_qty, sold_qty, sellthrough_rate_pct, markdown_value. Requires markdown_sales, markdown_log, and item_hierarchy DataFrames.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Investigation Skill
+        </div>
+        <button class="skill-toggle" onclick="toggleSkill(this)">
+          <svg class="chevron" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+          <span class="skill-name">markdown_sellthrough_investigation_skill.md</span>
+          <span class="skill-engine">rule_based</span>
+        </button>
+        <div class="skill-content">
+          <div class="skill-section-h">Purpose</div>
+          <div class="skill-purpose">Guide the investigation of a MARKDOWN_SELLTHROUGH alert. A store's sell-through rate is below the chain average or has dropped sharply week-on-week. A low sell-through means items are being reduced in price but customers are not buying them — ultimately leading to waste.</div>
+
+          <div class="skill-section-h">Key Signal Fields</div>
+          <table class="skill-table">
+            <tr><th>Field</th><th>Description</th></tr>
+            <tr><td>this_week_sellthrough_rate</td><td>% of markdown units sold this week</td></tr>
+            <tr><td>chain_sellthrough_rate</td><td>Chain-wide sell-through rate this week</td></tr>
+            <tr><td>below_chain_pp</td><td>pp below chain (VS_CHAIN trigger only)</td></tr>
+            <tr><td>last_week_sellthrough_rate</td><td>Sell-through rate last week (WOW trigger only)</td></tr>
+            <tr><td>wow_change_pp</td><td>pp drop week-on-week (WOW trigger only)</td></tr>
+            <tr><td>this_week_markdown_qty</td><td>Total units marked down this week</td></tr>
+            <tr><td>this_week_markdown_value</td><td>£ value of markdown sales this week</td></tr>
+          </table>
+
+          <div class="skill-section-h">Narrative Construction</div>
+          <ul class="skill-rule-list">
+            <li>State: "Of {markdown_qty} markdown units, {rate}% were sold, generating £{value} in markdown revenue"</li>
+            <li>VS_CHAIN: name chain average and gap; WOW: name last week rate and drop</li>
+            <li>Name worst 1–2 departments from <code>sellthrough_dept_breakdown</code></li>
+            <li>Root cause prompt: markdown too shallow, product placement, or product-market fit</li>
+            <li>Cost if Not Fixed: frame as waste exposure ("items not sold at markdown will progress to waste"), not lost revenue. Do not project a precise £ waste figure</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ═══════════════════════════════════════════════════════
+         MARKDOWN SKU
+    ═══════════════════════════════════════════════════════ -->
+    <div class="alert-card bucket-markdown" id="card-markdown_sku" data-searchtext="markdown sku repeat_request excessive_override SOURCE_WMD_MARKDOWN_LOG_CONVERTED SOURCE_WMD_ITEM_HIERARCHY SOURCE_WMD_STORE_HIERARCHY STORE_ID ITEM_ID LOCAL_DATE IS_OVERRIDDEN MARKDOWN_PERCENTAGE VMECODE ITEM_DESCRIPTION DEPARTMENT STORE_NAME markdown_sku_history sku_markdown_history markdown_sku_investigation_skill">
+      <div class="card-header">
+        <div class="card-header-left">
+          <div class="card-title">
+            Markdown SKU
+            <span class="bucket-badge badge-markdown">Markdown</span>
+          </div>
+          <div class="card-problem">SKU-level alert. Fires when a specific item at a specific store has been marked down repeatedly across recent weeks (chronic surplus), or is being overridden at a disproportionately high rate (persistent staff resistance to pricing guidance for that SKU).</div>
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          Detection Methods
+        </div>
+        <div class="detector-grid">
+
+          <div class="detector-row">
+            <div class="detector-name">REPEAT_REQUEST <span class="tag">Chronic Surplus</span></div>
+            <div class="detector-logic">Fires when the item has been marked down on at least <code>min_markdown_weeks</code> distinct weeks AND has at least <code>min_markdown_requests</code> total requests within the <code>lookback_weeks</code> rolling window ending this week.</div>
+            <div class="detector-meta">
+              <span class="meta-pill"><span class="meta-label">Baseline</span>Distinct weeks item was marked down in the rolling window</span>
+              <span class="meta-pill"><span class="meta-label">Thresholds</span>lookback_weeks · min_markdown_weeks · min_markdown_requests</span>
+            </div>
+          </div>
+
+          <div class="detector-row">
+            <div class="detector-name">EXCESSIVE_OVERRIDE <span class="tag">SKU Override Rate</span></div>
+            <div class="detector-logic">Fires when the item has an override rate ≥ <code>min_sku_override_rate</code> (e.g. 50%) AND at least <code>min_sku_requests</code> total markdown requests within the <code>lookback_weeks</code> rolling window.</div>
+            <div class="detector-meta">
+              <span class="meta-pill"><span class="meta-label">Baseline</span>Override rate for this item at this store over the rolling window</span>
+              <span class="meta-pill"><span class="meta-label">Thresholds</span>lookback_weeks · min_sku_override_rate · min_sku_requests</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          Data Sources
+        </div>
+        <div class="sources-grid">
+
+          <div class="source-block">
+            <div class="source-table-name">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              SOURCE_WMD_MARKDOWN_LOG_CONVERTED
+            </div>
+            <div class="columns-list">
+              <div class="col-row"><span class="col-name">STORE_ID</span><span class="col-desc">Store identifier</span></div>
+              <div class="col-row"><span class="col-name">ITEM_ID</span><span class="col-desc">Internal numeric item identifier (LongType) — the per-SKU grouping key</span></div>
+              <div class="col-row"><span class="col-name">LOCAL_DATE</span><span class="col-desc">Date of the markdown event — truncated to WEEK_START for week counting</span></div>
+              <div class="col-row"><span class="col-name">IS_OVERRIDDEN</span><span class="col-desc">Boolean — whether this request was overridden by staff</span></div>
+              <div class="col-row"><span class="col-name">MARKDOWN_PERCENTAGE</span><span class="col-desc">Depth of the markdown — averaged across the window for context</span></div>
+            </div>
+          </div>
+
+          <div class="source-block">
+            <div class="source-table-name">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              SOURCE_WMD_ITEM_HIERARCHY
+            </div>
+            <div class="columns-list">
+              <div class="col-row"><span class="col-name">VMECODE → ITEM_ID</span><span class="col-desc">Internal numeric item ID (LongType) — join key to markdown log. Note: table has ~109M rows from multi-snapshot loading; deduplicate by VMECODE using latest FILE_TIMESTAMP</span></div>
+              <div class="col-row"><span class="col-name">ITEM_DESCRIPTION</span><span class="col-desc">Human-readable item name — surfaced in the signal for the card title</span></div>
+              <div class="col-row"><span class="col-name">DEPARTMENT</span><span class="col-desc">Department the item belongs to — used for grouping context</span></div>
+            </div>
+          </div>
+
+          <div class="source-block">
+            <div class="source-table-name">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              SOURCE_WMD_STORE_HIERARCHY
+            </div>
+            <div class="columns-list">
+              <div class="col-row"><span class="col-name">STORE_ID</span><span class="col-desc">Store identifier — join key</span></div>
+              <div class="col-row"><span class="col-name">STORE_NAME</span><span class="col-desc">Human-readable store name — surfaced as SITE_NAME</span></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          Facts Gathered
+        </div>
+        <div class="gatherer-grid">
+          <div class="gatherer-row">
+            <div class="gatherer-name">markdown_sku_history</div>
+            <div class="gatherer-keys"><span class="key-tag">sku_markdown_history</span></div>
+            <div class="gatherer-desc">Week-by-week markdown request and override history for each flagged store-SKU combination. Ordered oldest to newest — each entry contains week_start, request_count, override_count, avg_markdown_pct. Used to surface trend in the narrative.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Investigation Skill
+        </div>
+        <button class="skill-toggle" onclick="toggleSkill(this)">
+          <svg class="chevron" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+          <span class="skill-name">markdown_sku_investigation_skill.md</span>
+          <span class="skill-engine">rule_based</span>
+        </button>
+        <div class="skill-content">
+          <div class="skill-section-h">Purpose</div>
+          <div class="skill-purpose">Guide the investigation of a MARKDOWN_SKU alert — a SKU-level alert about a single item. Unlike store-level markdown alerts, this warrants a targeted SKU-level conversation. REPEAT_REQUEST = ordering/demand problem. EXCESSIVE_OVERRIDE = compliance/training problem. Recommended actions differ.</div>
+
+          <div class="skill-section-h">Key Signal Fields</div>
+          <table class="skill-table">
+            <tr><th>Field</th><th>Description</th></tr>
+            <tr><td>item_id</td><td>Internal item identifier</td></tr>
+            <tr><td>item_description</td><td>Human-readable item name</td></tr>
+            <tr><td>department</td><td>Department this item belongs to</td></tr>
+            <tr><td>markdown_request_count</td><td>Total markdown requests for this item in the window</td></tr>
+            <tr><td>override_count</td><td>Number of requests that were overridden (EXCESSIVE_OVERRIDE only)</td></tr>
+            <tr><td>lookback_weeks</td><td>Rolling window length in weeks</td></tr>
+            <tr><td>avg_markdown_pct</td><td>Average markdown depth % over the window</td></tr>
+          </table>
+
+          <div class="skill-section-h">Narrative Construction</div>
+          <ul class="skill-rule-list">
+            <li>REPEAT_REQUEST title: "[item] marked down {count} times in {weeks} weeks"</li>
+            <li>EXCESSIVE_OVERRIDE title: "[item] overridden {overrides} of {total} markdown requests in {weeks} weeks"</li>
+            <li>If both triggers merged: lead with EXCESSIVE_OVERRIDE, add repeat context</li>
+            <li>Use <code>sku_markdown_history</code> to describe trend (worsening / stable / improving)</li>
+            <li>REPEAT_REQUEST action: review ordering and ranging, consider whether item suits this store's customer profile</li>
+            <li>EXCESSIVE_OVERRIDE action: discuss pricing guidance with store manager; escalate to buying team if algorithm recommendation is consistently wrong</li>
+            <li>Do not project a £ cost — SKU-level waste projections require volume data not in this signal</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ═══════════════════════════════════════════════════════
+         WASTE
+    ═══════════════════════════════════════════════════════ -->
+    <div class="alert-card bucket-waste" id="card-waste" data-searchtext="waste vs_chain wow SOURCE_WMD_WASTAGE SOURCE_WMD_MARKDOWN_LOG_CONVERTED SOURCE_WMD_STORE_HIERARCHY DATE WASTE_QUANTITY ORIGINAL_PRICE WASTE_REASON LOCAL_DATE QTY_MARKDOWN STORE_NAME waste_dept_breakdown waste_investigation_skill">
+      <div class="card-header">
+        <div class="card-header-left">
+          <div class="card-title">
+            Waste
+            <span class="bucket-badge badge-waste">Waste</span>
+          </div>
+          <div class="card-problem">Fires when a store's waste rate (units wasted per unit put through the markdown process) is materially above the chain average or has risen sharply week-on-week — indicating the markdown process is not recovering stock effectively.</div>
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          Detection Methods
+        </div>
+        <div class="detector-grid">
+
+          <div class="detector-row">
+            <div class="detector-name">VS_CHAIN <span class="tag">vs Chain Average</span></div>
+            <div class="detector-logic">Waste rate = WASTE_QTY / QTY_MARKDOWN. Fires when the store waste rate exceeds the chain average by more than <code>min_stb_chain_gap</code> pp, and the store wasted at least <code>min_waste_qty</code> units this week. Note: FINAL_PRICE is always NULL in source data — not used.</div>
+            <div class="detector-meta">
+              <span class="meta-pill"><span class="meta-label">Baseline</span>Chain-wide waste rate (WASTE_QTY / QTY_MARKDOWN) this week</span>
+              <span class="meta-pill"><span class="meta-label">Thresholds</span>min_stb_chain_gap · min_waste_qty</span>
+            </div>
+          </div>
+
+          <div class="detector-row">
+            <div class="detector-name">WOW <span class="tag">Week-on-Week</span></div>
+            <div class="detector-logic">Fires when the waste rate has risen by more than <code>min_stb_wow_increase</code> pp compared to last week, and the store wasted at least <code>min_waste_qty</code> units this week.</div>
+            <div class="detector-meta">
+              <span class="meta-pill"><span class="meta-label">Baseline</span>Same store waste rate last week</span>
+              <span class="meta-pill"><span class="meta-label">Thresholds</span>min_stb_wow_increase · min_waste_qty</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          Data Sources
+        </div>
+        <div class="sources-grid">
+
+          <div class="source-block">
+            <div class="source-table-name">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              SOURCE_WMD_WASTAGE
+            </div>
+            <div class="columns-list">
+              <div class="col-row"><span class="col-name">STORE_ID</span><span class="col-desc">Store identifier</span></div>
+              <div class="col-row"><span class="col-name">ITEM_ID</span><span class="col-desc">Item identifier — used in department breakdown join</span></div>
+              <div class="col-row"><span class="col-name">DATE</span><span class="col-desc">Date of the waste event — used to window into weeks</span></div>
+              <div class="col-row"><span class="col-name">WASTE_QUANTITY</span><span class="col-desc">Units wasted — numerator of waste rate (WASTE_QTY / QTY_MARKDOWN)</span></div>
+              <div class="col-row"><span class="col-name">ORIGINAL_PRICE</span><span class="col-desc">Full retail price — multiplied by WASTE_QUANTITY to compute waste value (£)</span></div>
+              <div class="col-row"><span class="col-name">WASTE_REASON</span><span class="col-desc">Reason for waste (AFTER BEST BEFORE DATE, TOO GOOD TO GO, OUT OF DATE, DAMAGED) — descriptive context, not used in detection logic</span></div>
+            </div>
+          </div>
+
+          <div class="source-block">
+            <div class="source-table-name">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              SOURCE_WMD_MARKDOWN_LOG_CONVERTED <span style="font-size:10px;color:var(--text-dim);font-family:sans-serif;font-weight:400">(denominator)</span>
+            </div>
+            <div class="columns-list">
+              <div class="col-row"><span class="col-name">STORE_ID</span><span class="col-desc">Store identifier — join key for waste rate denominator</span></div>
+              <div class="col-row"><span class="col-name">LOCAL_DATE</span><span class="col-desc">Date — used to window the denominator into the same week</span></div>
+              <div class="col-row"><span class="col-name">QTY_MARKDOWN</span><span class="col-desc">Units put through the markdown process — denominator of waste rate metric</span></div>
+            </div>
+          </div>
+
+          <div class="source-block">
+            <div class="source-table-name">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              SOURCE_WMD_STORE_HIERARCHY
+            </div>
+            <div class="columns-list">
+              <div class="col-row"><span class="col-name">STORE_ID</span><span class="col-desc">Store identifier — join key</span></div>
+              <div class="col-row"><span class="col-name">STORE_NAME</span><span class="col-desc">Human-readable store name — surfaced as SITE_NAME</span></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          Facts Gathered
+        </div>
+        <div class="gatherer-grid">
+          <div class="gatherer-row">
+            <div class="gatherer-name">waste_dept_breakdown</div>
+            <div class="gatherer-keys"><span class="key-tag">waste_dept_breakdown</span></div>
+            <div class="gatherer-desc">Top-N departments by waste quantity and waste rate (WASTE_QTY / QTY_MARKDOWN) this week for each flagged store. Each entry contains: dept, waste_qty, stb_qty, stb_rate_pct, waste_value.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-section">
+        <div class="section-title">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Investigation Skill
+        </div>
+        <button class="skill-toggle" onclick="toggleSkill(this)">
+          <svg class="chevron" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+          <span class="skill-name">waste_investigation_skill.md</span>
+          <span class="skill-engine">rule_based</span>
+        </button>
+        <div class="skill-content">
+          <div class="skill-section-h">Purpose</div>
+          <div class="skill-purpose">Guide the investigation of a WASTE alert. A store's waste rate is above chain average or rising week-on-week. Waste rate = WASTE_QTY / QTY_MARKDOWN — normalised for activity so a high rate vs chain indicates the markdown process is not recovering stock effectively.</div>
+
+          <div class="skill-section-h">Key Signal Fields</div>
+          <table class="skill-table">
+            <tr><th>Field</th><th>Description</th></tr>
+            <tr><td>this_week_stb_rate</td><td>Waste rate % this week (WASTE_QTY / QTY_MARKDOWN)</td></tr>
+            <tr><td>chain_stb_rate</td><td>Chain-wide waste rate this week</td></tr>
+            <tr><td>above_chain_pp</td><td>pp above chain (VS_CHAIN trigger only)</td></tr>
+            <tr><td>last_week_stb_rate</td><td>Waste rate last week (WOW trigger only)</td></tr>
+            <tr><td>wow_change_pp</td><td>pp change week-on-week (WOW trigger only)</td></tr>
+            <tr><td>this_week_waste_qty</td><td>Total units wasted this week</td></tr>
+            <tr><td>this_week_waste_value</td><td>£ value of all waste this week (at original price)</td></tr>
+          </table>
+
+          <div class="skill-section-h">Narrative Construction</div>
+          <ul class="skill-rule-list">
+            <li>VS_CHAIN: "Chain average waste rate is {chain_rate}% — this store is {above_chain_pp}pp above"</li>
+            <li>WOW: "Last week the rate was {last_week_rate}% — up {wow_change_pp}pp"</li>
+            <li>Name top 1–2 departments from <code>waste_dept_breakdown</code> by STB quantity</li>
+            <li>Root cause prompt: items missed by markdown process, over-ordering, or staff binning before markdown applied</li>
+            <li>Cost if Not Fixed: "Items worth approximately £{this_week_waste_value} per week are being discarded that could have generated revenue through markdowns." (Not all waste is recoverable — markdown revenue typically 30–70% of original price)</li>
+            <li>Do not conflate total waste with straight-to-bin waste — some waste (damaged items) is unavoidable</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  function toggleSkill(btn) {
+    btn.classList.toggle('open');
+    const content = btn.nextElementSibling;
+    content.classList.toggle('open');
+  }
+
+  function scrollTo(id) {
+    const el = document.getElementById('card-' + id);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    const nav = document.getElementById('nav-' + id);
+    if (nav) nav.classList.add('active');
+  }
+
+  // Search
+  const searchInput = document.getElementById('search');
+  searchInput.addEventListener('input', () => {
+    const q = searchInput.value.trim().toLowerCase();
+    document.querySelectorAll('.alert-card').forEach(card => {
+      if (!q) {
+        card.classList.remove('hidden');
+        return;
+      }
+      const text = (card.dataset.searchtext || '') + ' ' + card.textContent;
+      card.classList.toggle('hidden', !text.toLowerCase().includes(q));
+    });
+  });
+
+  // Active nav on scroll
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const id = entry.target.id.replace('card-', '');
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        const nav = document.getElementById('nav-' + id);
+        if (nav) nav.classList.add('active');
+      }
+    });
+  }, { root: document.getElementById('main'), threshold: 0.3 });
+
+  document.querySelectorAll('.alert-card').forEach(card => observer.observe(card));
+</script>
+</body>
+</html>

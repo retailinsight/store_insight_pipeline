@@ -8,3 +8,8 @@ client_name: eastofengland
 connection:
   database: SNOWFLAKE_LEARNING_DB
   schema:   STORE_INSIGHT
+  role:     SNOWFLAKE_LEARNING_ROLE
+
+output:
+  top_n_per_store: 10
+
