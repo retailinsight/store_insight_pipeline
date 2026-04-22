@@ -12,7 +12,7 @@ function normalizeApiBaseUrl(rawBaseUrl: string): string {
 
   if (!trimmed) {
     // Default to remote API
-    return "https://store-insight-api-production-13c5.up.railway.app";
+    return "https://storeinsight-production.up.railway.app";
   }
 
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
