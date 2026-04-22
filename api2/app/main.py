@@ -11,6 +11,7 @@ Endpoints:
 """
 
 import hmac
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -21,6 +22,8 @@ from pydantic import BaseModel
 from app.actions_builder import get_actions
 from app.kpi_builder import get_kpis
 from app.snowflake_session import get_session
+
+logger = logging.getLogger(__name__)
 
 
 # ── Simple shared-secret auth ────────────────────────────────────────────────
@@ -169,16 +172,17 @@ def kpis(
         return get_kpis(session, store_id=store_id, week_end_date=date)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {exc}")
+    except Exception:
+        logger.exception("Unexpected error in /data/kpis (store_id=%s, date=%s)", store_id, date)
+        raise HTTPException(status_code=500, detail="Internal server error.")
 
 
 @app.get("/data/actions", dependencies=[Depends(require_api_key)])
 def actions(
     store_id: int | None = Query(None, description="Store ID. Omit to return all stores for the run_date."),
     run_date: str | None = Query(None, description="RUN_DATE in YYYY-MM-DD format. Defaults to the latest RUN_DATE in ALERTS_PIPELINE."),
-    limit:    int        = Query(100, ge=1, le=1000, description="Max alert cards to return. Default 100."),
-    offset:   int        = Query(0,   ge=0,          description="Rows to skip (pagination)."),
+    limit:    int        = Query(100, ge=1, le=1000,   description="Max alert cards to return. Default 100."),
+    offset:   int        = Query(0,   ge=0, le=100000, description="Rows to skip (pagination). Capped to prevent unbounded scans."),
 ):
     """
     Returns alert cards from ``ALERTS_PIPELINE`` sorted by SORT_VALUE desc.
@@ -201,8 +205,12 @@ def actions(
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {exc}")
+    except Exception:
+        logger.exception(
+            "Unexpected error in /data/actions (store_id=%s, run_date=%s, limit=%s, offset=%s)",
+            store_id, run_date, limit, offset,
+        )
+        raise HTTPException(status_code=500, detail="Internal server error.")
 
 
 @app.get("/data/successes", dependencies=[Depends(require_api_key)])
