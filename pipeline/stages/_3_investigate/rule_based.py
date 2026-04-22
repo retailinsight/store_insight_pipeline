@@ -103,12 +103,6 @@ def _generate_tick_and_flick(signal: dict) -> dict:
         f'(last week: {last_rate:.1f}%, {last_tf} of {last_worked} alerts).',
         f'Store tick-and-flick rate is {above_chain:.1f}pp above the chain average of {chain_rate:.1f}%.',
     ]
-    if tf_by_alert_type:
-        explanation_lines.append('Worst alert types by tick-and-flick rate this week:')
-        for item in tf_by_alert_type[:3]:
-            explanation_lines.append(
-                f"\u2022 {item['alert_type']}: {item['tf_count']} of {item['worked']} ({item['tf_rate']:.1f}%)"
-            )
 
     cost_if_not_fixed = (
         'Unresolved alerts mean availability issues go unaddressed, '

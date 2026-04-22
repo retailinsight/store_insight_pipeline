@@ -108,7 +108,7 @@ def detect(
     """
     data = wastage
     if store_id is not None:
-        data = data.filter(F.col('STORE_ID') == store_id)
+        data = data.filter(F.col('STORE_ID').isin(store_id))
 
     last = _weekly_store_waste_rates(data, markdown_log, last_week_start, last_week_end, 'LAST_WEEK')
     this = _weekly_store_waste_rates(data, markdown_log, this_week_start, this_week_end, 'THIS_WEEK')

@@ -69,7 +69,7 @@ def detect(
     """
     data = markdown_log
     if store_id is not None:
-        data = data.filter(F.col('STORE_ID') == store_id)
+        data = data.filter(F.col('STORE_ID').isin(store_id))
 
     window_start = F.dateadd('week', F.lit(-lookback_weeks), F.lit(window_end))
 

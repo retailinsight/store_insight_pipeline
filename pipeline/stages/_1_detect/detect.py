@@ -144,7 +144,7 @@ def detect_signals(
     this_week_start/end : date strings for the current week
     lookback_start : start of rolling window for REPEAT detector;
                      defaults to 10 weeks before this_week_end
-    store_id       : optional int — restrict to a single store
+    store_id       : optional int or list[int] — restrict to one or more stores
     feedback       : optional Snowpark DataFrame from LSM_ALERT_FEEDBACK;
                      required to run the TICK_AND_FLICK detector
     config         : optional DetectorConfig — threshold overrides;
@@ -165,7 +165,16 @@ def detect_signals(
         end = datetime.date.fromisoformat(this_week_end)
         lookback_start = str(end - datetime.timedelta(weeks=10))
 
-    data = osa if store_id is None else osa.filter(F.col('STORE_ID') == store_id)
+    # Normalize store_id to a list[int] or None, so downstream detectors can
+    # uniformly use `.isin(store_id)` without branching on type.
+    if store_id is None:
+        store_ids = None
+    elif isinstance(store_id, (list, tuple, set)):
+        store_ids = [int(s) for s in store_id]
+    else:
+        store_ids = [int(store_id)]
+
+    data = osa if store_ids is None else osa.filter(F.col('STORE_ID').isin(store_ids))
 
     _context = dict(
         osa=data,
@@ -182,7 +191,7 @@ def detect_signals(
         lookback_start=lookback_start,
         lookback_end=this_week_end,
         window_end=this_week_end,
-        store_id=store_id,
+        store_id=store_ids,
     )
 
     all_kwargs = {**_context, **asdict(det_cfg)}

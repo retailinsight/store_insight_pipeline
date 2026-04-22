@@ -43,12 +43,14 @@ Output Table
 SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_PIPELINE
 
 Schema: RUN_DATE, ALERT_TYPE, STORE_ID, SECTION, TYPE, TRIGGER_TYPES,
-        ISSUE, EXPLANATION, COST_IF_NOT_FIXED, RECOMMENDED_ACTION, SORT_VALUE
+        ISSUE, EXPLANATION, COST_IF_NOT_FIXED, RECOMMENDED_ACTION, SORT_VALUE,
+        LLM_PROMPT, SIGNAL_JSON, FACTS_JSON
 """
 
 import datetime
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 from store_insight.pipeline.stages._1_detect.detect          import detect_signals
 from store_insight.pipeline.pipeline.config                   import DetectorConfig
@@ -119,6 +121,7 @@ def _resolve_config(config: 'DetectorConfig' = None, cfg: dict = None) -> Detect
 
 def _build_card(sig: dict, narrative: dict, sort_value: float) -> dict:
     """Assemble a single alert-card dict from enriched signal + narrative + score."""
+    signal_wo_facts = {k: v for k, v in sig.items() if k != 'facts'}
     return {
         'alert_type':         ','.join(sorted(sig['trigger_types'])),
         'store_id':           sig['store_id'],
@@ -130,6 +133,9 @@ def _build_card(sig: dict, narrative: dict, sort_value: float) -> dict:
         'cost_if_not_fixed':  narrative['cost_if_not_fixed'],
         'recommended_action': narrative['recommended_action'],
         'sort_value':         sort_value,
+        'llm_prompt':         narrative.get('_prompt'),
+        'signal_json':        signal_wo_facts,
+        'facts_json':         sig.get('facts', {}),
     }
 
 
@@ -151,7 +157,20 @@ def _card_schema():
         StructField('COST_IF_NOT_FIXED',  StringType()),
         StructField('RECOMMENDED_ACTION', StringType()),
         StructField('SORT_VALUE',         FloatType()),
+        StructField('LLM_PROMPT',         StringType()),
+        StructField('SIGNAL_JSON',        StringType()),
+        StructField('FACTS_JSON',         StringType()),
     ])
+
+
+def _json_dump(value) -> str:
+    """JSON-serialise a value, coercing non-JSON types (dates, tuples, etc.) to strings."""
+    if value is None:
+        return None
+    try:
+        return json.dumps(value, default=str)
+    except (TypeError, ValueError):
+        return json.dumps(str(value))
 
 
 def _card_to_row(card: dict, run_date: str) -> tuple:
@@ -168,6 +187,9 @@ def _card_to_row(card: dict, run_date: str) -> tuple:
         card['cost_if_not_fixed'],
         card['recommended_action'],
         round(card['sort_value'], 2),
+        card.get('llm_prompt'),
+        _json_dump(card.get('signal_json')),
+        _json_dump(card.get('facts_json')),
     )
 
 
@@ -398,9 +420,20 @@ def run_pipeline_from_signals(
         cfg=cfg,
     )
 
+    max_workers = int((cfg or {}).get('investigation', {}).get('max_workers', 8))
+
+    def _investigate_one(sig):
+        return sig, investigate(sig, session=session, cfg=cfg)
+
     cards = []
-    for sig in enriched:
-        narrative  = investigate(sig, session=session, cfg=cfg)
+    if max_workers and max_workers > 1 and len(enriched) > 1:
+        print(f'[pipeline] Investigating {len(enriched)} signals with {max_workers} parallel workers...')
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            results = list(pool.map(_investigate_one, enriched))
+    else:
+        results = [_investigate_one(sig) for sig in enriched]
+
+    for sig, narrative in results:
         sort_value = score({**sig, **narrative})
         cards.append(_build_card(sig, narrative, sort_value))
 

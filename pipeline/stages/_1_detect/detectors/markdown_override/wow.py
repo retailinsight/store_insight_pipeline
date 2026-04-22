@@ -90,7 +90,7 @@ def detect(
     """
     data = markdown_log
     if store_id is not None:
-        data = data.filter(F.col('STORE_ID') == store_id)
+        data = data.filter(F.col('STORE_ID').isin(store_id))
 
     last = _weekly_store_override_rates(data, last_week_start, last_week_end, 'LAST_WEEK')
     this = _weekly_store_override_rates(data, this_week_start, this_week_end, 'THIS_WEEK')

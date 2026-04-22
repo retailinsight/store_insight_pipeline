@@ -123,7 +123,7 @@ def detect(
     """
     data = wastage
     if store_id is not None:
-        data = data.filter(F.col('STORE_ID') == store_id)
+        data = data.filter(F.col('STORE_ID').isin(store_id))
 
     chain_rate = _chain_waste_rate(wastage, markdown_log, this_week_start, this_week_end)
 

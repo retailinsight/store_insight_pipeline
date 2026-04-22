@@ -338,6 +338,7 @@ def generate(signal: dict, session) -> dict:
 
         required = ['issue', 'explanation', 'cost_if_not_fixed', 'recommended_action']
         if all(k in narrative for k in required):
+            narrative['_prompt'] = prompt
             return narrative
 
         _label = signal.get('department') or signal.get('signal_type', '?')
@@ -360,4 +361,6 @@ def generate(signal: dict, session) -> dict:
             f"{_label}: {e} — falling back to rule-based."
         )
 
-    return rule_based_generate(signal)
+    fallback = rule_based_generate(signal)
+    fallback['_prompt'] = prompt
+    return fallback

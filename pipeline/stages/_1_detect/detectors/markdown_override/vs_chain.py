@@ -107,7 +107,7 @@ def detect(
     """
     data = markdown_log
     if store_id is not None:
-        data = data.filter(F.col('STORE_ID') == store_id)
+        data = data.filter(F.col('STORE_ID').isin(store_id))
 
     chain_rate = _chain_override_rate(markdown_log, this_week_start, this_week_end)
 
@@ -144,3 +144,4 @@ def detect(
 
     print(f'[1_detect] MARKDOWN_OVERRIDE VS_CHAIN={len(signals)} (chain avg {chain_rate * 100:.1f}%)')
     return signals
+

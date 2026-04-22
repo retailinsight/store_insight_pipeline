@@ -123,7 +123,7 @@ def detect(
     """
     data = feedback
     if store_id is not None:
-        data = data.filter(F.col('STORE_ID') == store_id)
+        data = data.filter(F.col('STORE_ID').isin(store_id))
 
     chain_rate = _chain_tf_rate(feedback, this_week_start, this_week_end)
 

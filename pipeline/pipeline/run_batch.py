@@ -19,6 +19,7 @@ Usage
 
     python store_insight/pipeline/pipeline/run_batch.py --analysis-date 2025-06-14 --overwrite
     python store_insight/pipeline/pipeline/run_batch.py --analysis-date 2025-06-14 --store-id 242
+    python store_insight/pipeline/pipeline/run_batch.py --analysis-date 2025-06-14 --store-id 242 301 402
 
 Arguments
 ---------
@@ -30,7 +31,7 @@ Arguments
                   to analysis-date (inclusive), skipping dates that already
                   have rows in the output table.
 --run-date        Date to stamp on output rows. Defaults to today.
---store-id        Optional: restrict to a single store (useful for testing).
+--store-id        Optional: restrict to one or more stores (space-separated). Useful for testing.
 --overwrite       If set, overwrites the output table instead of appending.
 
 Date Windows Derived Automatically (per analysis_date)
@@ -269,7 +270,8 @@ def run_single_date(
     print(f'[run_batch] lookback      : {w["lookback_start"]} – {w["this_week_end"]}')
     print(f'[run_batch] wmd lookback  : {w["wmd_lookback"]} – {w["this_week_end"]}')
     if store_id:
-        print(f'[run_batch] store filter  : {store_id}')
+        store_label = store_id if isinstance(store_id, (list, tuple)) else [store_id]
+        print(f'[run_batch] store filter  : {store_label}')
 
     print('[run_batch] Loading OSA data...')
     osa = load_osa(session, w['lookback_start'], w['this_week_end'], cfg=cfg)
@@ -325,8 +327,8 @@ def main():
                              'is processed (skipping dates already in the output table).')
     parser.add_argument('--run-date', default=None,
                         help='Stamp date for output rows (YYYY-MM-DD). Defaults to today.')
-    parser.add_argument('--store-id', type=int, default=None,
-                        help='Restrict to a single store (optional)')
+    parser.add_argument('--store-id', type=int, nargs='+', default=None,
+                        help='Restrict to one or more stores (space-separated, optional)')
     parser.add_argument('--overwrite', action='store_true',
                         help='Overwrite output table instead of appending')
     args = parser.parse_args()
