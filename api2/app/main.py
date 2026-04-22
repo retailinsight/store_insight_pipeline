@@ -28,11 +28,10 @@ logger = logging.getLogger(__name__)
 
 # ── Simple shared-secret auth ────────────────────────────────────────────────
 # Protected routes require an ``X-API-Key`` header matching
-# ``STORE_INSIGHT_API_KEY``. If that env var is unset the API refuses to serve
-# protected routes (fail-closed) unless ``STORE_INSIGHT_ALLOW_NO_AUTH=1`` is
-# explicitly set for local development.
+# ``STORE_INSIGHT_API_KEY``. If that env var is unset the API fails closed.
+# For local development, set ``STORE_INSIGHT_API_KEY=dev`` in your .env and
+# send ``X-API-Key: dev`` from the client.
 _API_KEY = os.getenv("STORE_INSIGHT_API_KEY")
-_ALLOW_NO_AUTH = os.getenv("STORE_INSIGHT_ALLOW_NO_AUTH") == "1"
 
 # Shared POC credentials for the /auth/login stub. If either is unset, login is
 # disabled rather than silently accepting anything.
@@ -42,8 +41,6 @@ _POC_PASSWORD = os.getenv("POC_PASSWORD")
 
 def require_api_key(x_api_key: str | None = Header(default=None)) -> None:
     if not _API_KEY:
-        if _ALLOW_NO_AUTH:
-            return
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="API auth is not configured (STORE_INSIGHT_API_KEY missing).",
