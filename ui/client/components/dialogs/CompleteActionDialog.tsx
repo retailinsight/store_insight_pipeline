@@ -91,8 +91,8 @@ export default function CompleteActionDialog({
           <textarea
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
-            placeholder="Optional. Share how useful you found the action or any suggestions on how to improve it."
-            className="w-full rounded-xl border border-app-neutral-400 bg-app-neutral-100 p-3 text-sm font-dm-sans resize-none focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary min-h-[80px]"
+            placeholder="Optional. Share how useful you found the action or any suggestions on how to improve it. Let us know if you weren't able to complete it and why."
+            className="w-full rounded-xl border border-app-neutral-400 bg-app-neutral-100 p-3 text-sm font-dm-sans resize-none focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary min-h-[150px]"
           />
         </div>
 
