@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
+import { MessageCircle } from "lucide-react";
 import Layout from "@/components/Layout";
 import KpiWidget from "@/components/KpiWidget";
 import SuccessCard from "@/components/SuccessCard";
 import SmartActionCard from "@/components/SmartActionCard";
 import KpiDetailPanel from "@/components/KpiDetailPanel";
+import FeedbackDialog from "@/components/dialogs/FeedbackDialog";
 import { useSmartActions } from "@/contexts/SmartActionsContext";
 import { fetchKpis, fetchSuccesses, getErrorMessage } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
@@ -128,6 +130,7 @@ export default function Index() {
 
   const [now, setNow] = useState(new Date());
   const [selectedKpi, setSelectedKpi] = useState<KpiData | null>(null);
+  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
 
   // Fetch KPI data
   useEffect(() => {
@@ -215,41 +218,72 @@ export default function Index() {
   const totalActions = allActions.length;
   const progressPct = Math.round((completedCount / totalActions) * 100);
 
+  const handleSubmitFeedback = async (feedback: string) => {
+    try {
+      // For now, just log the feedback since we don't have a dedicated feedback API endpoint
+      console.log("[Feedback] User submitted:", feedback);
+
+      toast({
+        title: "Thank you!",
+        description: "Your feedback has been received and will help us improve.",
+      });
+
+      setFeedbackDialogOpen(false);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to submit feedback";
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <Layout>
       {/* Page header — on mobile add left padding to clear the hamburger button */}
       <div className="px-5 md:px-8 pt-6 pb-4 pl-16 md:pl-8 shrink-0 flex flex-col gap-1 animate-panel-in opacity-0" style={{ animationDelay: '100ms' }}>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <h1 className="font-bebas text-[32px] text-black dark:text-white tracking-wide">
             Store {selectedStore?.id}: {selectedStore?.name}
           </h1>
-          {availableStores.length > 1 && (
-            <div className="flex items-center gap-2">
-              <span className="font-dm-sans text-sm text-gray-600 dark:text-white/60">
-                Switch store:
-              </span>
-              <Select
-                value={String(selectedStore?.id || "")}
-                onValueChange={(storeId) => {
-                  const selected = availableStores.find(s => String(s.id) === storeId);
-                  if (selected) {
-                    selectStore(selected);
-                  }
-                }}
-              >
-                <SelectTrigger className="w-[250px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableStores.map((store) => (
-                    <SelectItem key={store.id} value={String(store.id)}>
-                      Store {store.id}: {store.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setFeedbackDialogOpen(true)}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-full border border-brand-outline-border text-brand-outline-text text-sm font-dm-sans hover:bg-brand-primary-100 transition-colors"
+              title="Send us your feedback"
+            >
+              <MessageCircle size={18} />
+              <span>Send feedback</span>
+            </button>
+            {availableStores.length > 1 && (
+              <div className="flex items-center gap-2">
+                <span className="font-dm-sans text-sm text-gray-600 dark:text-white/60">
+                  Switch store:
+                </span>
+                <Select
+                  value={String(selectedStore?.id || "")}
+                  onValueChange={(storeId) => {
+                    const selected = availableStores.find(s => String(s.id) === storeId);
+                    if (selected) {
+                      selectStore(selected);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-[250px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableStores.map((store) => (
+                      <SelectItem key={store.id} value={String(store.id)}>
+                        Store {store.id}: {store.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2 text-black/50 dark:text-white/50">
           <svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
@@ -426,6 +460,13 @@ export default function Index() {
           onClose={() => setSelectedKpi(null)}
         />
       )}
+
+      {/* Feedback Dialog */}
+      <FeedbackDialog
+        open={feedbackDialogOpen}
+        onSubmit={handleSubmitFeedback}
+        onCancel={() => setFeedbackDialogOpen(false)}
+      />
     </Layout>
   );
 }
