@@ -286,4 +286,62 @@ async function completeAction(req, res) {
   }
 }
 
-module.exports = { list, getById, create, update, remove, createActionReminder, completeAction };
+// ─── POST /feedback ──────────────────────────────────────────────────
+async function submitFeedback(req, res) {
+  try {
+    const { feedback, storeId, userId, timestamp } = req.body || {};
+    const authenticatedUserId = req.user?.userId;
+
+    // Validate required fields
+    if (!feedback || !feedback.trim()) {
+      return res.status(400).json({ error: 'Feedback is required' });
+    }
+
+    if (!storeId) {
+      return res.status(400).json({ error: 'Store ID is required' });
+    }
+
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    if (IS_DEVELOPMENT) {
+      const data = await readLocalData();
+
+      // Initialize feedback array if it doesn't exist
+      if (!Array.isArray(data.feedbacks)) {
+        data.feedbacks = [];
+      }
+
+      const feedbackRecord = {
+        id: uuidv4(),
+        feedback: feedback.trim(),
+        storeId,
+        userId,
+        timestamp: timestamp || new Date().toISOString(),
+      };
+
+      data.feedbacks.push(feedbackRecord);
+
+      await fs.writeFile(LOCAL_DATA_FILE, JSON.stringify(data, null, 2));
+
+      return res.status(201).json({ message: 'Feedback submitted successfully', data: feedbackRecord });
+    }
+
+    // Store feedback in database
+    const feedbackId = uuidv4();
+    await executeQuery(
+      'INSERT INTO feedbacks (id, feedback, store_id, user_id, timestamp) VALUES (?, ?, ?, ?, ?)',
+      [feedbackId, feedback.trim(), storeId, userId, timestamp || new Date().toISOString()]
+    );
+
+    return res.status(201).json({
+      message: 'Feedback submitted successfully',
+      data: { id: feedbackId, feedback: feedback.trim(), storeId, userId, timestamp }
+    });
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message });
+  }
+}
+
+module.exports = { list, getById, create, update, remove, createActionReminder, completeAction, submitFeedback };

@@ -268,6 +268,26 @@ export async function completeAction(
 }
 
 /**
+ * Submit user feedback
+ */
+export async function submitFeedback(
+  feedback: string,
+  storeId: number,
+  userId: string
+): Promise<void> {
+  const timestamp = new Date().toISOString();
+  console.log("[API] Submitting feedback for store:", storeId);
+  await authenticatedFetch<{ message: string; data: unknown }>(
+    `/feedback`,
+    {
+      method: "POST",
+      body: JSON.stringify({ feedback, storeId, userId, timestamp }),
+    }
+  );
+  console.log("[API] Feedback submitted successfully");
+}
+
+/**
  * Generic error handler for API errors
  */
 export function getErrorMessage(error: unknown): string {

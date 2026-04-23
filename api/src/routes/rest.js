@@ -14,5 +14,6 @@ router.get('/successes', requireAuth, withTable('successes', crud.list));
 router.get('/actions', requireAuth, withTable('actions', crud.list));
 router.post('/actions/:id/reminder', requireAuth, requireRole('admin', 'editor'), crud.createActionReminder);
 router.post('/actions/:id/complete', requireAuth, crud.completeAction);
+router.post('/feedback', requireAuth, crud.submitFeedback);
 
 module.exports = router;
