@@ -64,7 +64,7 @@ If the **scorer logic or sort_value formula** changed:
 
 ## 6. Config changes
 
-If **new thresholds** were added to `DetectorConfig` in `pipeline/config.py`:
+If **new thresholds** were added to `DetectorConfig` in `pipeline/pipeline/config.py`:
 - Add the field to the _Full field reference_ table in `_1_detect/README.md`.
 - Add a default value entry in `config/base/default.yaml` under `thresholds:`.
 - Update the `architecture.md` Configuration table if the field affects a new detector.
