@@ -14,14 +14,16 @@ This pipeline runs weekly against Snowflake OSA and intervention data to produce
 
 ### Alert types
 
-| Type | What it detects |
-|---|---|
-| **WoW (Week-on-Week)** | OSA has dropped materially vs last week |
-| **VS Chain** | OSA is significantly below the chain average this week |
-| **Repeat** | Multiple individual items have been in an OSA alert state for several consecutive weeks |
-| **Tick & Flick** | Store team is dismissing alerts too quickly without genuinely working them (compliance) |
+| Signal type | Triggers | What it detects |
+|---|---|---|
+| **OSA** | WOW / VS_CHAIN / REPEAT | Store-department availability has dropped week-on-week, is below the chain average, or has chronic repeat-offender items |
+| **COMPLIANCE** | TICK_AND_FLICK | Store team is dismissing alerts too quickly without genuinely working them |
+| **MARKDOWN_OVERRIDE** | WOW / VS_CHAIN | Store is overriding the markdown algorithm at an elevated rate (week-on-week rise or above chain) |
+| **WASTE** | WOW / VS_CHAIN | Store straight-to-bin waste rate is rising week-on-week or above chain average |
+| **MARKDOWN_SELLTHROUGH** | WOW / VS_CHAIN | Store markdown sell-through rate is dropping week-on-week or below chain average |
+| **MARKDOWN_SKU** | REPEAT_REQUEST / EXCESSIVE_OVERRIDE | A specific SKU is repeatedly marked down or persistently overridden at this store |
 
-Multiple triggers can fire for the same store-department in the same week — these are merged into a single alert card with a combined explanation.
+Multiple triggers can fire for the same store (and department, for OSA) in the same week — these are merged into a single alert card with a combined explanation.
 
 ---
 
@@ -74,7 +76,7 @@ Each stage adds more information to that signal before it is written as a scored
 ## Folder structure
 
 ```
-alerts/
+pipeline/
 ├── config/                  Configuration loader
 │   ├── base/default.yaml    Complete set of defaults (works out-of-the-box)
 │   ├── clients/<name>/      Per-client overrides (only changed keys needed)
@@ -88,13 +90,14 @@ alerts/
 │   └── _shared.py           Shared Snowpark helpers
 │
 ├── stages/
-│   ├── _1_detect/           Detector registry + individual detectors
+│   ├── _1_detect/           Detector registry + detectors/{osa,compliance,markdown_override,markdown_sellthrough,markdown_sku,waste}/
 │   ├── _2_facts/            Fact gatherer registry + individual gatherers
-│   ├── _3_investigate/      Rule-based and Cortex narrative engines
+│   ├── _3_investigate/      Rule-based and Cortex narrative engines + skills/
 │   └── _4_score/            LSV-weighted scoring
 │
 ├── deploy/                  Snowflake SP + Task deployment (see deploy/README.md)
-├── monitoring/              Signals quality notebook
+├── docs/                    architecture.md, semantic_model.md
+├── monitoring/              Signals quality notebook + cortex_usage.py
 ├── qc/                      Per-stage QC notebooks
 └── tests/                   Automated tests (pytest)
 ```
