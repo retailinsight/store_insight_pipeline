@@ -262,6 +262,45 @@ export async function fetchActions(storeId?: number): Promise<ActionsResponse> {
 }
 
 /**
+ * Complete an action with feedback
+ */
+export async function completeAction(
+  actionId: number,
+  opinion: "positive" | "negative",
+  feedback: string = ""
+): Promise<void> {
+  console.log("[API] Completing action:", actionId, "with opinion:", opinion);
+  await authenticatedFetch<{ message: string; data: unknown }>(
+    `/actions/${actionId}/complete`,
+    {
+      method: "POST",
+      body: JSON.stringify({ opinion, feedback }),
+    }
+  );
+  console.log("[API] Action completed successfully");
+}
+
+/**
+ * Submit user feedback
+ */
+export async function submitFeedback(
+  feedback: string,
+  storeId: number,
+  userId: string
+): Promise<void> {
+  const timestamp = new Date().toISOString();
+  console.log("[API] Submitting feedback for store:", storeId);
+  await authenticatedFetch<{ message: string; data: unknown }>(
+    `/feedback`,
+    {
+      method: "POST",
+      body: JSON.stringify({ feedback, storeId, userId, timestamp }),
+    }
+  );
+  console.log("[API] Feedback submitted successfully");
+}
+
+/**
  * Generic error handler for API errors
  */
 export function getErrorMessage(error: unknown): string {
