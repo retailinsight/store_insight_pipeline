@@ -9,9 +9,7 @@ import os
 import textwrap
 
 import pytest
-
-from store_insight.pipeline.config.loader import _deep_merge, load_config
-
+from store_insight.pipeline.config.loader import _deep_merge
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -92,9 +92,6 @@ def _generate_tick_and_flick(signal: dict) -> dict:
     chain_rate   = signal.get('chain_tf_rate', 0.0)
     above_chain  = signal.get('above_chain_by', 0.0)
 
-    facts             = signal.get('facts', {})
-    tf_by_alert_type  = facts.get('tf_by_alert_type', [])
-
     issue = f'{site_name}: tick-and-flick compliance declining'
 
     explanation_lines = [
@@ -359,7 +356,7 @@ def _generate_markdown_sku(signal: dict) -> dict:
             'Consider whether this item suits this store\'s customer profile or whether order quantities should be reduced.'
         )
         cost = (
-            f'An item requiring markdown every week represents a recurring ordering cost and waste risk. '
+            'An item requiring markdown every week represents a recurring ordering cost and waste risk. '
             'If quantities are not adjusted, this pattern is likely to continue.'
         )
     else:

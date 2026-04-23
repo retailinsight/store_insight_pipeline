@@ -22,9 +22,7 @@ Each item in tf_by_alert_type:
 from collections import defaultdict
 
 from snowflake.snowpark import functions as F
-
 from store_insight.pipeline.stages._2_facts.config import GathererInfo
-
 
 METADATA = GathererInfo(
     name         = 'tick_and_flick_breakdown',

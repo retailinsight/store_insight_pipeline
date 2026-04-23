@@ -24,7 +24,6 @@ overwrite     : bool — True = overwrite output table, False = append
 
 import datetime
 
-
 # ---------------------------------------------------------------------------
 # Snowflake SP entrypoint
 # ---------------------------------------------------------------------------
@@ -55,10 +54,12 @@ def run(session, client: str = None, analysis_date: str = None, overwrite: bool 
         analysis_date = str(datetime.date.today())
 
     # ── import pipeline (available via the uploaded zip) ─────────────────────
-    from store_insight.pipeline.pipeline.run_batch import load_osa, load_feedback, load_wmd
-    from store_insight.pipeline.pipeline.pipeline  import (
-        derive_windows, run_pipeline, write_alerts,
+    from store_insight.pipeline.pipeline.pipeline import (
+        derive_windows,
+        run_pipeline,
+        write_alerts,
     )
+    from store_insight.pipeline.pipeline.run_batch import load_feedback, load_osa, load_wmd
 
     w        = derive_windows(analysis_date)
     run_date = str(datetime.date.today())

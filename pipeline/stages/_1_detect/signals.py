@@ -20,8 +20,7 @@ through untouched.
 
 from __future__ import annotations
 
-from typing import TypedDict, Union
-
+from typing import TypedDict
 
 # ---------------------------------------------------------------------------
 # Signal type definitions
@@ -128,14 +127,14 @@ class MarkdownSkuSignal(TypedDict):
     avg_markdown_pct:       float | None
 
 
-Signal = Union[
-    OsaSignal,
-    ComplianceSignal,
-    MarkdownOverrideSignal,
-    WasteSignal,
-    MarkdownSellthroughSignal,
-    MarkdownSkuSignal,
-]
+Signal = (
+    OsaSignal
+    | ComplianceSignal
+    | MarkdownOverrideSignal
+    | WasteSignal
+    | MarkdownSellthroughSignal
+    | MarkdownSkuSignal
+)
 
 
 # ---------------------------------------------------------------------------

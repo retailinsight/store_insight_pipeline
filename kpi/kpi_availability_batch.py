@@ -5,10 +5,10 @@ Joins source tables, aggregates all Availability KPI metrics per store per week,
 calls Snowflake Cortex to generate key insights, and writes the result to
 SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.KPI_AVAILABILITY_SUMMARY.
 
-Run manually (from the StoreInsight/ root):
-    python batch/kpi_availability_batch.py --date 2025-03-22
+Run manually (from the repo root):
+    python kpi/kpi_availability_batch.py --date 2025-03-22
 
-Credentials are read from store-insight-api/.env (copy store-insight-api/.env.example to get started).
+Credentials are read from api2/.env (copy api2/.env.example to get started).
 
 The --date argument is the last day of available OSA data (typically yesterday).
 The script computes KPIs over the 7-day window ending on that date (inclusive),
@@ -30,7 +30,7 @@ from snowflake.snowpark.types import (
 )
 
 load_dotenv(dotenv_path=Path(__file__).parent / ".env")
-load_dotenv(dotenv_path=Path(__file__).parent.parent / "store-insight-api" / ".env")
+load_dotenv(dotenv_path=Path(__file__).parent.parent / "api2" / ".env")
 
 _session: Session | None = None
 
