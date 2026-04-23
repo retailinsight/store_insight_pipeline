@@ -1,5 +1,18 @@
 """
-Pydantic response models matching the kpiData.json shape expected by the front end.
+Pydantic reference models for the Overall + Availability KPI card ``details``
+payloads.
+
+Status
+------
+These models are **reference types only** — they are not currently wired into
+any route as a ``response_model``. ``kpi_builder.get_kpis`` returns plain dicts
+assembled from the JSON columns ``OVERALL_DETAILS_JSON`` and
+``AVAILABILITY_DETAILS_JSON`` in ``KPI_AVAILABILITY_SUMMARY``; the dict shape is
+expected to match ``OverallDetails`` / ``AvailabilityDetails`` below.
+
+Note the live API response envelope is ``{"data": [...], "meta": {...}}`` — the
+``KPIResponse`` model in this file predates that change and does not reflect it.
+Kept here so the intended per-field types of the JSON blobs are documented.
 """
 
 from typing import List, Optional

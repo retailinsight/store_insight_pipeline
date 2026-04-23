@@ -1,13 +1,26 @@
 """
 Store Insight API
 =================
-FastAPI application exposing KPI data for the Store Insight front end.
+FastAPI application exposing KPI and alert data for the Store Insight front end.
 
 Endpoints:
-    POST /auth/login                                                      (dev stub)
+    POST /auth/login                                                      (POC stub)
     GET  /data/kpis?store_id={int}&date={YYYY-MM-DD}
     GET  /data/actions?store_id={int}&run_date={YYYY-MM-DD}&limit={int}&offset={int}
-    GET  /health
+    GET  /data/successes                                                  (stub — empty)
+    GET  /health                                                          (liveness)
+
+Authentication:
+    All /auth/* and /data/* routes require the ``X-API-Key`` header to match the
+    ``STORE_INSIGHT_API_KEY`` env var. ``/health`` is unauthenticated.
+
+Data sources (via Snowpark, see ``app.snowflake_session``):
+    /data/kpis    → ``KPI_AVAILABILITY_SUMMARY`` (written by kpi/kpi_availability_batch.py)
+    /data/actions → ``ALERTS_PIPELINE`` (written by pipeline/ — see store_insight/pipeline)
+
+CORS:
+    Controlled by the ``ALLOWED_ORIGINS`` env var (comma-separated). Defaults
+    to ``*`` for local dev.
 """
 
 import hmac
