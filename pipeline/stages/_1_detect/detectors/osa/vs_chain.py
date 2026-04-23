@@ -21,11 +21,9 @@ Public API
 """
 
 from snowflake.snowpark import functions as F
-
 from store_insight.pipeline.pipeline._shared import osa_score_col, weekly_dept_scores
 from store_insight.pipeline.stages._1_detect.detector_info import DetectorInfo
 from store_insight.pipeline.stages._1_detect.signals import make_osa_signal
-
 
 METADATA = DetectorInfo(
     name        = 'VS_CHAIN',

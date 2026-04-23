@@ -13,3 +13,23 @@ connection:
 output:
   top_n_per_store: 10
 
+investigation:
+  OSA:
+    engine: cortex
+    skill_file: skills/osa_investigation_skill.md
+  COMPLIANCE:
+    engine: cortex
+    skill_file: skills/compliance_investigation_skill.md
+  MARKDOWN_OVERRIDE:
+    engine: cortex
+    skill_file: skills/markdown_override_investigation_skill.md
+  WASTE:
+    engine: cortex
+    skill_file: skills/waste_investigation_skill.md
+  MARKDOWN_SELLTHROUGH:
+    engine: cortex
+    skill_file: skills/markdown_sellthrough_investigation_skill.md
+  MARKDOWN_SKU:
+    engine: cortex
+    skill_file: skills/markdown_sku_investigation_skill.md
+

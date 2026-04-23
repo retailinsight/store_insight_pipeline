@@ -32,7 +32,7 @@ Public API
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from store_insight.pipeline.stages._4_score.lsv_trigger_weight import compute as _default_scorer
 

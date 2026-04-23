@@ -28,7 +28,6 @@ from snowflake.snowpark import functions as F
 from store_insight.pipeline.stages._1_detect.detector_info import DetectorInfo
 from store_insight.pipeline.stages._1_detect.signals import make_compliance_signal
 
-
 METADATA = DetectorInfo(
     name        = 'TICK_AND_FLICK',
     problem     = "A store's rate of rapidly dismissed alerts has risen week-on-week and is above the chain average, indicating poor compliance with the alerting process.",

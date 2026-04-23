@@ -36,7 +36,6 @@ from pathlib import Path
 
 from store_insight.pipeline.stages._3_investigate.rule_based import generate as rule_based_generate
 
-
 _HERE             = Path(__file__).parent
 _CARD_SKILL_PATH  = _HERE / 'smart_action_card_content_skill.md'
 _card_skill_cache: str | None = None
@@ -93,7 +92,7 @@ def _build_compliance_context(signal):
     facts = signal.get('facts', {})
     store_label = signal.get('site_name') or f"Store {signal['store_id']}"
     lines = [
-        f"Alert Type: Tick-and-Flick Compliance",
+        "Alert Type: Tick-and-Flick Compliance",
         f"Store: {store_label}",
         f"This Week Alerts Worked: {signal.get('this_week_worked', 0)}",
         f"This Week Tick-and-Flick Count: {signal.get('this_week_tf', 0)}",
@@ -146,7 +145,7 @@ def _build_markdown_override_context(signal):
     store_label = signal.get('site_name') or f"Store {signal['store_id']}"
     this_rate   = signal.get('this_week_override_rate', 0.0)
     lines = [
-        f"Alert Type: Markdown Override",
+        "Alert Type: Markdown Override",
         f"Store: {store_label}",
         f"Triggers: {', '.join(signal.get('trigger_types', []))}",
         f"This Week Override Rate: {this_rate:.1f}%",
@@ -178,7 +177,7 @@ def _build_waste_context(signal):
     store_label = signal.get('site_name') or f"Store {signal['store_id']}"
     this_rate   = signal.get('this_week_stb_rate', 0.0)
     lines = [
-        f"Alert Type: Waste (Straight-to-Bin)",
+        "Alert Type: Waste (Straight-to-Bin)",
         f"Store: {store_label}",
         f"Triggers: {', '.join(signal.get('trigger_types', []))}",
         f"This Week Straight-to-Bin Rate: {this_rate:.1f}%",
@@ -212,7 +211,7 @@ def _build_markdown_sellthrough_context(signal):
     store_label = signal.get('site_name') or f"Store {signal['store_id']}"
     this_rate   = signal.get('this_week_sellthrough_rate', 0.0)
     lines = [
-        f"Alert Type: Markdown Sell-Through",
+        "Alert Type: Markdown Sell-Through",
         f"Store: {store_label}",
         f"Triggers: {', '.join(signal.get('trigger_types', []))}",
         f"This Week Sell-Through Rate: {this_rate:.1f}%",
@@ -247,7 +246,7 @@ def _build_markdown_sku_context(signal):
     override    = signal.get('override_count')
     lbk_weeks   = signal.get('lookback_weeks', 4)
     lines = [
-        f"Alert Type: SKU-Level Markdown",
+        "Alert Type: SKU-Level Markdown",
         f"Store: {store_label}",
         f"Item: {item_desc} (ID {signal.get('item_id', '?')})",
         f"Department: {signal.get('department') or 'unknown'}",
