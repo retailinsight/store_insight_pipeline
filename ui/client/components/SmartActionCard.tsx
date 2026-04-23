@@ -4,6 +4,8 @@ import CompleteActionDialog from "./dialogs/CompleteActionDialog";
 import ReminderDialog from "./dialogs/ReminderDialog";
 import CouldNotCompleteDialog from "./dialogs/CouldNotCompleteDialog";
 import { useSmartActions } from "@/contexts/SmartActionsContext";
+import { completeAction as completeActionApi } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 export interface SmartAction {
   id: number;
@@ -53,14 +55,29 @@ export default function SmartActionCard({ action, onComplete }: SmartActionCardP
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
   const [couldNotCompleteDialogOpen, setCouldNotCompleteDialogOpen] = useState(false);
+  const { toast } = useToast();
 
   const status = getActionStatus(action.id);
   const reminderSet = status === "reminder_set";
 
-  const handleComplete = (feedback: string) => {
-    setCompleteDialogOpen(false);
-    updateActionStatus(action.id, "completed");
-    onComplete?.(action.id);
+  const handleComplete = async (opinion: "positive" | "negative", feedback: string) => {
+    try {
+      await completeActionApi(action.id, opinion, feedback);
+      setCompleteDialogOpen(false);
+      updateActionStatus(action.id, "completed");
+      toast({
+        title: "Action completed",
+        description: "Thanks for your feedback!",
+      });
+      onComplete?.(action.id);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to complete action";
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
   };
 
   const handleReminder = (date: string, time: string, method: string) => {
