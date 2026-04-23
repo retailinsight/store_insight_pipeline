@@ -77,24 +77,24 @@
         ],
         "category_performance": [
           {
-              "category": "BWS",
-              "performance": "85.2%",
-              "warning": false
+            "category": "BWS",
+            "performance": "85.2%",
+            "warning": false
           },
           {
-              "category": "Fresh Produce",
-              "performance": "88.4%",
-              "warning": false
+            "category": "Fresh Produce",
+            "performance": "88.4%",
+            "warning": false
           },
           {
-              "category": "Bakery",
-              "performance": "90.1%",
-              "warning": false
+            "category": "Bakery",
+            "performance": "90.1%",
+            "warning": false
           },
           {
-              "category": "Dairy",
-              "performance": "92.4%",
-              "warning": true
+            "category": "Dairy",
+            "performance": "92.4%",
+            "warning": true
           }
         ],
         "time_of_day_analysis": [
@@ -106,12 +106,12 @@
                 "performance": "89.5%",
                 "rag_status": "green"
               },
-                            {
+              {
                 "time_period": "Afternoon (12pm-6pm)",
                 "performance": "89.5%",
                 "rag_status": "green"
               },
-                            {
+              {
                 "time_period": "Evening (6pm-Close)",
                 "performance": "89.5%",
                 "rag_status": "green"
@@ -126,12 +126,12 @@
                 "performance": "89.5%",
                 "rag_status": "green"
               },
-                            {
+              {
                 "time_period": "Afternoon (12pm-6pm)",
                 "performance": "89.5%",
                 "rag_status": "green"
               },
-                            {
+              {
                 "time_period": "Evening (6pm-Close)",
                 "performance": "89.5%",
                 "rag_status": "green"
@@ -191,7 +191,7 @@
                 "performance": "89.5%",
                 "rag_status": "green"
               },
-                {
+              {
                 "time_period": "Evening (6pm-Close)",
                 "performance": "89.5%",
                 "rag_status": "green"
@@ -247,24 +247,24 @@
         ],
         "category_performance": [
           {
-              "category": "BWS",
-              "performance": "85.2%",
-              "warning": false
+            "category": "BWS",
+            "performance": "85.2%",
+            "warning": false
           },
           {
-              "category": "Fresh Produce",
-              "performance": "88.4%",
-              "warning": false
+            "category": "Fresh Produce",
+            "performance": "88.4%",
+            "warning": false
           },
           {
-              "category": "Bakery",
-              "performance": "90.1%",
-              "warning": false
+            "category": "Bakery",
+            "performance": "90.1%",
+            "warning": false
           },
           {
-              "category": "Dairy",
-              "performance": "92.4%",
-              "warning": true
+            "category": "Dairy",
+            "performance": "92.4%",
+            "warning": true
           }
         ]
       }
@@ -275,7 +275,7 @@
       "id": "1",
       "title": "Food to go sales have increased this week!",
       "trigger_types": [
-      "Sales"
+        "Sales"
       ],
       "type": "Availability",
       "value": "£4,343",
@@ -287,7 +287,8 @@
       "id": "2",
       "title": "Beer, Wine & Spirits sales increased on Saturday!",
       "trigger_types": [
-      "Sales", "Alert Compliance"
+        "Sales",
+        "Alert Compliance"
       ],
       "type": "Availability",
       "value": "£7,920",
@@ -299,7 +300,7 @@
       "id": "3",
       "title": "Sell through increase in Ready Meals this week!",
       "trigger_types": [
-      "Markdown Compliance"
+        "Markdown Compliance"
       ],
       "type": "Waste",
       "value": "+32%",
@@ -310,79 +311,88 @@
   ],
   "actions": [
     {
-    "RUN_DATE": "2025-06-14",
-    "ALERT_TYPE": "OSA_WOW",
-    "STORE_ID": 224,
-    "SECTION": "ICE CREAM & RELATED PRODS",
-    "TYPE": "Availability",
-    "TRIGGER_TYPES": [
-      "WOW"
-    ],
-    "ISSUE": "ICE CREAM & RELATED PRODS: \u00a3237.18 lost sales this week",
-    "EXPLANATION": "There has been \u00a3237.18 of lost sales in ICE CREAM & RELATED PRODS this week. Store OSA this week is 89.0%, vs chain average of 89.3% (0.3pp gap). Worst day for lost sales this week: Friday (\u00a3147.58)",
-    "COST_IF_NOT_FIXED": "If this continues at the same rate, the store could lose approximately \u00a3948.72 in the next 4 weeks.",
-    "RECOMMENDED_ACTION": "Review availability in ICE CREAM & RELATED PRODS daily, especially on Fridays. Ensure all gaps are filled before busy periods.",
-    "SORT_VALUE": 27.57
-  },
-  {
-    "RUN_DATE": "2025-06-14",
-    "ALERT_TYPE": "WASTE",
-    "STORE_ID": 436,
-    "SECTION": "ALL",
-    "TYPE": "Waste",
-    "TRIGGER_TYPES": [
-      "WOW"
-    ],
-    "ISSUE": "MARKDOWN COMPLIANCE: Trending down this week, resulting in an increase in Straight to Bin",
-    "EXPLANATION": "62% of markdowns occurred outside of the recommended window this week. Straight to Bin waste has increased by 70% as a result. This is compared to 96% compliance in the previous week, where the Straight to Bin was much lower,",
-    "COST_IF_NOT_FIXED": "If this continues, the store could lose approximately \u00a32,500 in the next month.",
-    "RECOMMENDED_ACTION": "Review availability in IN-STORE BAKERY daily, especially on Fridays. Ensure replenishment orders are raised before 8am and all gaps on high-velocity lines are filled before the store opens.Coach the teams and ensure markdowns are completed within the agreed window, to protect sell-through and reduce waste",
-    "SORT_VALUE": 807.79
-  },
-  {
-    "RUN_DATE": "2025-06-14",
-    "ALERT_TYPE": "OSA_WOW",
-    "STORE_ID": 436,
-    "SECTION": "FOOD TO GO",
-    "TYPE": "Availability",
-    "TRIGGER_TYPES": [
-      "WOW"
-    ],
-    "ISSUE": "Optimize shelf space layout in Food-to-Go",
-    "EXPLANATION": "Food-to-Go availability dropped to 88.2% vs 94% target. Top 5 lines by volume are frequently out of stock before noon. Planogram compliance in this section is currently at 71%.",
-    "COST_IF_NOT_FIXED": "Weekend demand spike expected - plan replenishment accordingly.",
-    "RECOMMENDED_ACTION": "Review and realign shelf space allocation in Food-to-Go to match current sales velocity. High-velocity lines should have additional facings; slow movers should be reduced.",
-    "SORT_VALUE": 807.79
-  },
-  {
-    "RUN_DATE": "2025-06-14",
-    "ALERT_TYPE": "OSA_WOW",
-    "STORE_ID": 436,
-    "SECTION": "BAKERY",
-    "TYPE": "Waste",
-    "TRIGGER_TYPES": [
-      "WOW"
-    ],
-    "ISSUE": "Review markdown compliance in Bakery",
-    "EXPLANATION": "Bakery markdown compliance has fallen to 68% this week vs 92% target. 43% of waste in Bakery this week could have been avoided with timely markdowns. PM team needs additional coaching on scanning reduced-price labels.",
-    "COST_IF_NOT_FIXED": "Daily waste value in Bakery is trending up - immediate action needed.",
-    "RECOMMENDED_ACTION": "Increase markdown execution compliance during the 6pm window to minimize waste while maximizing sell-through on short-life items.",
-    "SORT_VALUE": 807.79
-  },
-  {
-    "RUN_DATE": "2025-06-14",
-    "ALERT_TYPE": "OSA_WOW",
-    "STORE_ID": 436,
-    "SECTION": "IN-STORE BAKERY",
-    "TYPE": "Availability",
-    "TRIGGER_TYPES": [
-      "WOW"
-    ],
-    "ISSUE": "IN-STORE BAKERY: \u00a3226.75 lost sales this week",
-    "EXPLANATION": "There has been \u00a3226.75 of lost sales in IN-STORE BAKERY this week. Store OSA this week is 86.2%, vs chain average of 87.7% (1.5pp gap). Worst day for lost sales this week: Friday (\u00a352.66)",
-    "COST_IF_NOT_FIXED": "If this continues at the same rate, the store could lose approximately \u00a3907.00 in the next 4 weeks.",
-    "RECOMMENDED_ACTION": "Review availability in IN-STORE BAKERY daily, especially on Fridays. Ensure replenishment orders are raised before 8am and all gaps on high-velocity lines are filled before the store opens.",
-    "SORT_VALUE": 807.79
-  }
-]
+      "RUN_DATE": "2025-06-14",
+      "ALERT_TYPE": "OSA_WOW",
+      "STORE_ID": 224,
+      "SECTION": "ICE CREAM & RELATED PRODS",
+      "TYPE": "Availability",
+      "TRIGGER_TYPES": [
+        "WOW"
+      ],
+      "ISSUE": "ICE CREAM & RELATED PRODS: £237.18 lost sales this week",
+      "EXPLANATION": "There has been £237.18 of lost sales in ICE CREAM & RELATED PRODS this week. Store OSA this week is 89.0%, vs chain average of 89.3% (0.3pp gap). Worst day for lost sales this week: Friday (£147.58)",
+      "COST_IF_NOT_FIXED": "If this continues at the same rate, the store could lose approximately £948.72 in the next 4 weeks.",
+      "RECOMMENDED_ACTION": "Review availability in ICE CREAM & RELATED PRODS daily, especially on Fridays. Ensure all gaps are filled before busy periods.",
+      "SORT_VALUE": 27.57
+    },
+    {
+      "RUN_DATE": "2025-06-14",
+      "ALERT_TYPE": "WASTE",
+      "STORE_ID": 436,
+      "SECTION": "ALL",
+      "TYPE": "Waste",
+      "TRIGGER_TYPES": [
+        "WOW"
+      ],
+      "ISSUE": "MARKDOWN COMPLIANCE: Trending down this week, resulting in an increase in Straight to Bin",
+      "EXPLANATION": "62% of markdowns occurred outside of the recommended window this week. Straight to Bin waste has increased by 70% as a result. This is compared to 96% compliance in the previous week, where the Straight to Bin was much lower,",
+      "COST_IF_NOT_FIXED": "If this continues, the store could lose approximately £2,500 in the next month.",
+      "RECOMMENDED_ACTION": "Review availability in IN-STORE BAKERY daily, especially on Fridays. Ensure replenishment orders are raised before 8am and all gaps on high-velocity lines are filled before the store opens.Coach the teams and ensure markdowns are completed within the agreed window, to protect sell-through and reduce waste",
+      "SORT_VALUE": 807.79
+    },
+    {
+      "RUN_DATE": "2025-06-14",
+      "ALERT_TYPE": "OSA_WOW",
+      "STORE_ID": 436,
+      "SECTION": "FOOD TO GO",
+      "TYPE": "Availability",
+      "TRIGGER_TYPES": [
+        "WOW"
+      ],
+      "ISSUE": "Optimize shelf space layout in Food-to-Go",
+      "EXPLANATION": "Food-to-Go availability dropped to 88.2% vs 94% target. Top 5 lines by volume are frequently out of stock before noon. Planogram compliance in this section is currently at 71%.",
+      "COST_IF_NOT_FIXED": "Weekend demand spike expected - plan replenishment accordingly.",
+      "RECOMMENDED_ACTION": "Review and realign shelf space allocation in Food-to-Go to match current sales velocity. High-velocity lines should have additional facings; slow movers should be reduced.",
+      "SORT_VALUE": 807.79
+    },
+    {
+      "RUN_DATE": "2025-06-14",
+      "ALERT_TYPE": "OSA_WOW",
+      "STORE_ID": 436,
+      "SECTION": "BAKERY",
+      "TYPE": "Waste",
+      "TRIGGER_TYPES": [
+        "WOW"
+      ],
+      "ISSUE": "Review markdown compliance in Bakery",
+      "EXPLANATION": "Bakery markdown compliance has fallen to 68% this week vs 92% target. 43% of waste in Bakery this week could have been avoided with timely markdowns. PM team needs additional coaching on scanning reduced-price labels.",
+      "COST_IF_NOT_FIXED": "Daily waste value in Bakery is trending up - immediate action needed.",
+      "RECOMMENDED_ACTION": "Increase markdown execution compliance during the 6pm window to minimize waste while maximizing sell-through on short-life items.",
+      "SORT_VALUE": 807.79
+    },
+    {
+      "RUN_DATE": "2025-06-14",
+      "ALERT_TYPE": "OSA_WOW",
+      "STORE_ID": 436,
+      "SECTION": "IN-STORE BAKERY",
+      "TYPE": "Availability",
+      "TRIGGER_TYPES": [
+        "WOW"
+      ],
+      "ISSUE": "IN-STORE BAKERY: £226.75 lost sales this week",
+      "EXPLANATION": "There has been £226.75 of lost sales in IN-STORE BAKERY this week. Store OSA this week is 86.2%, vs chain average of 87.7% (1.5pp gap). Worst day for lost sales this week: Friday (£52.66)",
+      "COST_IF_NOT_FIXED": "If this continues at the same rate, the store could lose approximately £907.00 in the next 4 weeks.",
+      "RECOMMENDED_ACTION": "Review availability in IN-STORE BAKERY daily, especially on Fridays. Ensure replenishment orders are raised before 8am and all gaps on high-velocity lines are filled before the store opens.",
+      "SORT_VALUE": 807.79
+    }
+  ],
+  "feedbacks": [
+    {
+      "id": "bfa87e20-6e82-414d-83f4-51980ca1c529",
+      "feedback": "asdasd",
+      "storeId": 1,
+      "userId": "dummy-manager-1",
+      "timestamp": "2026-04-23T09:08:56.228Z"
+    }
+  ]
 }

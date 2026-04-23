@@ -15,6 +15,7 @@ import {
   clearTokens,
   getErrorMessage,
   setSessionExpiredHandler,
+  clearUserData,
 } from "@/lib/api";
 import {
   applyAnalyticsUserContext,
@@ -123,6 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const handleSessionExpiration = () => {
       console.log("[useAuth] Session expired, logging out and redirecting");
       clearTokens();
+      clearUserData();
       saveStoreData(null, []);
       clearPersistedRoleName();
       clearAnalyticsUserContext();
@@ -203,6 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const handleLogout = useCallback((showSuccessMessage: boolean = true) => {
     clearTokens();
+    clearUserData();
     saveStoreData(null, []); // Clear stored store data
     clearPersistedRoleName();
     clearAnalyticsUserContext();

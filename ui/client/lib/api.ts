@@ -52,6 +52,10 @@ console.log("[API] Base URL set to:", API_BASE_URL);
 const ACCESS_TOKEN_KEY = "STORE_INSIGHT_ACCESS_TOKEN";
 const REFRESH_TOKEN_KEY = "STORE_INSIGHT_REFRESH_TOKEN";
 
+// User data storage keys
+const USER_ID_KEY = "STORE_INSIGHT_USER_ID";
+const USER_EMAIL_KEY = "STORE_INSIGHT_USER_EMAIL";
+
 // Session expiration handler
 let onSessionExpired: (() => void) | null = null;
 
@@ -86,6 +90,25 @@ export function clearTokens(): void {
 
 export function hasTokens(): boolean {
   return !!getAccessToken();
+}
+
+// ===== User Data Management =====
+export function getUserId(): string | null {
+  return localStorage.getItem(USER_ID_KEY);
+}
+
+export function getUserEmail(): string | null {
+  return localStorage.getItem(USER_EMAIL_KEY);
+}
+
+export function setUserData(userId: string, email: string): void {
+  localStorage.setItem(USER_ID_KEY, userId);
+  localStorage.setItem(USER_EMAIL_KEY, email);
+}
+
+export function clearUserData(): void {
+  localStorage.removeItem(USER_ID_KEY);
+  localStorage.removeItem(USER_EMAIL_KEY);
 }
 
 // ===== Auth =====
@@ -129,6 +152,8 @@ export async function login(
     console.log("[API] Login successful, tokens stored");
     console.log("[API] User data:", { id: data.user.id, username: data.user.username, stores: data.user.stores });
     setTokens(data.accessToken, data.refreshToken);
+    // Store user ID and email (username) in local storage
+    setUserData(data.user.id, data.user.username);
     return data;
   } catch (error) {
     console.error("[API] Login exception:", error);

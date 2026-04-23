@@ -2,7 +2,6 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import CompleteActionDialog from "./dialogs/CompleteActionDialog";
 import ReminderDialog from "./dialogs/ReminderDialog";
-import CouldNotCompleteDialog from "./dialogs/CouldNotCompleteDialog";
 import { useSmartActions } from "@/contexts/SmartActionsContext";
 import { completeAction as completeActionApi } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
@@ -33,14 +32,6 @@ function CalendarIcon() {
   );
 }
 
-function CloseIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-      <path d="M17.805 2.19673C17.545 1.93573 17.123 1.93573 16.862 2.19673L10 9.05873L3.13801 2.19673C2.878 1.93573 2.45599 1.93573 2.19499 2.19673C1.93501 2.45672 1.93501 2.87874 2.19499 3.13873L9.05799 10.0007L2.19499 16.8627C1.93501 17.1237 1.93501 17.5457 2.19499 17.8057C2.45601 18.0657 2.878 18.0657 3.13801 17.8057L10 10.9437L16.862 17.8057C17.123 18.0657 17.545 18.0657 17.805 17.8057C18.065 17.5457 18.065 17.1237 17.805 16.8627L10.943 10.0007L17.805 3.13873C18.065 2.87874 18.065 2.45672 17.805 2.19673Z" fill="currentColor"/>
-    </svg>
-  );
-}
-
 function TickIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
@@ -54,7 +45,6 @@ export default function SmartActionCard({ action, onComplete }: SmartActionCardP
   const { updateActionStatus, getActionStatus } = useSmartActions();
   const [completeDialogOpen, setCompleteDialogOpen] = useState(false);
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
-  const [couldNotCompleteDialogOpen, setCouldNotCompleteDialogOpen] = useState(false);
   const { toast } = useToast();
 
   const status = getActionStatus(action.id);
@@ -84,12 +74,6 @@ export default function SmartActionCard({ action, onComplete }: SmartActionCardP
     setReminderDialogOpen(false);
     const reminderDate = new Date(`${date}T${time}`);
     updateActionStatus(action.id, "reminder_set", reminderDate);
-  };
-
-  const handleCouldNotComplete = (reason: string, comment: string) => {
-    setCouldNotCompleteDialogOpen(false);
-    updateActionStatus(action.id, "couldnt_complete");
-    onComplete?.(action.id);
   };
 
   return (
@@ -162,14 +146,6 @@ export default function SmartActionCard({ action, onComplete }: SmartActionCardP
           </button>
 
           <button
-            onClick={() => setCouldNotCompleteDialogOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-full border border-brand-outline-border text-brand-outline-text text-xs font-dm-sans hover:bg-brand-primary-100 transition-colors"
-          >
-            <CloseIcon />
-            Couldn't complete
-          </button>
-
-          <button
             onClick={() => setCompleteDialogOpen(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-full bg-brand-primary text-white text-xs font-dm-sans hover:opacity-90 transition-opacity"
           >
@@ -190,12 +166,6 @@ export default function SmartActionCard({ action, onComplete }: SmartActionCardP
         actionTitle={action.title}
         onConfirm={handleReminder}
         onCancel={() => setReminderDialogOpen(false)}
-      />
-      <CouldNotCompleteDialog
-        open={couldNotCompleteDialogOpen}
-        actionTitle={action.title}
-        onConfirm={handleCouldNotComplete}
-        onCancel={() => setCouldNotCompleteDialogOpen(false)}
       />
     </>
   );
