@@ -1,23 +1,32 @@
-# Store Insight API
+# Store Insight API (`api2/`)
 
-Python FastAPI service that returns store-level KPI data for the Store Insight front end.
+Python FastAPI service that serves pre-computed KPI and alert data to the
+Store Insight front end. Deployed to Railway via the included `Procfile` and
+`railway.json`.
 
 ---
 
 ## Architecture
 
 ```
-Batch (manual / daily)
-  batch/kpi_availability_batch.py
-    └─> joins OSA + item hierarchy + site hierarchy + feedback tables
-    └─> calls Snowflake Cortex to generate key insights
-    └─> writes to SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.KPI_AVAILABILITY_SUMMARY
+Upstream batches (run elsewhere in the repo)
+  kpi/kpi_availability_batch.py                (KPI aggregation + Cortex insights)
+    └─> SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.KPI_AVAILABILITY_SUMMARY
+  pipeline/  (stages: detect → facts → investigate → score)
+    └─> SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_PIPELINE
 
-API (per-request)
-  GET /api/kpis?store_id=436&date=2025-06-14
-    └─> point-lookup on KPI_AVAILABILITY_SUMMARY
-    └─> returns JSON matching kpiData.json shape
+API (api2/, per-request)
+  FastAPI + Snowpark, cached session, X-API-Key auth
+    GET /data/kpis      ── point-lookup on KPI_AVAILABILITY_SUMMARY
+    GET /data/actions   ── filtered + paginated read of ALERTS_PIPELINE
+    GET /data/successes ── stub (empty payload)
+    POST /auth/login    ── POC credential check
+    GET /health         ── liveness
 ```
+
+This service does **not** write to Snowflake. KPI rows come from
+`kpi/kpi_availability_batch.py` and alert rows come from the `pipeline/`
+package — both are separate entry points in this repo.
 
 ---
 
@@ -33,141 +42,190 @@ pip install -r requirements.txt
 
 ```bash
 cp .env.example .env
-# Edit .env with your Snowflake username and password
+# Edit .env with your Snowflake connection + API key
 ```
 
-### 3. Run the batch (first time, and daily after new data arrives)
+Required variables — see [Configuration](#configuration) for the full list.
+
+### 3. Start the API locally
 
 ```bash
-# From the store-insight-api/ directory:
-python -m batch.kpi_availability_batch --date 2025-06-14 --overwrite
-```
-
-- `--date` is the **week end date** (last day of the 7-day rolling window)
-- `--overwrite` replaces existing rows for all stores on that date; omit to append
-
-### 4. Start the API
-
-```bash
-# From the store-insight-api/ directory:
+# From the api2/ directory:
 uvicorn app.main:app --reload --port 8000
 ```
+
+Requests to `/data/*` and `/auth/*` must include `X-API-Key: <value>` matching
+`STORE_INSIGHT_API_KEY` in `.env`.
 
 ---
 
 ## Endpoints
 
-### `GET /api/kpis`
+All `/data/*` and `/auth/*` routes require the header `X-API-Key: <key>`.
+`/health` is unauthenticated.
 
-Returns the Overall and Availability KPI cards for a store and week.
+### `GET /data/kpis`
 
-**Parameters**
+Returns Overall + Availability KPI cards for a store and week.
 
-| Name       | Type   | Required | Description                              |
-|------------|--------|----------|------------------------------------------|
-| `store_id` | int    | Yes      | Store ID (matches `SITE_ID` in Snowflake)|
-| `date`     | string | Yes      | Week end date in `YYYY-MM-DD` format     |
+| Param      | Type   | Required | Default                          |
+|------------|--------|----------|----------------------------------|
+| `store_id` | int    | No       | Latest store in the summary table |
+| `date`     | string | No       | Latest `ANALYSIS_DATE` for store  |
 
-**Example request**
-
-```
-GET http://localhost:8000/api/kpis?store_id=436&date=2025-06-14
-```
-
-**Example response** — shape matches `kpiData.json`:
+**Response envelope** (frontend `KpisResponse` in `ui/shared/api.ts`):
 
 ```json
 {
-  "kpis": [
-    {
-      "id": "1",
-      "name": "Overall",
-      "value": "87.5%",
-      "trend_direction": "up",
-      "trend": "+2.3pp vs LW",
-      "cluster_average": "82.5%",
-      "details": {
-        "target": { "value": "90%", "trend_direction": "down", "trend": "-2.5pp vs target" },
-        "previous_average": { "value": "85.2%", "trend_direction": "up", "trend": "+2.3pp improvement" },
-        "performance_breakdown": {
-          "current_week": "87.5%",
-          "last_week": "85.2%",
-          "month_average": "86.1%",
-          "year_average": "88.3%"
-        },
-        "Key_insights": [
-          "Availability is 2.5pp below the 90% target this week.",
-          "Week-on-week trend is up +2.3pp vs last week.",
-          "Store is 5.0pp ahead of cluster average."
-        ]
-      }
-    },
-    {
-      "id": "2",
-      "name": "Availability",
-      "value": "87.5%",
-      "trend_direction": "up",
-      "trend": "+2.3pp vs LW",
-      "cluster_average": "82.5%",
-      "details": {
-        "performance_breakdown": {
-          "actionability": "85.2%",
-          "Alert_compliance": "92.4%",
-          "tick_flick": "25.0%"
-        },
-        "summary": "Availability increased 2.3pp this week vs last week ...",
-        "top_drivers": [ ... ],
-        "category_performance": [ ... ],
-        "time_of_day_analysis": [ ... ]
-      }
-    }
-  ]
+  "data": [
+    { "id": "1", "name": "Overall",      "value": "87.5%", "trend_direction": "up", "trend": "+2.3pp vs LW", "cluster_average": "82.5%", "details": { ... } },
+    { "id": "2", "name": "Availability", "value": "87.5%", "trend_direction": "up", "trend": "+2.3pp vs LW", "cluster_average": "82.5%", "details": { ... } }
+  ],
+  "meta": { "limit": 2, "offset": 0, "total": 2 }
 }
 ```
 
-**Error responses**
+The `details` block for each card is a JSON blob sourced directly from the
+`OVERALL_DETAILS_JSON` / `AVAILABILITY_DETAILS_JSON` columns written by the
+KPI batch. Reference types for that shape live in `app/schemas.py`.
 
-| Status | Meaning                                              |
-|--------|------------------------------------------------------|
-| 404    | No batch data found for this store / date combination |
-| 500    | Unexpected Snowflake or server error                 |
+### `GET /data/actions`
+
+Returns alert cards from `ALERTS_PIPELINE`, sorted by `SORT_VALUE desc`.
+
+| Param      | Type | Required | Default                               |
+|------------|------|----------|---------------------------------------|
+| `store_id` | int  | No       | All stores                            |
+| `run_date` | str  | No       | Latest `RUN_DATE` in the table        |
+| `limit`    | int  | No       | 100 (1–1000)                          |
+| `offset`   | int  | No       | 0 (≤100,000 — prevents unbounded scans) |
+
+**Response envelope** (frontend `ActionsResponse`):
+
+```json
+{
+  "data": [
+    {
+      "RUN_DATE":           "2025-06-14",
+      "ALERT_TYPE":         "OSA",
+      "STORE_ID":           408,
+      "SECTION":            "CHILLED",
+      "TYPE":               "...",
+      "TRIGGER_TYPES":      ["WOW", "VS_CHAIN"],
+      "ISSUE":              "...",
+      "EXPLANATION":        "...",
+      "COST_IF_NOT_FIXED":  "...",
+      "RECOMMENDED_ACTION": "...",
+      "SORT_VALUE":         12345.67
+    }
+  ],
+  "meta": { "limit": 100, "offset": 0, "total": 427 }
+}
+```
+
+### `GET /data/successes`
+
+Stub — returns an empty envelope. Kept so the frontend renders without 404.
+
+### `POST /auth/login`
+
+POC credential check against `POC_USERNAME` / `POC_PASSWORD` env vars. Returns
+stub tokens plus a mock user profile. The returned tokens are **not real
+bearer tokens** — `/data/*` routes continue to require `X-API-Key`. If the POC
+env vars are not set the endpoint returns 503 rather than silently accepting
+input.
 
 ### `GET /health`
 
-Returns `{"status": "ok"}`. Used for liveness checks.
+Returns `{"status": "ok"}`. Used for liveness checks (e.g. Railway).
+
+### Error responses
+
+| Status | Meaning                                                         |
+|--------|-----------------------------------------------------------------|
+| 401    | Missing or invalid `X-API-Key` / login credentials              |
+| 404    | No data matches the requested filters                           |
+| 500    | Unexpected Snowflake or server error                            |
+| 503    | `STORE_INSIGHT_API_KEY` (or POC creds for `/auth/login`) not set |
 
 ---
 
-## KPI Calculations
+## Configuration
 
-All metrics are computed over a **rolling 7-day window** ending on `date`.
+All configuration is via environment variables (`.env` in development, Railway
+service variables in production).
 
-| Metric | Source | Calculation |
-|---|---|---|
-| OSA % | `LSM_REPORT_ITEM_STORE_DAY_REPORTING_PERIOD` | `ACTUAL_SALES_VOLUME / (ACTUAL_SALES_VOLUME + LOST_SALES_VOLUME)` |
-| Cluster average | Same table + `LSM_SITE_HIERARCHY` (CLUSTER_ID) | Average OSA across all stores in the same cluster |
-| Actionability | `LSM_ALERT_FEEDBACK` | % alerts with a logged intervention |
-| Alert compliance | `LSM_ALERT_FEEDBACK` | % alerts worked |
-| Tick & flick | `LSM_ALERT_FEEDBACK` | % alerts where `TICK_AND_FLICK_FLAG = true` |
-| Time of day | `REPORTING_PERIOD_ID` 1/2/3 | Morning / Afternoon / Evening OSA split |
-| Key insights | Snowflake Cortex (`mistral-large`) | LLM-generated from aggregated facts |
+### Required
 
-RAG thresholds: **green ≥ 90%, red < 90%**.
+| Variable                    | Purpose                                                        |
+|-----------------------------|----------------------------------------------------------------|
+| `SNOWFLAKE_ACCOUNT`         | Account identifier                                             |
+| `SNOWFLAKE_USER`            | Snowflake user                                                 |
+| `STORE_INSIGHT_API_KEY`     | Shared secret for `X-API-Key` header on `/data/*` + `/auth/*`  |
+
+### Snowflake authentication (one of)
+
+Checked in this order:
+
+1. **Key-pair (recommended for cloud)** — set one of:
+   - `SNOWFLAKE_PRIVATE_KEY_B64` — base64-encoded PEM
+   - `SNOWFLAKE_PRIVATE_KEY` — raw PEM (`\n` escapes accepted)
+   - `SNOWFLAKE_PRIVATE_KEY_PATH` — path to `.p8`/`.pem` file (local only)
+   - `SNOWFLAKE_PRIVATE_KEY_PASSPHRASE` — optional passphrase
+2. **Password** — `SNOWFLAKE_PASSWORD`
+3. **Browser SSO** — no secret set; opens `externalbrowser` authenticator (local dev only)
+
+### Optional (defaults shown)
+
+| Variable              | Default                             |
+|-----------------------|-------------------------------------|
+| `SNOWFLAKE_ROLE`      | `ACL_SNOWFLAKE_RI_EOE_PRD_DP_USER`  |
+| `SNOWFLAKE_WAREHOUSE` | `SNOWFLAKE_LEARNING_WH`             |
+| `SNOWFLAKE_DATABASE`  | `SNOWFLAKE_LEARNING_DB`             |
+| `SNOWFLAKE_SCHEMA`    | `STORE_INSIGHT`                     |
+| `ALLOWED_ORIGINS`     | `*` (comma-separated list or `*`)   |
+| `POC_USERNAME`        | unset — disables `/auth/login`      |
+| `POC_PASSWORD`        | unset — disables `/auth/login`      |
+
+See `.env.example` for a ready-to-copy template.
+
+---
+
+## Deployment (Railway)
+
+Deployment is driven by `railway.json` + `Procfile`:
+
+```
+# Procfile
+web: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+Railway's Nixpacks builder picks up `requirements.txt` automatically. Set all
+required env vars under **Service → Variables** before the first deploy.
+
+For production, prefer key-pair auth (`SNOWFLAKE_PRIVATE_KEY_B64`) over
+`SNOWFLAKE_PASSWORD` — avoids password rotation pain and works headlessly.
 
 ---
 
 ## Project Structure
 
 ```
-store-insight-api/
-  app/
-    main.py               # FastAPI app and routes
-    kpi_builder.py        # Reads summary table, assembles JSON response
-    snowflake_session.py  # Snowflake session factory (env-var auth)
-    schemas.py            # Pydantic response models
-  batch/
-    kpi_availability_batch.py  # Daily aggregation + Cortex insights job
-  .env.example            # Credentials template
-  requirements.txt
-  README.md
+api2/
+├── app/
+│   ├── main.py              FastAPI app, routes, auth + CORS middleware
+│   ├── kpi_builder.py       Reads KPI_AVAILABILITY_SUMMARY → KpisResponse shape
+│   ├── actions_builder.py   Reads ALERTS_PIPELINE → ActionsResponse shape
+│   ├── snowflake_session.py Cached Snowpark session factory (key-pair / password / SSO)
+│   └── schemas.py           Pydantic reference types for KPI details blobs (not wired as response_model)
+├── .env.example             Credentials + config template
+├── Procfile                 Railway / Heroku start command
+├── railway.json             Railway build + restart config
+├── requirements.txt         FastAPI, Snowpark, cryptography, pydantic
+└── README.md
 ```
+
+Batch jobs that populate the upstream tables live elsewhere in the repo:
+
+- `kpi/kpi_availability_batch.py` — writes `KPI_AVAILABILITY_SUMMARY`
+- `pipeline/` — writes `ALERTS_PIPELINE` (see `pipeline/README.md`)
