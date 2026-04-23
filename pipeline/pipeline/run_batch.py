@@ -51,15 +51,16 @@ import sys
 # We need .../ds-common-tools/ on sys.path so `import store_insight` resolves.
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
 
-from store_insight.pipeline.config.loader      import load_config
-from store_insight.pipeline.pipeline.session   import load_env, create_session
-from store_insight.pipeline.pipeline.pipeline  import (
-    derive_windows, run_pipeline, write_alerts,
-)
 from snowflake.snowpark import Window
 from snowflake.snowpark import functions as F
 from snowflake.snowpark.types import LongType
-
+from store_insight.pipeline.config.loader import load_config
+from store_insight.pipeline.pipeline.pipeline import (
+    derive_windows,
+    run_pipeline,
+    write_alerts,
+)
+from store_insight.pipeline.pipeline.session import create_session
 
 # ---------------------------------------------------------------------------
 # Source table defaults (used when no config is loaded)

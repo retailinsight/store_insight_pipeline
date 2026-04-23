@@ -52,11 +52,11 @@ import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-from store_insight.pipeline.stages._1_detect.detect          import detect_signals
-from store_insight.pipeline.pipeline.config                   import DetectorConfig
-from store_insight.pipeline.stages._2_facts.facts             import enrich_signals
+from store_insight.pipeline.pipeline.config import DetectorConfig
+from store_insight.pipeline.stages._1_detect.detect import detect_signals
+from store_insight.pipeline.stages._2_facts.facts import enrich_signals
 from store_insight.pipeline.stages._3_investigate.investigate import investigate
-from store_insight.pipeline.stages._4_score.score             import score
+from store_insight.pipeline.stages._4_score.score import score
 
 _DEFAULT_OUTPUT_TABLE = 'SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_PIPELINE'
 
@@ -143,7 +143,11 @@ def _card_schema():
     """Snowflake output-table schema. Kept adjacent to ``_card_to_row`` — if
     you add a column, edit both."""
     from snowflake.snowpark.types import (
-        StructType, StructField, StringType, IntegerType, FloatType,
+        FloatType,
+        IntegerType,
+        StringType,
+        StructField,
+        StructType,
     )
     return StructType([
         StructField('RUN_DATE',           StringType()),

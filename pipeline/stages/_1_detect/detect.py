@@ -36,8 +36,8 @@ Public API
 import datetime
 from dataclasses import asdict
 
-from store_insight.pipeline.stages._1_detect import registry as _registry
 from store_insight.pipeline.pipeline.config import DetectorConfig
+from store_insight.pipeline.stages._1_detect import registry as _registry
 
 
 def _detector_module_name(mod) -> str:
@@ -157,6 +157,7 @@ def detect_signals(
     list of signal dicts, one per (store_id, department) pair
     """
     import inspect
+
     from snowflake.snowpark import functions as F
 
     det_cfg = config if config is not None else DetectorConfig()

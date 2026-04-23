@@ -11,7 +11,6 @@ It is not customer-configurable (thresholds live in
 """
 
 from dataclasses import dataclass, field
-from typing import List
 
 
 @dataclass
@@ -33,4 +32,4 @@ class DetectorInfo:
     action:      str
     baseline:    str
     logic:       str
-    config_keys: List[str] = field(default_factory=list)
+    config_keys: list[str] = field(default_factory=list)
