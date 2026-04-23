@@ -250,11 +250,11 @@ export default function Index() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setFeedbackDialogOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-full border border-brand-outline-border text-brand-outline-text text-sm font-dm-sans hover:bg-brand-primary-100 transition-colors"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-full border border-brand-outline-border text-brand-outline-text text-sm font-dm-sans hover:bg-brand-primary-100 transition-colors md:px-4"
               title="Send us your feedback"
             >
               <MessageCircle size={18} />
-              <span>Send feedback</span>
+              <span className="hidden md:inline">Send feedback</span>
             </button>
             {availableStores.length > 1 && (
               <div className="flex items-center gap-2">
