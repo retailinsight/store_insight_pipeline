@@ -11,8 +11,11 @@ import os
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.serialization import (
-    Encoding, NoEncryption, PrivateFormat,
-    load_der_private_key, load_pem_private_key,
+    Encoding,
+    NoEncryption,
+    PrivateFormat,
+    load_der_private_key,
+    load_pem_private_key,
 )
 from dotenv import load_dotenv
 from snowflake.snowpark import Session
@@ -131,5 +134,5 @@ def _create_session() -> Session:
 def _require(key: str) -> str:
     value = os.getenv(key)
     if not value:
-        raise EnvironmentError(f"Required environment variable '{key}' is not set.")
+        raise OSError(f"Required environment variable '{key}' is not set.")
     return value
