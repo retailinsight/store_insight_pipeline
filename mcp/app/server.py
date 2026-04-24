@@ -2,22 +2,29 @@
 Store Insight Alerts — MCP server.
 
 Exposes read-only tools over ``ALERTS_PIPELINE`` so MCP clients (Claude
-Desktop, Claude web via ``mcp-remote``, etc.) can browse alert cards and
-inspect their full pipeline trace.
+Desktop, Claude.ai web, etc.) can browse alert cards and inspect their full
+pipeline trace.
 
 Transport: streamable HTTP at ``/mcp``.
-Auth:      shared ``X-API-Key`` header (env ``STORE_INSIGHT_MCP_API_KEY``).
+Auth:      OAuth 2.1 Bearer tokens issued by WorkOS AuthKit. The server
+           publishes RFC 9728 Protected Resource Metadata at
+           ``/.well-known/oauth-protected-resource`` pointing clients at the
+           WorkOS authorization server; all ``/mcp`` requests must carry a
+           valid ``Authorization: Bearer <jwt>`` header which is verified
+           against WorkOS's JWKS.
 Health:    ``GET /health`` — unauthenticated, for Railway checks.
 
 Run locally:
     uvicorn app.server:app --reload --port 8001
 """
 
-import hmac
 import json
 import logging
 import os
 from typing import Optional
+
+import jwt
+from jwt import PyJWKClient
 
 from dotenv import load_dotenv
 
@@ -37,8 +44,21 @@ from app.snowflake_session import get_session
 
 logger = logging.getLogger(__name__)
 
-_API_KEY_ENV = "STORE_INSIGHT_MCP_API_KEY"
-_API_KEY = os.getenv(_API_KEY_ENV)
+_AUTHKIT_DOMAIN = os.getenv("WORKOS_AUTHKIT_DOMAIN", "").rstrip("/")
+_WORKOS_CLIENT_ID = os.getenv("WORKOS_CLIENT_ID", "").strip()
+_RESOURCE_URL = os.getenv("MCP_RESOURCE_URL", "").rstrip("/")
+
+_JWKS_CLIENT: Optional[PyJWKClient] = None
+
+
+def _jwks_client() -> PyJWKClient:
+    """Lazy, cached JWKS client. PyJWKClient caches keys internally."""
+    global _JWKS_CLIENT
+    if _JWKS_CLIENT is None:
+        if not _AUTHKIT_DOMAIN:
+            raise RuntimeError("WORKOS_AUTHKIT_DOMAIN is not set.")
+        _JWKS_CLIENT = PyJWKClient(f"{_AUTHKIT_DOMAIN}/oauth2/jwks")
+    return _JWKS_CLIENT
 
 
 # ─── FastMCP server + tools ─────────────────────────────────────────────────
@@ -167,27 +187,42 @@ def alerts_schema() -> str:
     return alerts_repo.SCHEMA_MARKDOWN
 
 
-# ─── API-key middleware ─────────────────────────────────────────────────────
+# ─── OAuth: JWT middleware + discovery endpoints ────────────────────────────
 
 
-class ApiKeyMiddleware:
+def _resource_metadata_url() -> str:
+    """Full URL of our Protected Resource Metadata document (RFC 9728)."""
+    # The metadata lives at the origin root, not under /mcp.
+    if _RESOURCE_URL:
+        # Strip /mcp (or any path) to get the origin.
+        from urllib.parse import urlparse
+        parsed = urlparse(_RESOURCE_URL)
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+    else:
+        origin = ""
+    return f"{origin}/.well-known/oauth-protected-resource"
+
+
+class JwtMiddleware:
     """
-    ASGI middleware that requires a matching ``X-API-Key`` header on all
-    requests except paths in ``exempt_paths``.
+    ASGI middleware that requires a valid WorkOS-issued Bearer token on all
+    requests except paths in ``exempt_paths`` or any path under
+    ``/.well-known/``.
 
-    Fails closed (503) if the env var holding the expected key is unset,
-    matching ``api2``'s auth model.
+    On missing/invalid tokens, responds 401 with a ``WWW-Authenticate`` header
+    pointing MCP clients at our Protected Resource Metadata document, per
+    RFC 9728 + the MCP auth spec.
+
+    Fails closed (503) if ``WORKOS_AUTHKIT_DOMAIN`` is unset.
     """
 
     def __init__(
         self,
         app: ASGIApp,
         *,
-        key_env: str,
         exempt_paths: Optional[set] = None,
     ) -> None:
         self.app = app
-        self.key_env = key_env
         self.exempt_paths = exempt_paths or set()
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -196,38 +231,77 @@ class ApiKeyMiddleware:
             return
 
         path = scope.get("path", "")
-        if path in self.exempt_paths:
+        if path in self.exempt_paths or path.startswith("/.well-known/"):
             await self.app(scope, receive, send)
             return
 
-        expected = os.getenv(self.key_env)
-        if not expected:
+        if not _AUTHKIT_DOMAIN:
             await _json_response(
                 send, 503,
-                {"detail": f"MCP auth not configured ({self.key_env} missing)."},
+                {"detail": "MCP auth not configured (WORKOS_AUTHKIT_DOMAIN missing)."},
             )
             return
 
         headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
-        provided = headers.get("x-api-key")
-        if provided is None or not hmac.compare_digest(provided, expected):
-            await _json_response(
-                send, 401, {"detail": "Invalid or missing X-API-Key."},
+        auth = headers.get("authorization", "")
+        if not auth.lower().startswith("bearer "):
+            await self._unauthorized(send, error="invalid_token",
+                                     description="Missing Bearer token.")
+            return
+
+        token = auth.split(None, 1)[1].strip()
+        try:
+            signing_key = _jwks_client().get_signing_key_from_jwt(token).key
+            decode_opts = {"verify_aud": bool(_WORKOS_CLIENT_ID)}
+            jwt.decode(
+                token,
+                signing_key,
+                algorithms=["RS256"],
+                issuer=_AUTHKIT_DOMAIN,
+                audience=_WORKOS_CLIENT_ID or None,
+                options=decode_opts,
             )
+        except Exception as exc:
+            logger.warning("JWT validation failed: %s", exc)
+            await self._unauthorized(send, error="invalid_token",
+                                     description=str(exc))
             return
 
         await self.app(scope, receive, send)
 
+    async def _unauthorized(
+        self, send: Send, *, error: str, description: str,
+    ) -> None:
+        metadata_url = _resource_metadata_url()
+        www_auth = (
+            f'Bearer realm="mcp", error="{error}", '
+            f'error_description="{description}", '
+            f'resource_metadata="{metadata_url}"'
+        )
+        await _json_response(
+            send, 401, {"error": error, "error_description": description},
+            extra_headers=[(b"www-authenticate", www_auth.encode())],
+        )
 
-async def _json_response(send: Send, status: int, body: dict) -> None:
+
+async def _json_response(
+    send: Send,
+    status: int,
+    body: dict,
+    *,
+    extra_headers: Optional[list] = None,
+) -> None:
     payload = json.dumps(body).encode()
+    headers = [
+        (b"content-type", b"application/json"),
+        (b"content-length", str(len(payload)).encode()),
+    ]
+    if extra_headers:
+        headers.extend(extra_headers)
     await send({
         "type": "http.response.start",
         "status": status,
-        "headers": [
-            (b"content-type", b"application/json"),
-            (b"content-length", str(len(payload)).encode()),
-        ],
+        "headers": headers,
     })
     await send({"type": "http.response.body", "body": payload})
 
@@ -239,26 +313,51 @@ async def _health(_request) -> Response:
     return JSONResponse({"status": "ok"})
 
 
+async def _protected_resource_metadata(_request) -> Response:
+    """
+    RFC 9728 Protected Resource Metadata.
+
+    Tells MCP clients (Claude.ai) which authorization server to use and which
+    bearer-token methods we accept. Clients fetch this after we return a 401
+    with a ``WWW-Authenticate: Bearer resource_metadata=<this URL>`` header.
+    """
+    return JSONResponse({
+        "resource": _RESOURCE_URL or "",
+        "authorization_servers": [_AUTHKIT_DOMAIN] if _AUTHKIT_DOMAIN else [],
+        "bearer_methods_supported": ["header"],
+        "scopes_supported": [],
+    })
+
+
 # FastMCP exposes its streamable-HTTP ASGI sub-app; mount it at /mcp.
 _mcp_asgi = mcp.streamable_http_app()
 
 _routes = [
     Route("/health", _health, methods=["GET"]),
+    Route(
+        "/.well-known/oauth-protected-resource",
+        _protected_resource_metadata,
+        methods=["GET"],
+    ),
     Mount("/mcp", app=_mcp_asgi),
 ]
 
 # ``lifespan`` ensures FastMCP's session manager starts/stops cleanly.
 _base = Starlette(routes=_routes, lifespan=_mcp_asgi.router.lifespan_context)
 
-app = ApiKeyMiddleware(
+app = JwtMiddleware(
     _base,
-    key_env=_API_KEY_ENV,
     exempt_paths={"/health"},
 )
 
 
-if not _API_KEY:
+if not _AUTHKIT_DOMAIN:
     logger.warning(
-        "%s is unset — all MCP requests will receive 503 until configured.",
-        _API_KEY_ENV,
+        "WORKOS_AUTHKIT_DOMAIN is unset — all MCP requests will receive 503 "
+        "until configured.",
+    )
+if not _RESOURCE_URL:
+    logger.warning(
+        "MCP_RESOURCE_URL is unset — Protected Resource Metadata will be "
+        "incomplete and Claude.ai discovery will fail.",
     )
