@@ -19,10 +19,8 @@ Public API
 from collections import defaultdict
 
 from snowflake.snowpark import functions as F
-
 from store_insight.pipeline.pipeline._shared import build_store_dept_filter
 from store_insight.pipeline.stages._2_facts.config import GathererInfo
-
 
 METADATA = GathererInfo(
     name         = 'osa_dow',

@@ -42,7 +42,6 @@ run_pipeline / write_alerts directly — no pipeline code needs to change.
 
 import argparse
 import os
-import sys
 import tempfile
 import zipfile
 from pathlib import Path

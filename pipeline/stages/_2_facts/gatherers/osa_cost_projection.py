@@ -19,7 +19,6 @@ Public API
 
 from store_insight.pipeline.stages._2_facts.config import GathererInfo
 
-
 METADATA = GathererInfo(
     name         = 'osa_cost_projection',
     signal_types = ['OSA'],

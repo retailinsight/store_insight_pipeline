@@ -18,12 +18,11 @@ the appropriate string to ``signal_types`` in your gatherer's ``METADATA``.
 """
 
 from dataclasses import dataclass, field
-from typing import List
 
 
 @dataclass
 class GathererInfo:
     name:         str
-    signal_types: List[str]
-    facts_keys:   List[str]  = field(default_factory=list)
+    signal_types: list[str]
+    facts_keys:   list[str]  = field(default_factory=list)
     description:  str        = ''

@@ -32,8 +32,7 @@ Public API
 from pathlib import Path
 
 import yaml
-
-from store_insight.pipeline.stages._3_investigate import rule_based, cortex
+from store_insight.pipeline.stages._3_investigate import cortex, rule_based
 
 _HERE     = Path(__file__).parent
 _YAML_PATH = _HERE / 'signal_type_investigators.yaml'

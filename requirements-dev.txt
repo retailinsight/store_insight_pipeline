@@ -1,0 +1,11 @@
+# Dev / CI dependencies for running the pipeline test suite.
+# Runtime Snowflake deps live in pipeline/deploy/requirements.txt and are
+# re-declared here so CI has everything needed to import pipeline modules.
+
+# Runtime (needed at import time by pipeline/stages/**)
+snowflake-snowpark-python>=1.18.0
+pyyaml>=6.0
+
+# Test + lint tooling
+pytest>=8.0
+ruff>=0.6

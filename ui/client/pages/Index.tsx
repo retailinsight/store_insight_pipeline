@@ -7,7 +7,7 @@ import SmartActionCard from "@/components/SmartActionCard";
 import KpiDetailPanel from "@/components/KpiDetailPanel";
 import FeedbackDialog from "@/components/dialogs/FeedbackDialog";
 import { useSmartActions } from "@/contexts/SmartActionsContext";
-import { fetchKpis, fetchSuccesses, getErrorMessage, submitFeedback } from "@/lib/api";
+import { fetchKpis, fetchSuccesses, getErrorMessage, submitFeedback, getUserId } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { KpiData, SuccessData } from "@shared/api";
@@ -220,13 +220,18 @@ export default function Index() {
 
   const handleSubmitFeedback = async (feedback: string) => {
     try {
-      // Get user and store from auth context
-      if (!user || !selectedStore) {
-        throw new Error("User or store not available");
+      // Get store from auth context and user ID from localStorage
+      if (!selectedStore) {
+        throw new Error("Store not available");
+      }
+
+      const userId = getUserId();
+      if (!userId) {
+        throw new Error("User not authenticated");
       }
 
       // Call API with required params
-      await submitFeedback(feedback, selectedStore.id, user.id);
+      await submitFeedback(feedback, selectedStore.id, userId);
 
       // Close dialog on success
       setFeedbackDialogOpen(false);
