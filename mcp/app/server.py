@@ -27,7 +27,6 @@ from dotenv import load_dotenv
 from jwt import PyJWKClient
 from mcp.server.fastmcp import FastMCP
 from starlette.applications import Starlette
-from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Mount, Route
@@ -341,28 +340,29 @@ _routes = [
     Mount("/mcp", app=_mcp_asgi),
 ]
 
-# Claude.ai and other browser-based MCP clients perform OAuth discovery from
-# the browser, so the server must serve CORS headers — otherwise Claude can't
-# read our /.well-known metadata or the 401 WWW-Authenticate header that
-# kicks off the OAuth flow.
-_cors = Middleware(
-    CORSMiddleware,
+# ``lifespan`` ensures FastMCP's session manager starts/stops cleanly.
+_base = Starlette(
+    routes=_routes,
+    lifespan=_mcp_asgi.router.lifespan_context,
+)
+
+_authed = JwtMiddleware(
+    _base,
+    exempt_paths={"/health"},
+)
+
+# CORS must be the OUTERMOST middleware: browser-based MCP clients
+# (claude.ai) need CORS headers on *every* response, including the 401s
+# emitted by JwtMiddleware. Otherwise the browser discards the response
+# before Claude can read the WWW-Authenticate header that drives OAuth
+# discovery. CORSMiddleware also short-circuits preflight ``OPTIONS``
+# requests so they never reach the JWT check.
+app = CORSMiddleware(
+    _authed,
     allow_origins=["*"],
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["WWW-Authenticate", "Mcp-Session-Id"],
-)
-
-# ``lifespan`` ensures FastMCP's session manager starts/stops cleanly.
-_base = Starlette(
-    routes=_routes,
-    middleware=[_cors],
-    lifespan=_mcp_asgi.router.lifespan_context,
-)
-
-app = JwtMiddleware(
-    _base,
-    exempt_paths={"/health"},
 )
 
 
