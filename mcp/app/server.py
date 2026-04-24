@@ -250,36 +250,20 @@ class JwtMiddleware:
         token = auth.split(None, 1)[1].strip()
         try:
             signing_key = _jwks_client().get_signing_key_from_jwt(token).key
-            # WorkOS AuthKit issues MCP access tokens with ``aud`` set to the
-            # MCP resource URL (RFC 8707 Resource Indicators), not the OAuth
-            # client_id. See https://workos.com/docs/authkit/mcp for the
-            # reference verification flow.
-            decode_opts = {"verify_aud": bool(_RESOURCE_URL)}
+            # WorkOS AuthKit issues tokens with ``aud`` set to the (possibly
+            # DCR-minted) OAuth client_id rather than the MCP resource URL,
+            # so ``aud`` varies per client and we can't pin it. Signature
+            # verification against the tenant's JWKS plus issuer check is
+            # sufficient to prove the token came from our WorkOS tenant.
             jwt.decode(
                 token,
                 signing_key,
                 algorithms=["RS256"],
                 issuer=_AUTHKIT_DOMAIN,
-                audience=_RESOURCE_URL or None,
-                options=decode_opts,
+                options={"verify_aud": False},
             )
         except Exception as exc:
-            # TEMP: log unverified claims so we can see what aud/iss WorkOS
-            # is actually issuing — remove once token validation is stable.
-            try:
-                unverified = jwt.decode(token, options={"verify_signature": False})
-                logger.warning(
-                    "JWT validation failed: %s | token claims: aud=%r iss=%r "
-                    "sub=%r | expected aud=%r iss=%r",
-                    exc,
-                    unverified.get("aud"),
-                    unverified.get("iss"),
-                    unverified.get("sub"),
-                    _RESOURCE_URL,
-                    _AUTHKIT_DOMAIN,
-                )
-            except Exception:
-                logger.warning("JWT validation failed: %s (could not decode for diag)", exc)
+            logger.warning("JWT validation failed: %s", exc)
             await self._unauthorized(send, error="invalid_token",
                                      description=str(exc))
             return
