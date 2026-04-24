@@ -250,13 +250,17 @@ class JwtMiddleware:
         token = auth.split(None, 1)[1].strip()
         try:
             signing_key = _jwks_client().get_signing_key_from_jwt(token).key
-            decode_opts = {"verify_aud": bool(_WORKOS_CLIENT_ID)}
+            # WorkOS AuthKit issues MCP access tokens with ``aud`` set to the
+            # MCP resource URL (RFC 8707 Resource Indicators), not the OAuth
+            # client_id. See https://workos.com/docs/authkit/mcp for the
+            # reference verification flow.
+            decode_opts = {"verify_aud": bool(_RESOURCE_URL)}
             jwt.decode(
                 token,
                 signing_key,
                 algorithms=["RS256"],
                 issuer=_AUTHKIT_DOMAIN,
-                audience=_WORKOS_CLIENT_ID or None,
+                audience=_RESOURCE_URL or None,
                 options=decode_opts,
             )
         except Exception as exc:
