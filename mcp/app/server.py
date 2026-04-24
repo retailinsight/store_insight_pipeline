@@ -264,7 +264,22 @@ class JwtMiddleware:
                 options=decode_opts,
             )
         except Exception as exc:
-            logger.warning("JWT validation failed: %s", exc)
+            # TEMP: log unverified claims so we can see what aud/iss WorkOS
+            # is actually issuing — remove once token validation is stable.
+            try:
+                unverified = jwt.decode(token, options={"verify_signature": False})
+                logger.warning(
+                    "JWT validation failed: %s | token claims: aud=%r iss=%r "
+                    "sub=%r | expected aud=%r iss=%r",
+                    exc,
+                    unverified.get("aud"),
+                    unverified.get("iss"),
+                    unverified.get("sub"),
+                    _RESOURCE_URL,
+                    _AUTHKIT_DOMAIN,
+                )
+            except Exception:
+                logger.warning("JWT validation failed: %s (could not decode for diag)", exc)
             await self._unauthorized(send, error="invalid_token",
                                      description=str(exc))
             return
