@@ -21,18 +21,10 @@ Run locally:
 import json
 import logging
 import os
-from typing import Optional
 
 import jwt
-from jwt import PyJWKClient
-
 from dotenv import load_dotenv
-
-# Load base .env first, then overlay .env.local (if present) so local
-# developers can override Snowflake creds / API key without touching .env.
-load_dotenv(".env", override=True)
-load_dotenv(".env.local", override=True)
-
+from jwt import PyJWKClient
 from mcp.server.fastmcp import FastMCP
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
@@ -44,13 +36,18 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from app import alerts_repo
 from app.snowflake_session import get_session
 
+# Load base .env first, then overlay .env.local (if present) so local
+# developers can override Snowflake creds / API key without touching .env.
+load_dotenv(".env", override=True)
+load_dotenv(".env.local", override=True)
+
 logger = logging.getLogger(__name__)
 
 _AUTHKIT_DOMAIN = os.getenv("WORKOS_AUTHKIT_DOMAIN", "").rstrip("/")
 _WORKOS_CLIENT_ID = os.getenv("WORKOS_CLIENT_ID", "").strip()
 _RESOURCE_URL = os.getenv("MCP_RESOURCE_URL", "").rstrip("/")
 
-_JWKS_CLIENT: Optional[PyJWKClient] = None
+_JWKS_CLIENT: PyJWKClient | None = None
 
 
 def _jwks_client() -> PyJWKClient:
@@ -70,12 +67,12 @@ mcp = FastMCP("store-insight-alerts", streamable_http_path="/")
 
 @mcp.tool()
 def list_alerts(
-    store_id: Optional[int] = None,
-    run_date: Optional[str] = None,
-    type: Optional[str] = None,
-    section: Optional[str] = None,
-    trigger_type: Optional[str] = None,
-    min_sort_value: Optional[float] = None,
+    store_id: int | None = None,
+    run_date: str | None = None,
+    type: str | None = None,
+    section: str | None = None,
+    trigger_type: str | None = None,
+    min_sort_value: float | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> dict:
@@ -112,11 +109,11 @@ def list_alerts(
 
 @mcp.tool()
 def get_alert_detail(
-    alert_id: Optional[str] = None,
-    run_date: Optional[str] = None,
-    store_id: Optional[int] = None,
-    alert_type: Optional[str] = None,
-    section: Optional[str] = None,
+    alert_id: str | None = None,
+    run_date: str | None = None,
+    store_id: int | None = None,
+    alert_type: str | None = None,
+    section: str | None = None,
 ) -> dict:
     """
     Return a single alert with both the rendered card and the full trace.
@@ -152,20 +149,20 @@ def get_alert_detail(
 
 
 @mcp.tool()
-def list_run_dates(limit: Optional[int] = None) -> dict:
+def list_run_dates(limit: int | None = None) -> dict:
     """List distinct RUN_DATE values present in ALERTS_PIPELINE, newest first."""
     return alerts_repo.list_run_dates(get_session(), limit=limit)
 
 
 @mcp.tool()
-def list_stores(run_date: Optional[str] = None) -> dict:
+def list_stores(run_date: str | None = None) -> dict:
     """List distinct STORE_IDs. Optionally restrict to a single RUN_DATE."""
     return alerts_repo.list_stores(get_session(), run_date=run_date)
 
 
 @mcp.tool()
 def summarise_alerts(
-    run_date: Optional[str] = None,
+    run_date: str | None = None,
     group_by: str = "type",
 ) -> dict:
     """
@@ -222,7 +219,7 @@ class JwtMiddleware:
         self,
         app: ASGIApp,
         *,
-        exempt_paths: Optional[set] = None,
+        exempt_paths: set | None = None,
     ) -> None:
         self.app = app
         self.exempt_paths = exempt_paths or set()
@@ -291,7 +288,7 @@ async def _json_response(
     status: int,
     body: dict,
     *,
-    extra_headers: Optional[list] = None,
+    extra_headers: list | None = None,
 ) -> None:
     payload = json.dumps(body).encode()
     headers = [
