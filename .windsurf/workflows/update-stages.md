@@ -86,7 +86,26 @@ If a **new detector/gatherer is enabled by default**:
 
 ---
 
-## 9. Tests
+## 9. Regenerate the MCP pipeline catalog
+
+The MCP server's `pipeline_overview` / `list_detectors` / `list_gatherers` /
+`list_thresholds` / `get_investigation_skill` tools and the
+`pipeline://reference` resource are backed by `mcp/app/pipeline_catalog.json`,
+which is generated from the live pipeline package.
+
+After **any** change to detectors, gatherers, signal factories, `DetectorConfig`,
+investigation skills, or `signal_type_*.yaml` files:
+
+```
+python store_insight/pipeline/tools/build_catalog.py
+```
+
+Then commit the regenerated `mcp/app/pipeline_catalog.json` alongside your
+pipeline change.
+
+---
+
+## 10. Tests
 
 For every new detector or gatherer:
 - Add or update a test in `pipeline/tests/` that exercises the new code path.
@@ -97,7 +116,7 @@ python -m pytest pipeline/tests/ -q
 
 ---
 
-## 10. Final check
+## 11. Final check
 
 Run a quick grep to catch any stale references to old names (trigger names, field names, file paths):
 ```
@@ -109,4 +128,5 @@ Confirm:
 - [ ] `_1_detect/README.md` signal fields and config table are current
 - [ ] `signal_type_gatherers.yaml` and `signal_type_investigators.yaml` are current
 - [ ] `config/base/default.yaml` thresholds and enabled lists are current
+- [ ] `mcp/app/pipeline_catalog.json` regenerated and committed
 - [ ] Tests pass

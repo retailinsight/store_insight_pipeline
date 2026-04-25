@@ -32,7 +32,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Mount, Route
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from app import alerts_repo
+from app import alerts_repo, pipeline_catalog
 from app.snowflake_session import get_session
 
 # Load base .env first, then overlay .env.local (if present) so local
@@ -183,6 +183,113 @@ def summarise_alerts(
 def alerts_schema() -> str:
     """Markdown reference for the ALERTS_PIPELINE table and tool cheatsheet."""
     return alerts_repo.SCHEMA_MARKDOWN
+
+
+# ─── Pipeline catalog — describes detectors / gatherers / signals ───────────
+#
+# These tools expose the *structure* of the alerts pipeline (what detectors
+# exist, what each one does, which thresholds control them, etc.) — not the
+# alert data itself. The catalog is generated at dev time from the live
+# pipeline package by ``store_insight/pipeline/tools/build_catalog.py``.
+
+
+@mcp.tool()
+def pipeline_overview() -> dict:
+    """
+    High-level overview of the alerts pipeline: summary, stages, signal types.
+
+    Use this as the starting point when a user asks "what does the pipeline
+    do?" or "what kinds of alerts can be raised?". Drill down with
+    ``list_detectors`` / ``list_gatherers`` / ``get_signal_type`` /
+    ``list_thresholds`` / ``get_investigation_skill``.
+    """
+    return pipeline_catalog.overview()
+
+
+@mcp.tool()
+def list_signal_types() -> dict:
+    """
+    List all signal types the pipeline can produce, with merge keys, buckets,
+    and counts of detectors / gatherers / fields per type.
+    """
+    return pipeline_catalog.list_signal_types()
+
+
+@mcp.tool()
+def get_signal_type(signal_type: str) -> dict:
+    """
+    Full description of one signal type: fields, detectors, gatherers,
+    investigator engine, skill file path.
+
+    Args:
+        signal_type: e.g. ``OSA``, ``COMPLIANCE``, ``MARKDOWN_OVERRIDE``,
+            ``WASTE``, ``MARKDOWN_SELLTHROUGH``, ``MARKDOWN_SKU``.
+    """
+    return pipeline_catalog.get_signal_type(signal_type)
+
+
+@mcp.tool()
+def list_detectors(signal_type: str | None = None) -> dict:
+    """
+    List every detector with its problem / action / baseline / logic and the
+    ``DetectorConfig`` keys that control it.
+
+    Args:
+        signal_type: Filter to detectors that produce one signal type
+            (e.g. ``OSA``). Omit to list all detectors across all types.
+    """
+    return pipeline_catalog.list_detectors(signal_type=signal_type)
+
+
+@mcp.tool()
+def list_gatherers(signal_type: str | None = None) -> dict:
+    """
+    List the Stage-2 fact gatherers that run for each signal type, including
+    the facts keys each one populates.
+
+    Args:
+        signal_type: Filter to gatherers dispatched for one signal type.
+            Omit to list all gatherer dispatches.
+    """
+    return pipeline_catalog.list_gatherers(signal_type=signal_type)
+
+
+@mcp.tool()
+def list_thresholds(detector: str | None = None) -> dict:
+    """
+    List every ``DetectorConfig`` threshold field with its default value and
+    which detectors consume it.
+
+    Args:
+        detector: Optional case-insensitive substring filter on the
+            ``"<SIGNAL_TYPE> <DETECTOR_NAME>"`` label
+            (e.g. ``"OSA"`` or ``"WASTE WOW"``).
+    """
+    return pipeline_catalog.list_thresholds(detector=detector)
+
+
+@mcp.tool()
+def get_investigation_skill(signal_type: str) -> dict:
+    """
+    Return the investigator engine and full skill markdown that drives the
+    narrative card for a given signal type.
+
+    Args:
+        signal_type: e.g. ``OSA``, ``COMPLIANCE``, ``WASTE``.
+    """
+    return pipeline_catalog.get_investigation_skill(signal_type)
+
+
+@mcp.resource("pipeline://reference")
+def pipeline_reference() -> str:
+    """
+    One consolidated Markdown document describing every detector, gatherer,
+    signal type, threshold, and investigation skill in the pipeline.
+
+    Generated from the live pipeline package at dev time; safe to fetch in
+    a single call to brief Claude on the whole catalog.
+    """
+    return pipeline_catalog.reference_markdown()
 
 
 # ─── OAuth: JWT middleware + discovery endpoints ────────────────────────────
