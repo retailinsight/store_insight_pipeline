@@ -21,6 +21,7 @@ Run locally:
 import json
 import logging
 import os
+from contextvars import ContextVar
 
 import jwt
 from dotenv import load_dotenv
@@ -32,8 +33,36 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Mount, Route
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from app import alerts_repo, pipeline_catalog
+from app import alerts_repo, ideas_repo, pipeline_catalog
+from app.pg_session import get_pg
 from app.snowflake_session import get_session
+
+# Holds the decoded JWT claims for the current request so MCP tools can
+# attribute writes (e.g. submit_idea) to the calling user without each
+# tool needing access to the raw ASGI scope.
+_current_jwt: ContextVar[dict | None] = ContextVar("_current_jwt", default=None)
+
+
+def _current_user() -> tuple[str, str | None]:
+    """
+    Return ``(email, name)`` for the calling user, pulled from the JWT.
+
+    Raises ``RuntimeError`` if no JWT is in scope (shouldn't happen for
+    authenticated tool calls, but guards against accidental misuse).
+    """
+    claims = _current_jwt.get()
+    if not claims:
+        raise RuntimeError("No authenticated user in scope.")
+    email = (
+        claims.get("email")
+        or claims.get("preferred_username")
+        or claims.get("sub")
+        or ""
+    )
+    name = claims.get("name") or claims.get("given_name")
+    if not email:
+        raise RuntimeError("JWT has no email/sub claim.")
+    return email, name
 
 # Load base .env first, then overlay .env.local (if present) so local
 # developers can override Snowflake creds / API key without touching .env.
@@ -183,6 +212,108 @@ def summarise_alerts(
 def alerts_schema() -> str:
     """Markdown reference for the ALERTS_PIPELINE table and tool cheatsheet."""
     return alerts_repo.SCHEMA_MARKDOWN
+
+
+# ─── Ideas-box tools ────────────────────────────────────────────────────────
+
+
+@mcp.tool()
+def submit_idea(
+    title: str,
+    body: str,
+    category: str | None = None,
+    store_id: int | None = None,
+) -> dict:
+    """
+    Submit a new idea / suggestion to the Store Insight ideas box.
+
+    The submitter is taken from the authenticated WorkOS JWT; callers
+    cannot spoof identity. Returns the full inserted row including
+    ``id`` and ``created_at``.
+
+    Args:
+        title: One-line summary (1-200 chars).
+        body:  Detailed description (1-5000 chars, markdown supported).
+        category: Free-text bucket (e.g. ``availability``, ``ui``, ``reporting``).
+        store_id: Optional store this idea relates to.
+    """
+    email, name = _current_user()
+    with get_pg() as conn:
+        return ideas_repo.submit_idea(
+            conn,
+            submitter_email=email,
+            submitter_name=name,
+            title=title,
+            body=body,
+            category=category,
+            store_id=store_id,
+        )
+
+
+@mcp.tool()
+def list_ideas(
+    status: str | None = None,
+    category: str | None = None,
+    submitter_email: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """
+    List submitted ideas, ordered by ``votes`` desc then newest first.
+
+    Args:
+        status: Filter by status (``new``, ``triaged``, ``planned``,
+            ``in_progress``, ``shipped``, ``declined``, ``duplicate``).
+        category: Exact-match category filter.
+        submitter_email: Restrict to one submitter.
+        limit: Max rows (default 50, cap 200).
+        offset: Pagination offset.
+    """
+    with get_pg() as conn:
+        return ideas_repo.list_ideas(
+            conn,
+            status=status,
+            category=category,
+            submitter_email=submitter_email,
+            limit=limit,
+            offset=offset,
+        )
+
+
+@mcp.tool()
+def get_idea(idea_id: int) -> dict:
+    """Fetch a single idea by id."""
+    with get_pg() as conn:
+        return ideas_repo.get_idea(conn, idea_id)
+
+
+@mcp.tool()
+def vote_idea(idea_id: int) -> dict:
+    """Add one vote to an idea. Honour system — no per-user dedupe."""
+    with get_pg() as conn:
+        return ideas_repo.vote_idea(conn, idea_id)
+
+
+@mcp.tool()
+def update_idea_status(
+    idea_id: int,
+    status: str,
+    resolution_note: str | None = None,
+) -> dict:
+    """
+    Move an idea to a new status. Triage tool — records the calling user
+    in ``triaged_by`` and stamps ``resolved_at`` for terminal states
+    (``shipped`` / ``declined`` / ``duplicate``).
+    """
+    email, _name = _current_user()
+    with get_pg() as conn:
+        return ideas_repo.update_idea_status(
+            conn,
+            idea_id,
+            status=status,
+            triaged_by=email,
+            resolution_note=resolution_note,
+        )
 
 
 # ─── Pipeline catalog — describes detectors / gatherers / signals ───────────
@@ -362,7 +493,7 @@ class JwtMiddleware:
             # so ``aud`` varies per client and we can't pin it. Signature
             # verification against the tenant's JWKS plus issuer check is
             # sufficient to prove the token came from our WorkOS tenant.
-            jwt.decode(
+            claims = jwt.decode(
                 token,
                 signing_key,
                 algorithms=["RS256"],
@@ -375,7 +506,11 @@ class JwtMiddleware:
                                      description=str(exc))
             return
 
-        await self.app(scope, receive, send)
+        token_ctx = _current_jwt.set(claims)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            _current_jwt.reset(token_ctx)
 
     async def _unauthorized(
         self, send: Send, *, error: str, description: str,

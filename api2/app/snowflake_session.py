@@ -14,7 +14,7 @@ from cryptography.hazmat.primitives.serialization import (
 from dotenv import load_dotenv
 from snowflake.snowpark import Session
 
-load_dotenv()
+load_dotenv(override=True)
 
 _session: Session | None = None
 
