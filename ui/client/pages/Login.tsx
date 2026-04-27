@@ -10,17 +10,21 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
   const { login } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    
+    setError("");
+
     if (!email || !password) {
+      const errorMsg = "Please enter both email and password";
+      setError(errorMsg);
       toast({
         title: "Missing fields",
-        description: "Please enter both email and password",
+        description: errorMsg,
         variant: "destructive",
       });
       return;
@@ -31,6 +35,8 @@ export default function Login() {
       await login(email, password);
       navigate("/");
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Login failed. Please try again.";
+      setError(errorMsg);
       // Error is already handled by useAuth hook
       console.error("Login error:", error);
     } finally {
@@ -58,6 +64,16 @@ export default function Login() {
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Error Message */}
+            {error && (
+              <div
+                data-testid="login-error-message"
+                className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded font-dm-sans text-sm"
+              >
+                {error}
+              </div>
+            )}
+
             {/* Email Input */}
             <div className="space-y-2">
               <Label htmlFor="email" className="font-dm-sans font-medium">
@@ -71,6 +87,7 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={isLoading}
                 className="font-dm-sans"
+                data-testid="login-email-input"
               />
             </div>
 
@@ -87,6 +104,7 @@ export default function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isLoading}
                 className="font-dm-sans"
+                data-testid="login-password-input"
               />
             </div>
 
@@ -95,6 +113,7 @@ export default function Login() {
               type="submit"
               disabled={isLoading}
               className="w-full mt-6 bg-brand-primary hover:opacity-90 text-white font-dm-sans font-medium py-2 h-10"
+              data-testid="login-submit-button"
             >
               {isLoading ? "Signing in..." : "Sign In"}
             </Button>
