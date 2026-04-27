@@ -184,6 +184,7 @@ export default function NavSidebar({ darkMode, onToggleDarkMode, mobileOpen, onT
             key={item.path}
             to={item.path}
             title={!expanded ? item.label : undefined}
+            data-testid={item.path === "/" ? "nav-dashboard" : item.path === "/smart-actions" ? "nav-smart-actions" : undefined}
             className={cn(
               "relative flex items-center gap-3 rounded-lg transition-colors duration-200 group",
               expanded ? "px-3 py-4" : "px-[14px] py-4 justify-center",
@@ -204,6 +205,7 @@ export default function NavSidebar({ darkMode, onToggleDarkMode, mobileOpen, onT
                   "absolute flex items-center justify-center h-5 min-w-[20px] px-1 rounded-full bg-app-error text-white text-xs font-normal leading-none",
                   expanded ? "top-2 right-2" : "top-2 right-1"
                 )}
+                data-testid={item.path === "/smart-actions" ? "nav-smart-actions-badge" : undefined}
               >
                 {item.badge}
               </span>
@@ -222,6 +224,7 @@ export default function NavSidebar({ darkMode, onToggleDarkMode, mobileOpen, onT
       <div className="flex flex-col gap-1 px-2 pb-6 shrink-0">
         <button
           onClick={onToggleDarkMode}
+          data-testid="nav-dark-mode-toggle"
           className={cn(
             "relative flex items-center gap-3 rounded-lg transition-colors duration-200 text-white/70 hover:text-white hover:bg-white/10",
             expanded ? "px-3 py-4" : "px-[14px] py-4 justify-center"
@@ -237,6 +240,7 @@ export default function NavSidebar({ darkMode, onToggleDarkMode, mobileOpen, onT
         </button>
         <button
           onClick={handleLogout}
+          data-testid="nav-logout"
           className={cn(
             "relative flex items-center gap-3 rounded-lg transition-colors duration-200 text-white/70 hover:text-white hover:bg-white/10",
             expanded ? "px-3 py-4" : "px-[14px] py-4 justify-center"
