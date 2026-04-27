@@ -36,12 +36,15 @@ columns:
       MARKDOWN_SKU and MARKDOWN_OVERRIDE alerts.
 
   DEPARTMENT:
-    type: VARCHAR
+    type: NUMBER
     required: true
     description: |
-      Top-level grouping dimension for waste / markdown alerts.
-      Equivalent to DEPARTMENT_NAME on the OSA-side `hierarchy` contract,
-      but kept separate because the WMD source uses a different code.
+      Top-level grouping dimension for waste / markdown alerts.  Today's
+      EoE adapter sources this from HIERARCHY_LEVEL_1_ID (a numeric code,
+      not a name).  Detectors and gatherers treat it as an opaque grouping
+      key — they group by it and emit it on output but never display it.
+      Functional equivalent of DEPARTMENT_NAME on the OSA-side `hierarchy`
+      contract, but the WMD source uses a numeric code.
 
   SECTION:
     type: VARCHAR
