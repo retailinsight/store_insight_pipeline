@@ -16,6 +16,15 @@ function normalizeApiBaseUrl(rawBaseUrl: string): string {
   }
 
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    // In deployed environments, guard against accidentally building with
+    // localhost API URLs from a checked-in .env file.
+    if (
+      typeof window !== "undefined" &&
+      window.location.hostname !== "localhost" &&
+      /localhost|127\.0\.0\.1/.test(trimmed)
+    ) {
+      return "https://storeinsight-production.up.railway.app";
+    }
     return trimmed.replace(/\/+$/, "");
   }
 
@@ -44,6 +53,25 @@ function buildApiUrl(endpoint: string): string {
 
 function apiKeyHeader(): Record<string, string> {
   return API_KEY ? { "X-API-Key": API_KEY } : {};
+}
+
+async function parseJsonResponse<T>(response: Response, endpoint: string): Promise<T> {
+  const text = await response.text();
+
+  if (!text.trim()) {
+    throw new Error(
+      `API returned an empty response for ${endpoint} (${response.status} ${response.statusText})`
+    );
+  }
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    const preview = text.slice(0, 180).replace(/\s+/g, " ");
+    throw new Error(
+      `API returned non-JSON response for ${endpoint} (${response.status} ${response.statusText}): ${preview}`
+    );
+  }
 }
 
 console.log("[API] Base URL set to:", API_BASE_URL);
@@ -148,7 +176,7 @@ export async function login(
       );
     }
 
-    const data: AuthResponse = await response.json();
+    const data = await parseJsonResponse<AuthResponse>(response, loginUrl);
     console.log("[API] Login successful, tokens stored");
     console.log("[API] User data:", { id: data.user.id, username: data.user.username, stores: data.user.stores });
     setTokens(data.accessToken, data.refreshToken);
@@ -213,7 +241,7 @@ async function authenticatedFetch<T>(
       );
     }
 
-    return response.json();
+    return parseJsonResponse<T>(response, buildApiUrl(endpoint));
   } catch (error) {
     if (error instanceof Error) {
       throw error;
