@@ -78,27 +78,27 @@ export default function SmartActionCard({ action, onComplete }: SmartActionCardP
 
   return (
     <>
-      <div className="flex flex-col gap-4 bg-white dark:bg-white/10 rounded-2xl border border-[#D3D3D3] dark:border-white/10 shadow-[0_0_24px_0_rgba(0,0,0,0.08)] p-6 animate-slide-in">
+      <div className="flex flex-col gap-4 bg-white dark:bg-white/10 rounded-2xl border border-[#D3D3D3] dark:border-white/10 shadow-[0_0_24px_0_rgba(0,0,0,0.08)] p-6 animate-slide-in" data-testid="action-card">
 
         {/* Badges */}
         {action.badges && (
           <div className="flex gap-2 flex-wrap">
-            <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-dm-sans font-medium">
+            <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-dm-sans font-medium" data-testid="action-card-badge-section">
               {action.badges.section}
             </span>
-            <span className="px-3 py-1 rounded-full bg-purple-100 text-purple-700 text-xs font-dm-sans font-medium">
+            <span className="px-3 py-1 rounded-full bg-purple-100 text-purple-700 text-xs font-dm-sans font-medium" data-testid="action-card-badge-type">
               {action.badges.type}
             </span>
           </div>
         )}
 
         {/* Header */}
-        <h3 className="font-dm-sans font-bold text-base text-black dark:text-white leading-5">
+        <h3 className="font-dm-sans font-bold text-base text-black dark:text-white leading-5" data-testid="action-card-title">
           {action.title}
         </h3>
 
         {/* Explanation section: bullets + warning */}
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3" data-testid="action-card-explanation">
           <p className="font-dm-sans font-bold text-sm text-black dark:text-white">
             Explanation
           </p>
@@ -112,7 +112,7 @@ export default function SmartActionCard({ action, onComplete }: SmartActionCardP
           </ul>
 
           {action.warning && (
-            <div className="flex items-start gap-3 rounded-sm border-l-[8px] border-app-warning bg-white dark:bg-white/10 shadow-toast px-4 py-3">
+            <div className="flex items-start gap-3 rounded-sm border-l-[8px] border-app-warning bg-white dark:bg-white/10 shadow-toast px-4 py-3" data-testid="action-card-warning">
               <p className="font-dm-sans text-xs text-brand-secondary dark:text-white/90 leading-6">
                 {action.warning}
               </p>
@@ -121,7 +121,7 @@ export default function SmartActionCard({ action, onComplete }: SmartActionCardP
         </div>
 
         {/* Recommended action section */}
-        <div className="flex flex-col gap-3 rounded-2xl bg-app-lime p-4">
+        <div className="flex flex-col gap-3 rounded-2xl bg-app-lime p-4" data-testid="action-card-recommended-action">
           <p className="font-dm-sans font-bold text-sm text-black">
             Recommended action
           </p>
@@ -140,6 +140,7 @@ export default function SmartActionCard({ action, onComplete }: SmartActionCardP
                 ? "border-app-lime bg-app-lime text-black"
                 : "border-brand-outline-border text-brand-outline-text hover:bg-brand-primary-100"
             )}
+            data-testid="action-card-set-reminder"
           >
             <CalendarIcon />
             {reminderSet ? "Reminder set" : "Set a reminder"}
@@ -148,6 +149,7 @@ export default function SmartActionCard({ action, onComplete }: SmartActionCardP
           <button
             onClick={() => setCompleteDialogOpen(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-full bg-brand-primary text-white text-xs font-dm-sans hover:opacity-90 transition-opacity"
+            data-testid="action-card-mark-complete"
           >
             <TickIcon />
             Mark Complete
