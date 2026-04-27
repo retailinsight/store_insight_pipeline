@@ -1,0 +1,120 @@
+# Contract: markdown_log (v1)
+# ============================
+# Markdown event log — one row per markdown request/decision.  Powers the
+# MARKDOWN_OVERRIDE, MARKDOWN_SKU, and (as denominator) WASTE detectors.
+#
+# Today's reference: ANALYSIS.FINAL.WMD_MARKDOWN_API (East of England),
+# loaded with column aliases in pipeline/pipeline/run_batch.py load_wmd().
+
+name: markdown_log
+version: v1
+
+description: |
+  One row per markdown event — the system's recommendation, whether the
+  store overrode it, and the resulting markdown action.  Driver for the
+  override-rate alerts and the SKU-level repeat/excessive-override alerts.
+
+grain:
+  - STORE_ID
+  - ITEM_ID
+  - MARKDOWN_DATETIME
+
+columns:
+  STORE_ID:
+    type: NUMBER
+    required: true
+    description: Store the markdown event applied to.
+
+  ITEM_ID:
+    type: NUMBER
+    required: true
+    description: |
+      Item identifier.  Joins many-to-one to wmd_item_hierarchy.ITEM_ID for
+      department names and item descriptions.
+
+  LOCAL_DATE:
+    type: DATE
+    required: true
+    description: |
+      Date of the markdown action (calendar day).  Pipeline filters by this
+      column to bound the lookback window.
+
+  MARKDOWN_DATETIME:
+    type: TIMESTAMP
+    required: true
+    description: |
+      Full timestamp of the markdown action.  Part of the grain because
+      multiple markdown events can occur for the same item/store/day.
+
+  IS_OVERRIDDEN:
+    type: BOOLEAN
+    required: true
+    description: |
+      True if the store overrode the algorithm's markdown recommendation.
+      Drives OVERRIDE_RATE — the central metric of the MARKDOWN_OVERRIDE
+      signal type.
+
+  MARKDOWN_PERCENTAGE:
+    type: NUMBER
+    required: true
+    description: |
+      % markdown applied (e.g. 25 for a 25%-off markdown).  Aggregated by
+      MARKDOWN_SKU.excessive_override to flag stores routinely over-discounting.
+
+  QTY_MARKDOWN:
+    type: NUMBER
+    required: true
+    description: |
+      Units being marked down at this event.  Used as denominator for the
+      waste rate (WASTE_QTY / SUM(QTY_MARKDOWN)) and for sell-through.
+
+  ORIGINAL_PRICE:
+    type: NUMBER
+    required: false
+    description: |
+      Pre-markdown retail price.  Not currently aggregated by markdown_log
+      detectors directly, but available for cost projection / scoring
+      enhancements.
+
+  MARKDOWN_TYPE:
+    type: VARCHAR
+    required: false
+    description: |
+      Optional label for the markdown reason (e.g. 'Head Office Instruction').
+      Not currently filtered on; useful for future segmentation.
+
+joins:
+  - contract: wmd_item_hierarchy
+    cardinality: many_to_one
+    match:
+      ITEM_ID: ITEM_ID
+    purpose: |
+      Resolve ITEM_DESCRIPTION and DEPARTMENT for narrative output and
+      department-level breakdowns.
+  - contract: wmd_store_hierarchy
+    cardinality: many_to_one
+    match:
+      STORE_ID: STORE_ID
+    purpose: |
+      Resolve STORE_NAME / SITE_NAME for narrative output.
+
+data_quality_findings:
+  - column: IS_OVERRIDDEN
+    severity: high
+    concern: |
+      Must be a true boolean (not 0/1 strings, not NULL).  The detector
+      compares with `== True`, so type-coerced rows can silently fall out
+      of OVERRIDE_RATE numerators.
+  - column: MARKDOWN_PERCENTAGE
+    severity: medium
+    concern: |
+      Expected as a number (e.g. 25, not 0.25 and not '25%').  Some raw
+      sources store this as text or as a decimal fraction; adapter views
+      must normalise to whole-percent integers.
+
+notes: |
+  - The pipeline's load_wmd applies a 4-week lookback filter.  Adapter
+    views should expose all rows; filtering happens in Python.
+  - REQUEST_ID (UUID per markdown event) is intentionally NOT on this
+    contract — the pipeline never reads it.  Adapters may include it as
+    a passthrough column if useful for ad-hoc debugging.

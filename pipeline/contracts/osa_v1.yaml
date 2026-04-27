@@ -1,0 +1,111 @@
+# Contract: osa (v1)
+# ===================
+# Daily on-shelf availability fact, item × store × day grain.
+#
+# Consumed by all OSA detectors (osa.wow, osa.vs_chain, osa.repeat) and OSA
+# fact gatherers (osa_ppg_drilldown, osa_dow, osa_chain_drift, …).
+#
+# Per-customer adapter views must produce a relation with exactly the columns
+# below and the declared grain.  Today's reference implementation is
+# pipeline/adapters/eastofengland/osa.sql (East of England), which selects
+# from ANALYSIS.FINAL.LSM_ITEM_STORE_DAY_REPORTING_PERIOD.
+
+name: osa
+version: v1
+
+description: |
+  Daily on-shelf availability fact at item × store × day grain.
+  OSA = ACTUAL_SALES_VOLUME / (ACTUAL_SALES_VOLUME + LOST_SALES_VOLUME).
+
+# Logical grain — used by the validator to assert primary-key uniqueness on
+# the adapter view.
+grain:
+  - STORE_ID
+  - ITEM_CODE
+  - ANALYSIS_DATE
+
+columns:
+  STORE_ID:
+    type: NUMBER
+    required: true
+    description: Store identifier (numeric).
+
+  ITEM_CODE:
+    type: VARCHAR
+    required: true
+    description: |
+      Item identifier as used by the OSA fact.  Joins to hierarchy.ITEM_CODE
+      to pick up DEPARTMENT_NAME, SUBCLASS_NAME, PRODUCT_PROFILE_GROUP_NAME.
+
+  ANALYSIS_DATE:
+    type: DATE
+    required: true
+    description: Calendar date the row applies to.
+
+  ACTUAL_SALES_VOLUME:
+    type: NUMBER
+    required: true
+    description: Units sold this item × store × day.
+
+  LOST_SALES_VOLUME:
+    type: NUMBER
+    required: true
+    description: |
+      Units of demand not met because the item was out of shelf-stock.
+      Numerator+denominator partner of ACTUAL_SALES_VOLUME for OSA %.
+
+  LOST_SALES_VALUE:
+    type: NUMBER
+    required: true
+    description: |
+      £ value of LOST_SALES_VOLUME.  Drives all LSV-based scoring and the
+      cost-projection narrative.  Must be > 0 only when LOST_SALES_VOLUME > 0.
+
+  DEPARTMENT_ID:
+    type: NUMBER
+    required: false
+    description: |
+      Optional.  Today's EoE adapter selects this column but no detector or
+      gatherer reads it.  Kept on the contract for forward compatibility;
+      adapters that omit it will not break the pipeline.
+
+# Canonical joins — how the pipeline enriches this contract with related ones.
+# Used by the validator and MCP discovery tools; cardinality is declarative only
+# (we don't enforce it at runtime, but adapter authors should honour it).
+joins:
+  - contract: hierarchy
+    cardinality: many_to_one
+    match:
+      ITEM_CODE: ITEM_CODE        # osa.ITEM_CODE → hierarchy.ITEM_CODE
+    purpose: |
+      Resolve DEPARTMENT_NAME, SUBCLASS_NAME, PRODUCT_PROFILE_GROUP_NAME
+      for grouping and narrative text in OSA alerts.
+
+# Contract-level data-quality findings — things adapter authors should
+# defend against regardless of customer.  Per-customer findings live next to
+# the adapter SQL, not here.
+data_quality_findings:
+  - column: LOST_SALES_VALUE
+    severity: high
+    concern: |
+      Must never be negative.  Some raw source tables allow negative LSV
+      rows (e.g. from retrospective corrections).  Adapter views should
+      filter or clamp these, since all downstream scoring assumes
+      LOST_SALES_VALUE >= 0.
+  - column: DEPARTMENT_ID
+    severity: low
+    concern: |
+      Not currently read by any detector, but included here because today's
+      EoE adapter selects it.  Keep it available to avoid future adapter
+      churn; no need to backfill it for new customers if missing from source.
+
+# Free-text notes for adapter authors.  Not validated.
+notes: |
+  - Pipeline filters this contract by ANALYSIS_DATE windows of up to ~10
+    weeks (lookback for REPEAT detectors).  Make sure the underlying source
+    table is partitioned/clustered by date to keep view scans fast.
+  - LOST_SALES_VALUE must be in the customer's local currency; the pipeline
+    does no FX conversion.
+  - DEPARTMENT_NAME, SUBCLASS_NAME, PRODUCT_PROFILE_GROUP_NAME are NOT on
+    this contract — they live on the `hierarchy` contract and are joined in
+    by the loader.
