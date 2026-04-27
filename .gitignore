@@ -63,3 +63,6 @@ ui/node_modules/
 ui/.env
 api/node_modules/
 api/.env
+
+# Local scratch / spike work — not part of the shipped pipeline
+experiments/
