@@ -144,7 +144,7 @@ export default function KpiDetailPanel({ kpiData, onClose }: KpiDetailPanelProps
       />
 
       {/* Slide-in panel */}
-      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-white dark:bg-gray-900 shadow-2xl flex flex-col overflow-hidden animate-slide-from-right">
+      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-white dark:bg-gray-900 shadow-2xl flex flex-col overflow-hidden animate-slide-from-right" data-testid={`kpi-drawer-${kpiType}`}>
         {/* Panel header */}
         <div className="flex flex-col gap-3 px-6 py-4 border-b border-app-neutral-400 dark:border-white/10 shrink-0 bg-gray-200 dark:bg-gray-800">
           <div className="flex items-center justify-between">
@@ -158,6 +158,7 @@ export default function KpiDetailPanel({ kpiData, onClose }: KpiDetailPanelProps
             <button
               onClick={onClose}
               className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-gray-500 dark:text-white/60"
+              data-testid="kpi-drawer-close"
             >
               <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
                 <path d="M17.805 2.197a.75.75 0 00-1.061 0L10 8.94 3.256 2.197a.75.75 0 00-1.061 1.06L8.94 10l-6.744 6.743a.75.75 0 001.06 1.061L10 11.06l6.744 6.744a.75.75 0 001.06-1.06L11.06 10l6.744-6.744a.75.75 0 000-1.06z" fill="currentColor"/>
@@ -167,10 +168,10 @@ export default function KpiDetailPanel({ kpiData, onClose }: KpiDetailPanelProps
 
           {/* Score and trend badge */}
           <div className="flex items-center gap-3 flex-wrap">
-            <span className="font-bebas text-5xl text-brand-primary leading-none">
+            <span className="font-bebas text-5xl text-brand-primary leading-none" data-testid={`kpi-drawer-${kpiType}-value`}>
               {kpiData.value}
             </span>
-            <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full ${kpiData.trend_direction === "up" ? 'bg-app-lime' : 'bg-app-pink'}`}>
+            <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full ${kpiData.trend_direction === "up" ? 'bg-app-lime' : 'bg-app-pink'}`} data-testid={`kpi-drawer-${kpiType}-trend`}>
               <span className="text-black">
                 {kpiData.trend_direction === "up" ? <TrendUpIcon /> : <TrendDownIcon />}
               </span>
@@ -189,7 +190,7 @@ export default function KpiDetailPanel({ kpiData, onClose }: KpiDetailPanelProps
             <>
               {/* Key Metrics - from performance_breakdown */}
               {details.performance_breakdown && (
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-4" data-testid="kpi-drawer-key-metrics">
                   <h3 className="font-bebas text-2xl text-black/50 dark:text-white/50 flex items-center gap-2">
                     <span className="flex items-center justify-center w-8 h-8 rounded-full bg-brand-primary-100 dark:bg-brand-primary/20 text-brand-primary">
                       <ChartBarIcon />
@@ -269,7 +270,7 @@ export default function KpiDetailPanel({ kpiData, onClose }: KpiDetailPanelProps
 
               {/* Performance by Category */}
               {details.category_performance && details.category_performance.length > 0 && (
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-4" data-testid="kpi-drawer-performance-by-category">
                   <h3 className="font-bebas text-2xl text-black/50 dark:text-white/50 flex items-center gap-2">
                     <span className="flex items-center justify-center w-8 h-8 rounded-full bg-brand-primary-100 dark:bg-brand-primary/20 text-brand-primary">
                       <GridIcon />
@@ -280,10 +281,10 @@ export default function KpiDetailPanel({ kpiData, onClose }: KpiDetailPanelProps
                     {details.category_performance.map((category, i) => {
                       const perfValue = parseFloat(category.performance);
                       return (
-                        <div key={i} className="flex flex-col gap-2">
+                        <div key={i} className="flex flex-col gap-2" data-testid="kpi-drawer-category-row">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="font-dm-sans text-sm text-black dark:text-white">
+                              <span className="font-dm-sans text-sm text-black dark:text-white" data-testid="kpi-drawer-category-name">
                                 {category.category}
                               </span>
                               {category.warning && (
@@ -293,7 +294,7 @@ export default function KpiDetailPanel({ kpiData, onClose }: KpiDetailPanelProps
                                 </svg>
                               )}
                             </div>
-                            <span className={`font-bebas text-xl ${category.warning ? 'text-red-600' : 'text-black dark:text-white'}`}>
+                            <span className={`font-bebas text-xl ${category.warning ? 'text-red-600' : 'text-black dark:text-white'}`} data-testid="kpi-drawer-category-value">
                               {category.performance}
                             </span>
                           </div>
@@ -317,7 +318,7 @@ export default function KpiDetailPanel({ kpiData, onClose }: KpiDetailPanelProps
 
               {/* Performance by Time of Day */}
               {details.time_of_day_analysis && details.time_of_day_analysis.length > 0 && (
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-4" data-testid="kpi-drawer-performance-by-time">
                   <h3 className="font-bebas text-2xl text-black/50 dark:text-white/50 flex items-center gap-2">
                     <span className="flex items-center justify-center w-8 h-8 rounded-full bg-brand-primary-100 dark:bg-brand-primary/20 text-brand-primary">
                       <ClockIcon />
@@ -346,17 +347,20 @@ export default function KpiDetailPanel({ kpiData, onClose }: KpiDetailPanelProps
                         {details.time_of_day_analysis.map((row, i) => {
                           const dayKey = row["day:"] || "";
                           return (
-                            <tr key={i} className="border-b border-app-neutral-400/50 dark:border-white/5 last:border-b-0">
-                              <td className="py-3 px-2 font-dm-sans text-sm text-black dark:text-white">
+                            <tr key={i} className="border-b border-app-neutral-400/50 dark:border-white/5 last:border-b-0" data-testid="kpi-drawer-time-row">
+                              <td className="py-3 px-2 font-dm-sans text-sm text-black dark:text-white" data-testid="kpi-drawer-time-day">
                                 {dayKey}
                               </td>
-                              {row.performance.map((perf, pi) => (
-                                <td key={pi} className="py-3 px-2 text-center">
-                                  <span className={`inline-block px-3 py-1 rounded-full font-dm-sans font-medium text-xs ${getPerformanceColor(parseFloat(perf.performance))}`}>
-                                    {perf.performance}
-                                  </span>
-                                </td>
-                              ))}
+                              {row.performance.map((perf, pi) => {
+                                const timePeriod = pi === 0 ? "morning" : pi === 1 ? "afternoon" : "evening";
+                                return (
+                                  <td key={pi} className="py-3 px-2 text-center" data-testid={`kpi-drawer-time-${timePeriod}`}>
+                                    <span className={`inline-block px-3 py-1 rounded-full font-dm-sans font-medium text-xs ${getPerformanceColor(parseFloat(perf.performance))}`}>
+                                      {perf.performance}
+                                    </span>
+                                  </td>
+                                );
+                              })}
                             </tr>
                           );
                         })}
