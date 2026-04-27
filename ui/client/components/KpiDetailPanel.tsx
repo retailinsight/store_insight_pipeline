@@ -377,7 +377,7 @@ export default function KpiDetailPanel({ kpiData, onClose }: KpiDetailPanelProps
             <>
               {/* Key Metrics - from performance_breakdown */}
               {details.performance_breakdown && (
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-4" data-testid="kpi-drawer-key-metrics">
                   <h3 className="font-bebas text-2xl text-black/50 dark:text-white/50 flex items-center gap-2">
                     <span className="flex items-center justify-center w-8 h-8 rounded-full bg-brand-primary-100 dark:bg-brand-primary/20 text-brand-primary">
                       <ChartBarIcon />
@@ -389,12 +389,12 @@ export default function KpiDetailPanel({ kpiData, onClose }: KpiDetailPanelProps
                   </h3>
                   <div className="flex flex-col gap-4">
                     {Object.entries(details.performance_breakdown).map(([key, value], i) => (
-                      <div key={i} className="flex flex-col gap-1">
+                      <div key={i} className="flex flex-col gap-1" data-testid="kpi-drawer-key-metric-row">
                         <div className="flex items-center justify-between">
-                          <span className="font-dm-sans font-bold text-sm text-black dark:text-white">
+                          <span className="font-dm-sans font-bold text-sm text-black dark:text-white" data-testid="kpi-drawer-key-metric-name">
                             {key.replace(/_/g, " ")}
                           </span>
-                          <span className="font-bebas text-2xl text-black dark:text-white">
+                          <span className="font-bebas text-2xl text-black dark:text-white" data-testid="kpi-drawer-key-metric-value">
                             {String(value)}
                           </span>
                         </div>
@@ -406,14 +406,14 @@ export default function KpiDetailPanel({ kpiData, onClose }: KpiDetailPanelProps
 
               {/* Summary */}
               {details.summary && (
-                <div className="flex flex-col gap-3 rounded-2xl border border-app-neutral-400 bg-app-neutral-100 dark:bg-white/5 dark:border-white/10 p-4">
+                <div className="flex flex-col gap-3 rounded-2xl border border-app-neutral-400 bg-app-neutral-100 dark:bg-white/5 dark:border-white/10 p-4" data-testid="kpi-drawer-summary">
                   <h3 className="font-bebas text-2xl text-black/50 dark:text-white/50 flex items-center gap-2">
                     <span className="flex items-center justify-center w-8 h-8 rounded-full bg-brand-primary-100 dark:bg-brand-primary/20 text-brand-primary">
                       <DocumentIcon />
                     </span>
                     Summary
                   </h3>
-                  <p className="font-dm-sans text-sm text-black dark:text-white/80 leading-6">
+                  <p className="font-dm-sans text-sm text-black dark:text-white/80 leading-6" data-testid="kpi-drawer-summary-text">
                     {details.summary}
                   </p>
                 </div>
@@ -421,7 +421,7 @@ export default function KpiDetailPanel({ kpiData, onClose }: KpiDetailPanelProps
 
               {/* Top Drivers */}
               {details.top_drivers && details.top_drivers.length > 0 && (
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-4" data-testid="kpi-drawer-top-drivers">
                   <h3 className="font-bebas text-2xl text-black/50 dark:text-white/50 flex items-center gap-2">
                     <span className="flex items-center justify-center w-8 h-8 rounded-full bg-brand-primary-100 dark:bg-brand-primary/20 text-brand-primary">
                       <TrendingIcon />
@@ -430,13 +430,13 @@ export default function KpiDetailPanel({ kpiData, onClose }: KpiDetailPanelProps
                   </h3>
                   <div className="flex flex-col gap-3">
                     {details.top_drivers.map((driver, i) => (
-                      <div key={i} className="flex flex-col gap-1 pb-3 border-b border-app-neutral-400 dark:border-white/10 last:border-b-0">
+                      <div key={i} className="flex flex-col gap-1 pb-3 border-b border-app-neutral-400 dark:border-white/10 last:border-b-0" data-testid="kpi-drawer-driver-row">
                         <div className="flex items-center gap-2">
-                          <span className={`font-bebas text-xl ${driver.trend_direction === "up" ? 'text-green-600' : 'text-red-600'}`}>
+                          <span className={`font-bebas text-xl ${driver.trend_direction === "up" ? 'text-green-600' : 'text-red-600'}`} data-testid="kpi-drawer-driver-value">
                             {driver.trend}
                           </span>
                         </div>
-                        <p className="font-dm-sans font-bold text-sm text-black dark:text-white">
+                        <p className="font-dm-sans font-bold text-sm text-black dark:text-white" data-testid="kpi-drawer-driver-name">
                           {driver.driver}
                         </p>
                         {driver.Subcategory && (
@@ -457,7 +457,7 @@ export default function KpiDetailPanel({ kpiData, onClose }: KpiDetailPanelProps
 
               {/* Performance by Category */}
               {details.category_performance && details.category_performance.length > 0 && (
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-4" data-testid="kpi-drawer-performance-by-category">
                   <h3 className="font-bebas text-2xl text-black/50 dark:text-white/50 flex items-center gap-2">
                     <span className="flex items-center justify-center w-8 h-8 rounded-full bg-brand-primary-100 dark:bg-brand-primary/20 text-brand-primary">
                       <GridIcon />
@@ -468,10 +468,10 @@ export default function KpiDetailPanel({ kpiData, onClose }: KpiDetailPanelProps
                     {details.category_performance.map((category, i) => {
                       const perfValue = parseFloat(category.performance);
                       return (
-                        <div key={i} className="flex flex-col gap-2">
+                        <div key={i} className="flex flex-col gap-2" data-testid="kpi-drawer-category-row">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="font-dm-sans text-sm text-black dark:text-white">
+                              <span className="font-dm-sans text-sm text-black dark:text-white" data-testid="kpi-drawer-category-name">
                                 {category.category}
                               </span>
                               {category.warning && (
@@ -481,7 +481,7 @@ export default function KpiDetailPanel({ kpiData, onClose }: KpiDetailPanelProps
                                 </svg>
                               )}
                             </div>
-                            <span className={`font-bebas text-xl ${category.warning ? 'text-red-600' : 'text-black dark:text-white'}`}>
+                            <span className={`font-bebas text-xl ${category.warning ? 'text-red-600' : 'text-black dark:text-white'}`} data-testid="kpi-drawer-category-value">
                               {category.performance}
                             </span>
                           </div>
