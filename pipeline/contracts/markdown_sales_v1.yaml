@@ -1,0 +1,99 @@
+# Contract: markdown_sales (v1)
+# ==============================
+# Markdown sell-through — one row per sale of a marked-down item.
+# Used by the MARKDOWN_SELLTHROUGH detector.
+#
+# Today's reference: ANALYSIS.FINAL.WMD_SALES (East of England),
+# loaded with column aliases in pipeline/pipeline/run_batch.py load_wmd().
+
+name: markdown_sales
+version: v1
+
+description: |
+  Sales of items at markdown price.  Numerator for the sell-through rate
+  (units sold at markdown / units put through markdown).  Lower-than-chain
+  sell-through indicates the store's markdowns are not landing.
+
+grain:
+  - STORE_ID
+  - ITEM_ID
+  - DATE
+
+columns:
+  STORE_ID:
+    type: NUMBER
+    required: true
+    description: Store of sale.
+
+  ITEM_ID:
+    type: NUMBER
+    required: true
+    description: Item sold; joins to wmd_item_hierarchy.
+
+  DATE:
+    type: DATE
+    required: true
+    description: |
+      Sale date (calendar day).  Pipeline filters by this column.  Note the
+      bare name "DATE" follows existing pipeline convention; adapter views
+      may need to alias from a more descriptive source name.
+
+  TIME:
+    type: VARCHAR
+    required: false
+    description: |
+      Sale time (HH:MM:SS).  Optional; not currently filtered on or used
+      to disambiguate rows.  Multiple sale rows for the same
+      store/item/day are aggregated together by all detectors, so TIME is
+      retained for ad-hoc queries only.
+
+  MARKDOWN_QUANTITY:
+    type: NUMBER
+    required: true
+    description: |
+      Units sold at markdown price.  Aggregated to compute SELLTHROUGH_RATE.
+
+  MARKDOWN_VALUE:
+    type: NUMBER
+    required: true
+    description: |
+      £ value of the markdown sale.  Used by scoring and cost-projection
+      narratives.
+
+  ORIGINAL_RETAIL_PRICE:
+    type: NUMBER
+    required: false
+    description: |
+      Pre-markdown unit price.  Optional; supports future "discount given"
+      analytics but not currently aggregated.
+
+joins:
+  - contract: wmd_item_hierarchy
+    cardinality: many_to_one
+    match:
+      ITEM_ID: ITEM_ID
+    purpose: Resolve item name and department for narrative output.
+  - contract: wmd_store_hierarchy
+    cardinality: many_to_one
+    match:
+      STORE_ID: STORE_ID
+    purpose: Resolve store name for narrative output.
+
+data_quality_findings:
+  - column: MARKDOWN_QUANTITY
+    severity: medium
+    concern: |
+      Must be a positive number — refunds / reversals as negative units
+      will silently reduce SELLTHROUGH_RATE.  Adapter views should filter
+      negatives or model them via a separate refunds contract in future.
+  - column: DATE
+    severity: low
+    concern: |
+      "DATE" is a Snowflake reserved word in some contexts.  Adapter
+      authors should always quote it ("DATE") in their view DDL to avoid
+      ambiguity.
+
+notes: |
+  - Pipeline applies the same 4-week lookback as markdown_log.
+  - SELLTHROUGH = SUM(MARKDOWN_QUANTITY) / SUM(QTY_MARKDOWN)  — the
+    denominator comes from the markdown_log contract, NOT from this one.
