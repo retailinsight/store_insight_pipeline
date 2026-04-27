@@ -48,10 +48,11 @@ export default function SuccessCard({
         // Horizontal divider on mobile (top border on all but first)
         !isFirst && "border-t md:border-t-0 border-black/[0.10] dark:border-white/[0.10]"
       )}
+      data-testid="success-card"
     >
       {/* Trigger Types & Type Tags */}
       {(trigger_types.length > 0 || type) && (
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap" data-testid="success-card-badges">
           {trigger_types.map((triggerType) => (
             <span
               key={triggerType}
@@ -69,19 +70,19 @@ export default function SuccessCard({
       )}
 
       {/* Title */}
-      <h3 className="font-dm-sans font-bold text-base text-black dark:text-white leading-5">
+      <h3 className="font-dm-sans font-bold text-base text-black dark:text-white leading-5" data-testid="success-card-title">
         {title}
       </h3>
 
       {/* Value */}
-      <div className="font-bebas text-2xl font-bold text-black dark:text-white">
+      <div className="font-bebas text-2xl font-bold text-black dark:text-white" data-testid="success-card-value">
         {value}
       </div>
 
       {/* Trend Tag */}
       <div className="flex items-center gap-1.5 px-3 py-1 rounded-full w-fit" style={{
         backgroundColor: trend_direction === "up" ? "#EDFAC2" : "#fee2e2",
-      }}>
+      }} data-testid="success-card-trend">
         <span className={cn(
           "text-black",
           trend_direction === "down" ? "text-red-700" : ""
@@ -97,7 +98,7 @@ export default function SuccessCard({
       </div>
 
       {/* Impact Statement */}
-      <p className="font-dm-sans text-sm text-black dark:text-white/80 leading-5">
+      <p className="font-dm-sans text-sm text-black dark:text-white/80 leading-5" data-testid="success-card-impact">
         {impact}
       </p>
     </div>
