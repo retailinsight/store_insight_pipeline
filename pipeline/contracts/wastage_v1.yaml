@@ -1,0 +1,108 @@
+# Contract: wastage (v1)
+# =======================
+# Waste / disposal events — one row per item-store-day waste record.
+# Powers the WASTE detector and (as denominator) MARKDOWN_SELLTHROUGH.
+#
+# Today's reference: ANALYSIS.FINAL.WMD_WASTAGE (East of England),
+# loaded with WASTE_DATE → DATE alias in pipeline/pipeline/run_batch.py
+# load_wmd().
+
+name: wastage
+version: v1
+
+description: |
+  Waste events.  Each row is one act of disposal (out-of-date,
+  damaged, etc.) at item × store granularity.  Aggregated by store/week
+  to compute the waste rate (units wasted / units put through markdown).
+
+grain:
+  - STORE_ID
+  - ITEM_ID
+  - WASTE_DATETIME
+
+columns:
+  STORE_ID:
+    type: NUMBER
+    required: true
+    description: Store the waste was recorded at.
+
+  ITEM_ID:
+    type: NUMBER
+    required: true
+    description: |
+      Item identifier.  Required because the department-breakdown gatherer
+      joins waste rows to wmd_item_hierarchy via this column; rows with
+      NULL ITEM_ID would silently drop out of departmental breakdowns.
+      Waste detectors that aggregate at store/week grain will simply ignore
+      this column.
+
+  DATE:
+    type: DATE
+    required: true
+    description: |
+      Waste event date (calendar day).  Aliased from WASTE_DATE in the EoE
+      adapter; pipeline filters by this column.
+
+  WASTE_DATETIME:
+    type: TIMESTAMP
+    required: true
+    description: |
+      Full timestamp of the waste event.  Part of the grain because
+      multiple disposals can happen on the same item/store/day.
+
+  WASTE_QUANTITY:
+    type: NUMBER
+    required: true
+    description: |
+      Units wasted.  Numerator for WASTE_RATE = WASTE_QTY / SUM(QTY_MARKDOWN).
+
+  ORIGINAL_PRICE:
+    type: NUMBER
+    required: true
+    description: |
+      Original retail price per unit, used to compute WASTE_VALUE
+      (= WASTE_QUANTITY * ORIGINAL_PRICE) for scoring and cost-projection.
+
+  WASTE_REASON:
+    type: VARCHAR
+    required: false
+    description: |
+      Reason code (e.g. 'OUT OF DATE', 'DAMAGED', 'AFTER BEST BEFORE DATE',
+      'TOO GOOD TO GO').  Not currently filtered on but retained for
+      future segmentation.
+
+joins:
+  - contract: wmd_item_hierarchy
+    cardinality: many_to_one
+    match:
+      ITEM_ID: ITEM_ID
+    purpose: Resolve department for department-breakdown gatherer.
+  - contract: wmd_store_hierarchy
+    cardinality: many_to_one
+    match:
+      STORE_ID: STORE_ID
+    purpose: Resolve store name for narrative output.
+
+data_quality_findings:
+  - column: WASTE_QUANTITY
+    severity: medium
+    concern: |
+      Must be positive.  Some raw sources record reversals as negative
+      quantities; adapter views should filter or take ABS() depending on
+      the customer's semantics.
+  - column: ORIGINAL_PRICE
+    severity: medium
+    concern: |
+      Must be a number, not a string.  EoE's source stores this as
+      DECIMAL(38,2) which casts cleanly; other sources may have it as
+      VARCHAR — adapter must cast.
+
+notes: |
+  - The original WMD_WASTAGE table has a FINAL_PRICE column that was
+    intended to discriminate "straight-to-bin" disposals from
+    "marked-down-then-disposed".  In EoE's data this is NULL for 100% of
+    rows and was dropped from the canonical contract.  WASTE_RATE is
+    computed using markdown_log as the denominator — see semantic_model.md
+    "Resolution — adopted metric" for the full reasoning.
+  - WASTE_REASON is a free-text field; values are customer-specific and
+    should NOT be treated as a fixed enum.

@@ -63,17 +63,19 @@ const SmartActionBoardCard = forwardRef<HTMLDivElement, SmartActionBoardCardProp
           isDragging && "opacity-40 shadow-none",
           isOverlay && "shadow-2xl ring-2 ring-brand-primary/30 rotate-[2deg] scale-105"
         )}
+        data-testid="board-card"
       >
         {/* Title row */}
         <div className="flex items-start justify-between gap-2">
           {dragHandleProps && <DragHandle {...dragHandleProps} />}
-          <p className="font-dm-sans font-normal text-sm text-black dark:text-white leading-5 flex-1">
+          <p className="font-dm-sans font-normal text-sm text-black dark:text-white leading-5 flex-1" data-testid="board-card-title">
             {action.title}
           </p>
           <button
             onClick={onExpand}
             className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-brand-primary-200 dark:bg-white/10 text-brand-primary dark:text-white hover:bg-brand-primary-100 transition-colors"
             aria-label="View action details"
+            data-testid="board-card-expand"
           >
             <ExpandIcon />
           </button>
@@ -104,7 +106,7 @@ const SmartActionBoardCard = forwardRef<HTMLDivElement, SmartActionBoardCardProp
 
         {/* Completed / couldn't complete label */}
         {status === "completed" && (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-app-lime text-black text-xs font-dm-sans w-fit">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-app-lime text-black text-xs font-dm-sans w-fit" data-testid="board-card-status">
             <svg width="12" height="12" viewBox="0 0 20 20" fill="none">
               <path d="M16.86 4.2L7.65 13.41a.75.75 0 01-1.06 0L3.14 9.84a.75.75 0 00-1.06 1.06l3.57 3.56a2.25 2.25 0 003.18 0l9.21-9.21a.75.75 0 00-1.06-1.06z" fill="currentColor"/>
             </svg>
@@ -112,7 +114,7 @@ const SmartActionBoardCard = forwardRef<HTMLDivElement, SmartActionBoardCardProp
           </span>
         )}
         {status === "couldnt_complete" && (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-100 text-red-700 text-xs font-dm-sans w-fit">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-100 text-red-700 text-xs font-dm-sans w-fit" data-testid="board-card-status">
             <svg width="12" height="12" viewBox="0 0 20 20" fill="none">
               <path d="M17.8 2.2a.75.75 0 00-1.06 0L10 8.94 3.26 2.2A.75.75 0 002.2 3.26L8.94 10 2.2 16.74a.75.75 0 101.06 1.06L10 11.06l6.74 6.74a.75.75 0 001.06-1.06L11.06 10l6.74-6.74a.75.75 0 000-1.06z" fill="currentColor"/>
             </svg>

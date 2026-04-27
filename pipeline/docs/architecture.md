@@ -1,31 +1,33 @@
 # Store Insight — Architecture
 
-Store Insight is a Snowflake-native analytics platform that detects retail availability anomalies, generates actionable alert cards, and serves KPI dashboards. It comprises three subsystems: an **Alerts Pipeline**, a **KPI API**, and a **Pipeline Explorer**.
+Store Insight is a Snowflake-native analytics platform that detects retail availability and markdown anomalies, generates actionable alert cards, and serves KPI dashboards. It comprises four subsystems: an **Alerts Pipeline** (`pipeline/`), a **Node/Express API** (`api/`), a **FastAPI KPI + actions API** (`api2/`), and a **React dashboard** (`ui/`).
 
 ---
 
 ## System Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Snowflake                                │
-│                                                                 │
-│  LSM_ITEM_STORE_DAY_REPORTING_PERIOD   LSM_ALERT_FEEDBACK       │
-│  LSM_ITEM_HIERARCHY                    KPI_AVAILABILITY_SUMMARY │
-│                                                                 │
-│  ┌─────────────────┐  ┌──────────────┐  ┌───────────────────┐  │
-│  │ ALERTS_PIPELINE  │  │ ALERTS_SIGNALS│  │ ALERTS_RUN_LOG   │  │
-│  └─────────────────┘  └──────────────┘  └───────────────────┘  │
-└──────────┬──────────────────┬───────────────────┬───────────────┘
-           │                  │                   │
-     ┌─────▼──────┐    ┌─────▼──────┐    ┌───────▼────────┐
-     │ Alerts     │    │ KPI API    │    │ Explorer       │
-     │ Pipeline   │    │ (FastAPI)  │    │ (React + Fast  │
-     │ (batch)    │    │ port 8000  │    │  API) 5173 +   │
-     │            │    │            │    │  8001           │
-     └────────────┘    └─────┬──────┘    └───────┬────────┘
-                             │                   │
-                        Front-end app       Dev / QC tool
+┌────────────────────────────────────────────────────────────────────┐
+│                            Snowflake                               │
+│                                                                    │
+│  LSM_ITEM_STORE_DAY_REPORTING_PERIOD   LSM_ALERT_FEEDBACK          │
+│  LSM_ITEM_HIERARCHY                    KPI_AVAILABILITY_SUMMARY    │
+│  WMD_MARKDOWN_API / WMD_SALES / WMD_WASTAGE / WMD_*_HIERARCHY      │
+│                                                                    │
+│  ┌─────────────────┐                                               │
+│  │ ALERTS_PIPELINE │  (scored alert cards, written weekly)         │
+│  └─────────────────┘                                               │
+└──────────┬─────────────────────────────────┬───────────────────────┘
+           │                                 │
+     ┌─────▼──────┐                   ┌─────▼──────────┐
+     │ Alerts     │                   │ api/  (Node)   │
+     │ Pipeline   │                   │ api2/ (FastAPI)│
+     │ (batch)    │                   └─────┬──────────┘
+     └────────────┘                         │
+                                       ┌────▼─────┐
+                                       │   ui/    │
+                                       │  React   │
+                                       └──────────┘
 ```
 
 ---
@@ -57,14 +59,22 @@ A **signal** is a dict representing one (store, department) pair that crossed a 
 
 Detectors live in `stages/_1_detect/detectors/<alert_type>/`. The registry auto-discovers any `.py` file with a `detect()` function.
 
-| Detector | Trigger | What it finds |
-|---|---|---|
-| `osa/wow` | WOW | Store-dept OSA dropped week-on-week |
-| `osa/vs_chain` | VS_CHAIN | Store-dept OSA significantly below chain average |
-| `osa/repeat` | REPEAT | Items with persistent weekly failures |
-| `compliance/tick_and_flick` | TICK_AND_FLICK | Store tick-and-flick rate rising above chain |
+| Detector | Trigger | Signal type | What it finds |
+|---|---|---|---|
+| `osa/wow` | WOW | OSA | Store-dept OSA dropped week-on-week |
+| `osa/vs_chain` | VS_CHAIN | OSA | Store-dept OSA significantly below chain average |
+| `osa/repeat` | REPEAT | OSA | Items with persistent weekly failures |
+| `compliance/tick_and_flick` | TICK_AND_FLICK | COMPLIANCE | Store tick-and-flick rate rising above chain |
+| `markdown_override/wow` | WOW | MARKDOWN_OVERRIDE | Store markdown-override rate rising week-on-week |
+| `markdown_override/vs_chain` | VS_CHAIN | MARKDOWN_OVERRIDE | Store markdown-override rate above chain average |
+| `waste/wow` | WOW | WASTE | Store straight-to-bin waste rate rising week-on-week |
+| `waste/vs_chain` | VS_CHAIN | WASTE | Store straight-to-bin waste rate above chain average |
+| `markdown_sellthrough/wow` | WOW | MARKDOWN_SELLTHROUGH | Store markdown sell-through rate dropping week-on-week |
+| `markdown_sellthrough/vs_chain` | VS_CHAIN | MARKDOWN_SELLTHROUGH | Store markdown sell-through rate below chain average |
+| `markdown_sku/repeat_request` | REPEAT_REQUEST | MARKDOWN_SKU | SKU repeatedly flagged for markdown over recent weeks |
+| `markdown_sku/excessive_override` | EXCESSIVE_OVERRIDE | MARKDOWN_SKU | SKU being overridden at a disproportionately high rate |
 
-Signals sharing the same `(store_id, department)` merge key are combined into a single signal with multiple `trigger_types`.
+Signals sharing the same `merge_key` (per signal type — typically `(signal_type, store_id, department)` for OSA or `(signal_type, store_id)` for store-level signals) are combined into a single signal with multiple `trigger_types`.
 
 ### Stage 2 — Facts
 
@@ -75,8 +85,13 @@ Gatherers live in `stages/_2_facts/gatherers/`. Each declares which `signal_type
 | `osa_ppg_drilldown` | OSA | Top-N PPGs by LSV and WoW change |
 | `osa_dow` | OSA | Lost sales by day-of-week |
 | `osa_chain_drift` | OSA | Chain-wide WoW OSA drift per department |
-| `osa_repeat_history` | OSA | Per-item week-by-week history |
+| `osa_repeat_history` | OSA | Per-item week-by-week OSA and LSV history |
+| `osa_cost_projection` | OSA | Cost-of-doing-nothing projection (LSV × projection_weeks) |
 | `tick_and_flick_breakdown` | COMPLIANCE | Alert-type TF breakdown |
+| `markdown_override_dept_breakdown` | MARKDOWN_OVERRIDE | Top-N departments by override count and rate |
+| `waste_dept_breakdown` | WASTE | Top-N departments by straight-to-bin quantity and waste value |
+| `markdown_sellthrough_dept_breakdown` | MARKDOWN_SELLTHROUGH | Top-N departments by lowest sell-through rate |
+| `markdown_sku_history` | MARKDOWN_SKU | Week-by-week markdown request and override history per SKU |
 
 ### Stage 3 — Investigate
 
@@ -104,7 +119,7 @@ Two layers, deep-merged by `config/loader.py`:
 | Base defaults | `config/base/default.yaml` | Tables, thresholds, enabled detectors, gatherers, engines, schedule |
 | Client override | `config/clients/<name>/client.yaml` | Only changed keys — everything else inherited |
 
-`DetectorConfig` (in `pipeline/config.py`) is a typed dataclass built from the merged config's `thresholds` block. Output table names support `{database}` / `{schema}` interpolation.
+`DetectorConfig` (in `pipeline/pipeline/config.py`) is a typed dataclass built from the merged config's `thresholds` block — nested alert-type sub-dicts (`OSA`, `COMPLIANCE`, `MARKDOWN_OVERRIDE`, `WASTE`, `MARKDOWN_SELLTHROUGH`, `MARKDOWN_SKU`) are flattened one level before matching. Output table names support `{database}` / `{schema}` interpolation.
 
 ---
 
@@ -116,40 +131,16 @@ Two layers, deep-merged by `config/loader.py`:
 
 ---
 
-## KPI API (`api/`)
+## APIs
 
-A FastAPI application that serves pre-calculated store KPI data to a front-end dashboard.
+Two HTTP APIs back the front-end dashboard:
 
-- **Endpoint**: `GET /api/kpis?store_id={int}&date={YYYY-MM-DD}`
-- **Data source**: `KPI_AVAILABILITY_SUMMARY` table in Snowflake
-- **Response**: JSON with Overall and Availability KPI cards (Pydantic-validated via `schemas.py`)
-- **Stack**: FastAPI, Snowpark, Pydantic
+- **`api/`** — Node/Express service (`src/server.js`, `src/routes/`, `src/controllers/`). Provides the primary JSON endpoints consumed by the UI.
+- **`api2/`** — FastAPI service (`app/main.py`, `app/kpi_builder.py`, `app/actions_builder.py`, `app/schemas.py`, `app/snowflake_session.py`). Serves KPI and alert-action data directly from Snowflake via Snowpark; the session is warmed at startup via lifespan hook.
 
-The Snowpark session is warmed at startup via lifespan hook.
+## Front-end (`ui/`)
 
----
-
-## Explorer (`explorer/`)
-
-A developer tool for interactively running and inspecting the alerts pipeline.
-
-### Backend (FastAPI — port 8001)
-
-| Endpoint | Method | Purpose |
-|---|---|---|
-| `/stores` | GET | Distinct store IDs from Snowflake |
-| `/pipeline/metadata` | GET | Detector/gatherer/skill introspection (no Snowflake needed) |
-| `/pipeline/run` | POST | Run pipeline for a store + selected detectors/gatherers/engine |
-
-### Frontend (React + Vite — port 5173)
-
-| Component | Role |
-|---|---|
-| `StoreSelector` | Pick store and date |
-| `DetectorsPanel` | Toggle detectors, view source and metadata |
-| `FactsPanel` | Inspect gathered facts per signal |
-| `SkillViewer` | View/edit investigation skill prompts |
-| `ResultsPanel` | Display scored alert cards |
+React + Vite + TypeScript dashboard (`ui/client/`) with shadcn/ui components in `components/`, routes in `pages/`, and the API client in `shared/api.ts`.
 
 ---
 
@@ -170,45 +161,52 @@ No pipeline code changes needed for any of the above.
 
 ```
 store_insight/
-├── alerts/
-│   ├── config/                       Configuration loader
-│   │   ├── base/default.yaml         Complete defaults
-│   │   ├── clients/<name>/           Per-client overrides
-│   │   └── loader.py                 Load + deep-merge + interpolate
+├── pipeline/                              Alerts pipeline (Python package)
+│   ├── config/                            Configuration loader
+│   │   ├── base/default.yaml              Complete defaults
+│   │   ├── clients/<name>/                Per-client overrides
+│   │   └── loader.py                      Load + deep-merge + interpolate
 │   │
-│   ├── pipeline/                     Orchestration
-│   │   ├── pipeline.py               run_pipeline(), write_alerts()
-│   │   ├── run_batch.py              CLI batch entrypoint
-│   │   ├── config.py                 DetectorConfig dataclass
-│   │   ├── session.py                Snowflake session factory
-│   │   └── _shared.py               Shared Snowpark helpers
+│   ├── pipeline/                          Orchestration
+│   │   ├── pipeline.py                    run_pipeline(), write_alerts()
+│   │   ├── run_batch.py                   CLI batch entrypoint
+│   │   ├── config.py                      DetectorConfig dataclass
+│   │   ├── session.py                     Snowflake session factory
+│   │   └── _shared.py                     Shared Snowpark helpers
 │   │
 │   ├── stages/
-│   │   ├── _1_detect/                Detector registry + detectors/
-│   │   ├── _2_facts/                 Gatherer registry + gatherers/
-│   │   ├── _3_investigate/           rule_based.py, cortex.py, skills/
-│   │   └── _4_score/                 lsv_trigger_weight.py
+│   │   ├── _1_detect/                     Detector registry + detectors/{osa,compliance,markdown_override,markdown_sellthrough,markdown_sku,waste}/
+│   │   ├── _2_facts/                      Gatherer registry + gatherers/ + signal_type_gatherers.yaml
+│   │   ├── _3_investigate/                rule_based.py, cortex.py, skills/, signal_type_investigators.yaml
+│   │   └── _4_score/                      lsv_trigger_weight.py, score.py
 │   │
-│   ├── deploy/                       Snowflake SP + Task deployment
-│   ├── monitoring/                   Signals quality notebook
-│   ├── qc/                           Per-stage QC notebooks
-│   └── tests/                        Automated tests
+│   ├── deploy/                            Snowflake SP + Task deployment
+│   ├── docs/                              architecture.md, semantic_model.md
+│   ├── monitoring/                        Signals quality notebook + cortex_usage.py
+│   ├── qc/                                Per-stage QC notebooks
+│   └── tests/                             Automated tests
 │
-├── api/                              KPI API (FastAPI)
+├── api/                                   Node/Express API
+│   ├── react-client/                      Snowflake client helpers
+│   └── src/
+│       ├── server.js                      Express app entrypoint
+│       ├── routes/                        HTTP route handlers
+│       ├── controllers/                   Business-logic controllers
+│       ├── middleware/                    Express middleware
+│       ├── config/                        Snowflake connection config
+│       └── data/                          Cached/static data
+│
+├── api2/                                  FastAPI KPI + actions API
 │   └── app/
-│       ├── main.py                   App + /api/kpis endpoint
-│       ├── kpi_builder.py            Reads KPI_AVAILABILITY_SUMMARY
-│       ├── schemas.py                Pydantic response models
-│       └── snowflake_session.py      Session factory
+│       ├── main.py                        FastAPI app + endpoints
+│       ├── kpi_builder.py                 Reads KPI_AVAILABILITY_SUMMARY
+│       ├── actions_builder.py             Reads ALERTS_PIPELINE
+│       ├── schemas.py                     Pydantic response models
+│       └── snowflake_session.py           Session factory
 │
-└── explorer/                         Pipeline Explorer (dev tool)
-    ├── backend/
-    │   ├── main.py                   FastAPI app (port 8001)
-    │   ├── routes.py                 /stores, /pipeline/metadata, /pipeline/run
-    │   └── pipeline_runner.py        Calls alerts pipeline programmatically
-    └── frontend/
-        └── src/
-            ├── App.jsx               Main layout
-            ├── api.js                Backend client
-            └── components/           StoreSelector, DetectorsPanel, etc.
+├── ui/                                    React + Vite + TypeScript dashboard
+│   ├── client/                            App.tsx, pages/, components/, hooks/, lib/
+│   └── shared/api.ts                      Typed backend client
+│
+└── kpi/                                   KPI batch + QC notebooks
 ```

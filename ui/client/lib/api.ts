@@ -5,14 +5,16 @@ import {
   ActionsResponse,
 } from "@shared/api";
 
-// Use the remote API directly in development to avoid proxy issues
+// Normalize and resolve the API base URL
+// In development, use relative paths (proxied via Vite)
 // In production, use an explicit base URL if provided, otherwise use the remote API
 function normalizeApiBaseUrl(rawBaseUrl: string): string {
   const trimmed = rawBaseUrl.trim();
 
   if (!trimmed) {
-    // Default to remote API
-    return "https://storeinsight-production.up.railway.app";
+    // Default to relative API paths in development (proxied via Vite to localhost:3001)
+    // In production, this will use relative paths to the same origin
+    return "/api";
   }
 
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {

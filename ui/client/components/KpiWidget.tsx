@@ -80,6 +80,7 @@ export default function KpiWidget({
       )}
       style={{ animationDelay: `${animationDelay}ms` }}
       onClick={onClick}
+      data-testid={`kpi-tile-${label.toLowerCase()}`}
     >
       {/* Label row */}
       <div className="flex items-center justify-between">
@@ -92,10 +93,10 @@ export default function KpiWidget({
 
       {/* Score row */}
       <div className="flex items-center gap-3 flex-wrap">
-        <span className="font-bebas text-4xl text-black dark:text-white leading-none tabular-nums">
+        <span className="font-bebas text-4xl text-black dark:text-white leading-none tabular-nums" data-testid={`kpi-tile-${label.toLowerCase()}-value`}>
           {animatedValue}
         </span>
-        <div className={cn("flex items-center gap-1.5 px-3 py-1 rounded-full", tagBg)}>
+        <div className={cn("flex items-center gap-1.5 px-3 py-1 rounded-full", tagBg)} data-testid={`kpi-tile-${label.toLowerCase()}-trend`}>
           <span className="text-black">
             {isPositive ? <TrendUpIcon /> : <TrendDownIcon />}
           </span>
@@ -106,7 +107,7 @@ export default function KpiWidget({
       </div>
 
       {/* Cluster avg */}
-      <p className="font-dm-sans text-xs text-black dark:text-white/70">
+      <p className="font-dm-sans text-xs text-black dark:text-white/70" data-testid={`kpi-tile-${label.toLowerCase()}-cluster-avg`}>
         cluster avg: {animatedClusterAvg}
       </p>
     </div>

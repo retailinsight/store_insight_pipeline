@@ -1,0 +1,80 @@
+# Contract: feedback (v1)
+# ========================
+# Per-intervention feedback on previously-shipped alerts.  Used exclusively
+# by the TICK_AND_FLICK compliance detector and its breakdown gatherer.
+#
+# Today's reference: ANALYSIS.FINAL.LSM_ALERT_FEEDBACK (East of England),
+# loaded with a two-week filter in pipeline/pipeline/run_batch.py load_feedback().
+
+name: feedback
+version: v1
+
+description: |
+  One row per alert intervention — captures whether the store engaged with
+  the alert meaningfully ("worked") or dismissed it too quickly
+  ("tick-and-flick").
+
+grain:
+  - INTERVENTION_ID
+
+columns:
+  INTERVENTION_ID:
+    type: NUMBER
+    required: true
+    description: |
+      Primary key — one row per intervention.  Counted to derive ALERTS_WORKED
+      per store per week.
+
+  STORE_ID:
+    type: NUMBER
+    required: true
+    description: Store the intervention applied to.
+
+  SITE_NAME:
+    type: VARCHAR
+    required: true
+    description: |
+      Human-readable store name.  Used in narrative output; comes from the
+      feedback table directly rather than a join so that a store-hierarchy
+      contract is not required for compliance alerts.
+
+  ALERT_TYPE_NAME:
+    type: VARCHAR
+    required: true
+    description: |
+      Category of alert that was worked.  The TICK_AND_FLICK detector
+      groups by this column to produce per-alert-type compliance rates.
+
+  ALERT_ANALYSIS_DATE:
+    type: DATE
+    required: true
+    description: |
+      Date the alert was actioned.  Pipeline filters to the
+      last_week_start → this_week_end window (14 days) at load time.
+
+  TICK_AND_FLICK_FLAG:
+    type: BOOLEAN
+    required: true
+    description: |
+      True if the intervention was dismissed too quickly to count as
+      meaningful engagement.  Drives the TF_RATE numerator.
+
+data_quality_findings:
+  - column: TICK_AND_FLICK_FLAG
+    severity: high
+    concern: |
+      Must be true/false — not NULL or string.  The detector treats NULL as
+      False, which silently under-reports compliance issues.  Adapter views
+      should COALESCE NULLs to FALSE explicitly so the behaviour is visible.
+  - column: SITE_NAME
+    severity: medium
+    concern: |
+      Embedded denormalised store name.  If a store is renamed, all
+      historical feedback rows keep the old name unless source ETL backfills.
+      Adapter authors may prefer to NULL this and rely on a join to
+      wmd_store_hierarchy for current names.
+
+notes: |
+  - Pipeline window is exactly two weeks; older feedback is invisible.
+  - This contract intentionally does NOT join to a store hierarchy — SITE_NAME
+    is denormalised in to keep the compliance pipeline self-contained.

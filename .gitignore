@@ -2,6 +2,9 @@
 .env
 .env.*
 !.env.example
+# Claude Desktop MCP config staged locally — contains API keys
+claude_desktop_config.json
+congig.json
 *.p8
 *.pem
 *.key
@@ -20,6 +23,7 @@ build/
 .eggs/
 *.egg
 .venv/
+.venv-*/
 venv/
 env/
 
@@ -59,3 +63,6 @@ ui/node_modules/
 ui/.env
 api/node_modules/
 api/.env
+
+# Local scratch / spike work — not part of the shipped pipeline
+experiments/

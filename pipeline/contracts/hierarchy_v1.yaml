@@ -1,0 +1,68 @@
+# Contract: hierarchy (v1)
+# =========================
+# Item master / hierarchy dimension joined into the OSA fact at load time.
+#
+# Today's reference implementation: ANALYSIS.FINAL.LSM_ITEM_HIERARCHY
+# (East of England), selected with .distinct() in pipeline/pipeline/run_batch.py
+# load_osa().
+
+name: hierarchy
+version: v1
+
+description: |
+  Item master.  Provides DEPARTMENT_NAME, SUBCLASS_NAME, and
+  PRODUCT_PROFILE_GROUP_NAME for grouping and narrative text on every OSA
+  alert.  One row per ITEM_CODE.
+
+grain:
+  - ITEM_CODE
+
+columns:
+  ITEM_CODE:
+    type: VARCHAR
+    required: true
+    description: |
+      Join key to the OSA fact.  Sourced from MASTER_ITEM_ID on EoE; other
+      customers' adapters will alias whatever their join key is.
+
+  ITEM_ID:
+    type: NUMBER
+    required: false
+    description: |
+      Optional second item identifier.  Today's EoE adapter selects it but
+      no downstream detector reads it directly (item resolution goes via
+      ITEM_CODE).  Kept optional for forward compatibility.
+
+  DEPARTMENT_NAME:
+    type: VARCHAR
+    required: true
+    description: |
+      Primary grouping dimension across all OSA alerts.  Rows where this
+      column is NULL are filtered out post-join — adapters should produce
+      NULL only for items that should be excluded from alerts entirely.
+
+  SUBCLASS_NAME:
+    type: VARCHAR
+    required: false
+    description: Sub-departmental grouping; used in some narrative breakdowns.
+
+  PRODUCT_PROFILE_GROUP_NAME:
+    type: VARCHAR
+    required: false
+    description: PPG — used by the OSA PPG drilldown gatherer.
+
+data_quality_findings:
+  - column: DEPARTMENT_NAME
+    severity: high
+    concern: |
+      Rows with NULL DEPARTMENT_NAME are silently dropped from all OSA
+      output by the loader's post-join filter.  Adapter authors should
+      ensure non-saleable / archived items are the only ones with NULL
+      here, otherwise live items will be invisible to alerts.
+
+notes: |
+  - Pipeline applies .distinct() at load time, so duplicate ITEM_CODE rows
+    in the source view are tolerated but wasteful — adapters should
+    deduplicate at source where possible.
+  - This contract is "wide and shallow": one row per item, joined many-to-one
+    against OSA.

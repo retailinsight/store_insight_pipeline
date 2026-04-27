@@ -142,7 +142,7 @@ function ActionDetailPanel({
       />
 
       {/* Slide-in panel */}
-      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-white dark:bg-gray-900 shadow-2xl flex flex-col overflow-hidden animate-slide-from-right">
+      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-white dark:bg-gray-900 shadow-2xl flex flex-col overflow-hidden animate-slide-from-right" data-testid="action-detail-panel">
         {/* Panel header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-app-neutral-400 dark:border-white/10 shrink-0">
           <div className="flex items-center gap-2 text-brand-primary">
@@ -152,6 +152,7 @@ function ActionDetailPanel({
           <button
             onClick={onClose}
             className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-gray-500 dark:text-white/60"
+            data-testid="action-detail-close"
           >
             <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
               <path d="M17.805 2.197a.75.75 0 00-1.061 0L10 8.94 3.256 2.197a.75.75 0 00-1.061 1.06L8.94 10l-6.744 6.743a.75.75 0 001.06 1.061L10 11.06l6.744 6.744a.75.75 0 001.06-1.06L11.06 10l6.744-6.744a.75.75 0 000-1.06z" fill="currentColor"/>
@@ -162,12 +163,12 @@ function ActionDetailPanel({
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
           {/* Title */}
-          <h3 className="font-dm-sans font-bold text-base text-black dark:text-white leading-6">
+          <h3 className="font-dm-sans font-bold text-base text-black dark:text-white leading-6" data-testid="action-detail-title">
             {action.title}
           </h3>
 
           {/* Explanation */}
-          <div className="flex flex-col gap-3 rounded-2xl border border-app-neutral-400 bg-app-neutral-100 dark:bg-white/5 dark:border-white/10 p-4">
+          <div className="flex flex-col gap-3 rounded-2xl border border-app-neutral-400 bg-app-neutral-100 dark:bg-white/5 dark:border-white/10 p-4" data-testid="action-detail-explanation">
             <p className="font-dm-sans font-bold text-sm text-black dark:text-white">
               Explanation
             </p>
@@ -180,7 +181,7 @@ function ActionDetailPanel({
               ))}
             </ul>
             {action.warning && (
-              <div className="flex items-start gap-3 rounded-sm border-l-[8px] border-app-warning bg-white dark:bg-white/10 shadow-toast px-4 py-3">
+              <div className="flex items-start gap-3 rounded-sm border-l-[8px] border-app-warning bg-white dark:bg-white/10 shadow-toast px-4 py-3" data-testid="action-detail-warning">
                 <p className="font-dm-sans text-xs text-brand-secondary dark:text-white/90 leading-6">
                   {action.warning}
                 </p>
@@ -189,7 +190,7 @@ function ActionDetailPanel({
           </div>
 
           {/* Recommended action */}
-          <div className="flex flex-col gap-3 rounded-2xl bg-app-lime p-4">
+          <div className="flex flex-col gap-3 rounded-2xl bg-app-lime p-4" data-testid="action-detail-recommended-action">
             <p className="font-dm-sans font-bold text-sm text-black">
               Recommended action
             </p>
@@ -209,6 +210,7 @@ function ActionDetailPanel({
                   ? "border-app-lime bg-app-lime text-black"
                   : "border-brand-outline-border text-brand-outline-text hover:bg-brand-primary-100"
               }`}
+              data-testid="action-detail-set-reminder"
             >
               <CalendarIcon size={16} />
               {reminderSet ? "Reminder set" : "Set a reminder"}
@@ -216,6 +218,7 @@ function ActionDetailPanel({
             <button
               onClick={() => setCouldNotOpen(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-full border border-brand-outline-border text-brand-outline-text text-xs font-dm-sans hover:bg-brand-primary-100 transition-colors"
+              data-testid="action-detail-could-not-complete"
             >
               <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
                 <path d="M17.805 2.197a.75.75 0 00-1.061 0L10 8.94 3.256 2.197a.75.75 0 00-1.061 1.06L8.94 10l-6.744 6.743a.75.75 0 001.06 1.061L10 11.06l6.744 6.744a.75.75 0 001.06-1.06L11.06 10l6.744-6.744a.75.75 0 000-1.06z" fill="currentColor"/>
@@ -225,6 +228,7 @@ function ActionDetailPanel({
             <button
               onClick={() => setCompleteOpen(true)}
               className="flex items-center gap-2 px-4 py-2 rounded-full bg-brand-primary text-white text-xs font-dm-sans hover:opacity-90 transition-opacity"
+              data-testid="action-detail-complete"
             >
               <CheckIcon size={14} />
               Complete
@@ -236,7 +240,7 @@ function ActionDetailPanel({
           <div className="shrink-0 px-6 py-4 border-t border-app-neutral-400 dark:border-white/10 bg-white dark:bg-gray-900">
             <div className={`flex items-center gap-2 px-4 py-2 rounded-full w-fit font-dm-sans text-xs ${
               status === "completed" ? "bg-app-lime text-black" : "bg-red-100 text-red-700"
-            }`}>
+            }`} data-testid="action-detail-status-badge">
               {status === "completed" ? "Marked as completed" : "Marked as couldn't complete"}
             </div>
           </div>
