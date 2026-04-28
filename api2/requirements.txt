@@ -2,5 +2,5 @@ fastapi>=0.136,<0.137
 uvicorn[standard]>=0.32,<0.33
 snowflake-snowpark-python==1.47.0
 python-dotenv==1.0.1
-pydantic==2.7.1
+pydantic>=2.9.0,<3.0
 cryptography>=42.0.0
