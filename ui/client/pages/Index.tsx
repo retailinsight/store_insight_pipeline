@@ -345,7 +345,7 @@ export default function Index() {
         </div>
 
         {/* ── Recent Team Successes ── */}
-        <section className="flex flex-col gap-6 rounded-2xl bg-white dark:bg-white/5 pt-4 px-6 pb-4 shadow-[1px_1px_16px_0_rgba(0,0,0,0.08)] animate-panel-in opacity-0" style={{ animationDelay: '500ms' }}>
+        <section className="flex flex-col gap-6 rounded-2xl bg-white dark:bg-white/5 pt-4 px-6 pb-4 shadow-[1px_1px_16px_0_rgba(0,0,0,0.08)] animate-panel-in opacity-0" style={{ animationDelay: '500ms' }} data-testid="section-recent-successes">
           {/* Header */}
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center justify-center w-9 h-9 rounded-full bg-brand-primary-100 shrink-0">
