@@ -395,7 +395,7 @@ export default function Index() {
         </section>
 
         {/* ── Smart Actions ── */}
-        <section className="flex flex-col gap-6 rounded-2xl bg-white/20 dark:bg-white/5 p-6 shadow-[1px_1px_16px_0_rgba(0,0,0,0.08)] animate-panel-in opacity-0" style={{ animationDelay: '700ms' }}>
+        <section className="flex flex-col gap-6 rounded-2xl bg-white/20 dark:bg-white/5 p-6 shadow-[1px_1px_16px_0_rgba(0,0,0,0.08)] animate-panel-in opacity-0" style={{ animationDelay: '700ms' }} data-testid="section-next-best-actions">
           {/* Header */}
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center justify-center w-9 h-9 rounded-full bg-brand-primary-100">
@@ -404,7 +404,7 @@ export default function Index() {
             <h2 className="font-bebas text-3xl text-black/50 dark:text-white/50 tracking-wide">
               Today's Next Best Actions
             </h2>
-            <span className="flex items-center px-4 py-1 rounded-full bg-app-lime font-dm-sans text-sm text-black">
+            <span className="flex items-center px-4 py-1 rounded-full bg-app-lime font-dm-sans text-sm text-black" data-testid="nba-priority-badge">
               {actions.length} priority action{actions.length !== 1 ? "s" : ""} worth {formatCurrency(calculateTotalCost(allActions))}
             </span>
           </div>
