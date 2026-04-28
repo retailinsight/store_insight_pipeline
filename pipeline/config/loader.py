@@ -54,19 +54,26 @@ def _deep_merge(base: dict, override: dict) -> dict:
 # Interpolation
 # ---------------------------------------------------------------------------
 
-def _interpolate_output(cfg: dict) -> dict:
+def _interpolate_placeholders(cfg: dict) -> dict:
     """
-    Resolve ``{database}`` and ``{schema}`` placeholders in output table names
-    using values from ``cfg['connection']``.
+    Resolve ``{database}`` and ``{schema}`` placeholders in any string value
+    under ``cfg['output']`` and ``cfg['tables']``.
+
+    Source-table names live in the same ``<DB>.<SCHEMA>`` as the connection
+    by default (each customer's adapter views are deployed alongside their
+    output schema), so the same interpolation that drives output table
+    names now also drives source-table names.  Customers whose source data
+    lives elsewhere can hard-code per-table overrides in their client YAML.
     """
     conn = cfg.get('connection', {})
     db   = conn.get('database', '')
     sch  = conn.get('schema', '')
 
-    output = cfg.get('output', {})
-    for key, val in output.items():
-        if isinstance(val, str):
-            output[key] = val.format(database=db, schema=sch)
+    for section in ('output', 'tables'):
+        block = cfg.get(section, {})
+        for key, val in block.items():
+            if isinstance(val, str):
+                block[key] = val.format(database=db, schema=sch)
     return cfg
 
 
@@ -135,7 +142,7 @@ def load_config(client: str = None) -> dict:
     # ── Store client name in config ────────────────────────────────────────
     cfg.setdefault('client_name', client or 'default')
 
-    # ── Interpolate output table names ─────────────────────────────────────
-    cfg = _interpolate_output(cfg)
+    # ── Interpolate {database}/{schema} placeholders in tables + output ────
+    cfg = _interpolate_placeholders(cfg)
 
     return cfg
