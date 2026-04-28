@@ -58,14 +58,8 @@ columns:
     required: true
     description: |
       £ value of the markdown sale.  Used by scoring and cost-projection
-      narratives.
-
-  ORIGINAL_RETAIL_PRICE:
-    type: NUMBER
-    required: false
-    description: |
-      Pre-markdown unit price.  Optional; supports future "discount given"
-      analytics but not currently aggregated.
+      narratives.  EoE adapter sources this from SALE_VALUE, mirroring
+      today's load_wmd() — see the SQL view for the alias.
 
 joins:
   - contract: wmd_item_hierarchy
@@ -97,3 +91,12 @@ notes: |
   - Pipeline applies the same 4-week lookback as markdown_log.
   - SELLTHROUGH = SUM(MARKDOWN_QUANTITY) / SUM(QTY_MARKDOWN)  — the
     denominator comes from the markdown_log contract, NOT from this one.
+  - There is intentionally no ORIGINAL_RETAIL_PRICE column on this
+    contract.  EoE's WMD_SALES exposes SALE_VALUE, ACTUAL_SALE_VALUE,
+    REDUCTION_VALUE, PROMO_DISCOUNT and GLOBAL_DISCOUNT but no native
+    pre-markdown unit price.  An earlier draft of this contract (and the
+    semantic-model doc) listed ORIGINAL_RETAIL_PRICE as available — that
+    was a documentation error; the column is not surfaced by EoE's source.
+    If a future customer's source has a true pre-markdown unit price it
+    can be added back as an optional column at that time, but speculating
+    now would only invite confusion.
