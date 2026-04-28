@@ -45,7 +45,7 @@ export default function CompleteActionDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="max-w-md rounded-2xl border-0 shadow-action p-6">
+      <DialogContent className="max-w-md rounded-2xl border-0 shadow-action p-6" data-testid="complete-dialog">
         <DialogHeader>
           <div className="flex items-center justify-center w-14 h-14 rounded-full bg-brand-primary-100 mx-auto mb-3">
             <svg width="28" height="28" viewBox="0 0 20 20" fill="none">
