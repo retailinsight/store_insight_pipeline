@@ -45,6 +45,12 @@ Arguments
 --deterministic   Force rule_based narratives for every signal type, ignoring any
                   cortex overrides in the client config.  Use for byte-identical
                   comparison runs, local dev without Cortex creds, CI smoke tests.
+--skip-capability-check
+                  Skip the startup check that confirms every enabled detector
+                  and gatherer has the adapter views it needs.  Use only when
+                  validation produces a false positive you cannot otherwise
+                  unblock — by default the pipeline aborts on any missing
+                  capability.
 
 Date Windows Derived Automatically (per analysis_date)
 -------------------------------------------------------
@@ -65,6 +71,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..',
 
 from snowflake.snowpark import functions as F
 from store_insight.pipeline.config.loader import load_config
+from store_insight.pipeline.pipeline.capabilities import validate as validate_capabilities
 from store_insight.pipeline.pipeline.pipeline import (
     derive_windows,
     run_pipeline,
@@ -308,6 +315,11 @@ def main():
                              'in the client config.  Use this for byte-identical '
                              'comparison runs, local dev without Cortex creds, '
                              'and CI smoke tests.')
+    parser.add_argument('--skip-capability-check', action='store_true',
+                        help='Skip the capability-validation step that confirms '
+                             'every enabled detector/gatherer has the adapter '
+                             'views it needs.  Use only when validation produces '
+                             'a false positive you cannot otherwise unblock.')
     args = parser.parse_args()
 
     analysis_date = datetime.date.fromisoformat(args.analysis_date)
@@ -317,6 +329,22 @@ def main():
     # ── Load config (merges base + client YAML, loads .env) ───────────────
     cfg = load_config(args.client)
     print(f'[run_batch] Config loaded: client={cfg["client_name"]}')
+
+    # ── Capability validation: every enabled detector/gatherer must have
+    #    its required contracts deployed for this client.  Fail fast here
+    #    rather than 30 seconds into the pipeline with a confusing
+    #    "Table 'XYZ' does not exist" deep inside a loader.
+    issues = validate_capabilities(cfg)
+    if issues:
+        print('[run_batch] Capability validation found issues:', file=sys.stderr)
+        for msg in issues:
+            print(f'  - {msg}', file=sys.stderr)
+        if not args.skip_capability_check:
+            print('[run_batch] Aborting.  Pass --skip-capability-check to '
+                  'override (rarely correct).', file=sys.stderr)
+            sys.exit(2)
+        print('[run_batch] --skip-capability-check set: continuing despite '
+              'issues above.', file=sys.stderr)
 
     if args.deterministic:
         # Strip per-signal-type engine overrides so investigate() falls back
