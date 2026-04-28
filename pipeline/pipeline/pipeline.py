@@ -466,25 +466,78 @@ def run_pipeline_from_signals(
     return cards
 
 
-def write_alerts(session, cards, run_date, overwrite=False, cfg: dict = None):
+def write_alerts(
+    session, cards, run_date,
+    overwrite: bool = False,
+    full_replace: bool = False,
+    target_table: str | None = None,
+    cfg: dict = None,
+):
     """
     Write alert cards to Snowflake.
 
+    Three write modes (mutually exclusive)
+    --------------------------------------
+    APPEND (default — both flags False)
+        Insert ``cards`` into the output table.  Any rows already present
+        for this ``RUN_DATE`` are left in place; you may get duplicates if
+        you append twice for the same date.  Safe everywhere.
+
+    OVERWRITE_RUN_DATE (``overwrite=True``)
+        ``DELETE FROM <table> WHERE RUN_DATE = <run_date>`` then APPEND.
+        Replaces only this run's rows; every other RUN_DATE is untouched.
+        This is the right mode for re-running a single date after a code
+        change, and it is safe to use against the production output table.
+
+    FULL_REPLACE (``full_replace=True``)
+        Drops and recreates the entire output table with just this run's
+        rows.  Destructive across all RUN_DATEs.  Use only when you
+        genuinely want a fresh table — rare; this is the explicit
+        "nuke and pave" option.
+
     Parameters
     ----------
-    session   : Snowpark Session
-    cards     : list of dicts from run_pipeline
-    run_date  : str — YYYY-MM-DD
-    overwrite : bool — True = overwrite table, False = append (default)
-    cfg       : optional dict — merged config; used to resolve output table name
+    session       : Snowpark Session
+    cards         : list of dicts from run_pipeline
+    run_date      : str — YYYY-MM-DD
+    overwrite     : bool — switch to OVERWRITE_RUN_DATE mode
+    full_replace  : bool — switch to FULL_REPLACE mode (destructive)
+    target_table  : str | None — if provided, write to this fully-qualified
+                    Snowflake table instead of the one in
+                    ``cfg['output']['alerts']``.  Useful for ad-hoc test
+                    runs without editing the YAML config.
+    cfg           : optional dict — merged config; resolves output table name
     """
+    if overwrite and full_replace:
+        raise ValueError(
+            'write_alerts: overwrite=True and full_replace=True are mutually '
+            'exclusive.  Pick one.'
+        )
+
     if not cards:
         print('[pipeline] No alert cards to write.')
         return
 
     rows  = [_card_to_row(c, run_date) for c in cards]
-    table = _output_table(cfg)
+    table = target_table or _output_table(cfg)
     df    = session.create_dataframe(rows, schema=_card_schema())
-    mode  = 'overwrite' if overwrite else 'append'
-    df.write.mode(mode).save_as_table(table)
-    print(f'[pipeline] Written {len(rows)} alert cards → {table} (mode={mode})')
+
+    if full_replace:
+        df.write.mode('overwrite').save_as_table(table)
+        mode_label = 'full_replace'
+    elif overwrite:
+        # Delete only this run_date's rows, then append.  Tolerates the
+        # table not yet existing on the very first write.
+        try:
+            session.sql(
+                f"DELETE FROM {table} WHERE RUN_DATE = '{run_date}'"
+            ).collect()
+        except Exception as exc:  # noqa: BLE001 — table-missing is an expected first-run case
+            print(f'[pipeline] (no pre-existing rows to delete for RUN_DATE={run_date}: {exc})')
+        df.write.mode('append').save_as_table(table)
+        mode_label = 'overwrite_run_date'
+    else:
+        df.write.mode('append').save_as_table(table)
+        mode_label = 'append'
+
+    print(f'[pipeline] Written {len(rows)} alert cards → {table} (mode={mode_label})')

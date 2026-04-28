@@ -78,6 +78,9 @@ class TestLoadConfigBaseOnly:
           database:  TEST_DB
           schema:    TEST_SCHEMA
           role:      SYSADMIN
+        tables:
+          osa:       "{database}.{schema}.OSA_V1"
+          hierarchy: "{database}.{schema}.HIERARCHY_V1"
         output:
           alerts: "{database}.{schema}.ALERTS_PIPELINE"
           signals: "{database}.{schema}.ALERTS_SIGNALS"
@@ -112,6 +115,11 @@ class TestLoadConfigBaseOnly:
         cfg = patched_loader.load_config()
         assert cfg["output"]["alerts"]  == "TEST_DB.TEST_SCHEMA.ALERTS_PIPELINE"
         assert cfg["output"]["signals"] == "TEST_DB.TEST_SCHEMA.ALERTS_SIGNALS"
+
+    def test_tables_placeholders_interpolated(self, patched_loader):
+        cfg = patched_loader.load_config()
+        assert cfg["tables"]["osa"]       == "TEST_DB.TEST_SCHEMA.OSA_V1"
+        assert cfg["tables"]["hierarchy"] == "TEST_DB.TEST_SCHEMA.HIERARCHY_V1"
 
     def test_base_thresholds_present(self, patched_loader):
         cfg = patched_loader.load_config()

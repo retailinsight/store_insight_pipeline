@@ -16,16 +16,24 @@ connection:
   schema:    STORE_INSIGHT
 
 # ── Source tables ─────────────────────────────────────────────────────────────
+# Each entry points at a per-customer adapter view that produces the canonical
+# column shape declared in pipeline/contracts/<name>_v1.yaml.  The view DDL
+# lives in pipeline/adapters/<client>/<contract>.sql and is deployed by
+# pipeline/tools/deploy_views.py.
+#
+# {database} and {schema} are interpolated from the connection block above,
+# so a new client only needs to set their own connection.{database,schema}
+# and these table names follow automatically — no per-table overrides
+# required unless their source data lives in a different schema.
 tables:
-  osa:                ANALYSIS.FINAL.LSM_ITEM_STORE_DAY_REPORTING_PERIOD
-  hierarchy:          ANALYSIS.FINAL.LSM_ITEM_HIERARCHY
-  feedback:           ANALYSIS.FINAL.LSM_ALERT_FEEDBACK
-  # WMD tables — required for markdown_override, waste, markdown_sellthrough, markdown_sku detectors
-  markdown_log:       ANALYSIS.FINAL.WMD_MARKDOWN_API
-  markdown_sales:     ANALYSIS.FINAL.WMD_SALES
-  wastage:            ANALYSIS.FINAL.WMD_WASTAGE
-  wmd_item_hierarchy: ANALYSIS.FINAL.WMD_ITEM_HIERARCHY
-  wmd_store_hierarchy: ANALYSIS.FINAL.WMD_SITE_HIERARCHY
+  osa:                 "{database}.{schema}.OSA_V1"
+  hierarchy:           "{database}.{schema}.HIERARCHY_V1"
+  feedback:            "{database}.{schema}.FEEDBACK_V1"
+  markdown_log:        "{database}.{schema}.MARKDOWN_LOG_V1"
+  markdown_sales:      "{database}.{schema}.MARKDOWN_SALES_V1"
+  wastage:             "{database}.{schema}.WASTAGE_V1"
+  wmd_item_hierarchy:  "{database}.{schema}.WMD_ITEM_HIERARCHY_V1"
+  wmd_store_hierarchy: "{database}.{schema}.WMD_STORE_HIERARCHY_V1"
 
 # ── Output tables ─────────────────────────────────────────────────────────────
 # {database} and {schema} are interpolated from the connection block above.

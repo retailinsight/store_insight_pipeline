@@ -32,7 +32,19 @@ Arguments
                   have rows in the output table.
 --run-date        Date to stamp on output rows. Defaults to today.
 --store-id        Optional: restrict to one or more stores (space-separated). Useful for testing.
---overwrite       If set, overwrites the output table instead of appending.
+--overwrite       Replace this run_date's rows in the output table (DELETE WHERE
+                  RUN_DATE = <run_date>, then INSERT).  Other dates are untouched.
+                  Safe to use against the production output table.
+--full-replace    DESTRUCTIVE.  Drop and recreate the entire output table with
+                  only this run's rows.  All historical RUN_DATEs are lost.  Use
+                  only for genuine fresh-start scenarios.  Mutually exclusive
+                  with --overwrite.
+--target-table    Override the output table for this run (does not change the
+                  config file).  Use for ad-hoc test/comparison runs:
+                      --target-table SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_TEST
+--deterministic   Force rule_based narratives for every signal type, ignoring any
+                  cortex overrides in the client config.  Use for byte-identical
+                  comparison runs, local dev without Cortex creds, CI smoke tests.
 
 Date Windows Derived Automatically (per analysis_date)
 -------------------------------------------------------
@@ -51,9 +63,7 @@ import sys
 # We need .../ds-common-tools/ on sys.path so `import store_insight` resolves.
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
 
-from snowflake.snowpark import Window
 from snowflake.snowpark import functions as F
-from snowflake.snowpark.types import LongType
 from store_insight.pipeline.config.loader import load_config
 from store_insight.pipeline.pipeline.pipeline import (
     derive_windows,
@@ -63,86 +73,45 @@ from store_insight.pipeline.pipeline.pipeline import (
 from store_insight.pipeline.pipeline.session import create_session
 
 # ---------------------------------------------------------------------------
-# Source table defaults (used when no config is loaded)
-# ---------------------------------------------------------------------------
-
-_DEFAULT_OSA_TABLE            = 'ANALYSIS.FINAL.LSM_ITEM_STORE_DAY_REPORTING_PERIOD'
-_DEFAULT_HIERARCHY_TABLE      = 'ANALYSIS.FINAL.LSM_ITEM_HIERARCHY'
-_DEFAULT_FEEDBACK_TABLE       = 'ANALYSIS.FINAL.LSM_ALERT_FEEDBACK'
-_DEFAULT_MARKDOWN_LOG_TABLE   = 'ANALYSIS.FINAL.WMD_MARKDOWN_API'
-_DEFAULT_MARKDOWN_SALES_TABLE = 'ANALYSIS.FINAL.WMD_SALES'
-_DEFAULT_WASTAGE_TABLE        = 'ANALYSIS.FINAL.WMD_WASTAGE'
-_DEFAULT_WMD_ITEM_HIER_TABLE  = 'ANALYSIS.FINAL.WMD_ITEM_HIERARCHY'
-_DEFAULT_WMD_STORE_HIER_TABLE = 'ANALYSIS.FINAL.WMD_SITE_HIERARCHY'
-
-
-def _table(cfg: dict, key: str, default: str) -> str:
-    """Resolve a source table name from config, env var, or default."""
-    if cfg:
-        return cfg.get('tables', {}).get(key, default)
-    return os.environ.get(f'ALERTS_{key.upper()}_TABLE', default)
-
-
-# ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
+#
+# Each loader reads from a per-customer adapter view whose canonical column
+# shape is declared by pipeline/contracts/<name>_v1.yaml and produced by SQL
+# in pipeline/adapters/<client>/<contract>.sql.  The view does all per-source
+# aliasing, dedup, and casting; this module only filters by the analysis
+# window and applies pipeline-level joins / NULL filters.
 
-def load_feedback(session, last_week_start, this_week_end, cfg: dict = None):
+def load_feedback(session, last_week_start, this_week_end, cfg: dict):
     """
     Load and cache alert feedback for the two-week window.
     Used by the TICK_AND_FLICK detector and fact gatherer.
     """
-    table = _table(cfg, 'feedback', _DEFAULT_FEEDBACK_TABLE)
     return (
-        session.table(table)
+        session.table(cfg['tables']['feedback'])
         .filter(F.col('ALERT_ANALYSIS_DATE') >= last_week_start)
         .filter(F.col('ALERT_ANALYSIS_DATE') <= this_week_end)
-        .select(
-            F.col('SITE_ID').alias('STORE_ID'),
-            F.col('SITE_NAME'),
-            F.col('ALERT_TYPE_NAME'),
-            F.col('ALERT_ANALYSIS_DATE'),
-            F.col('INTERVENTION_ID'),
-            F.col('TICK_AND_FLICK_FLAG'),
-        )
         .cache_result()
     )
 
 
-def load_osa(session, lookback_start, analysis_date, cfg: dict = None):
+def load_osa(session, lookback_start, analysis_date, cfg: dict):
     """
     Load and join OSA + item hierarchy data for the lookback window.
     Result is cached in Snowflake for fast repeated access during the pipeline.
-    """
-    osa_table       = _table(cfg, 'osa',       _DEFAULT_OSA_TABLE)
-    hierarchy_table = _table(cfg, 'hierarchy', _DEFAULT_HIERARCHY_TABLE)
 
+    The osa⨝hierarchy join and the NULL-department filter are pipeline
+    concerns (we don't want to alert on items that have no department, since
+    narrative output won't make sense), so they live here rather than in
+    the SQL views.
+    """
     osa_raw = (
-        session.table(osa_table)
+        session.table(cfg['tables']['osa'])
         .filter(F.col('ANALYSIS_DATE') >= lookback_start)
         .filter(F.col('ANALYSIS_DATE') <= analysis_date)
-        .select(
-            F.col('SITE_ID').alias('STORE_ID'),
-            F.col('ITEM_ID').alias('ITEM_CODE'),
-            F.col('ACTUAL_SALES_VOLUME'),
-            F.col('LOST_SALES_VOLUME'),
-            F.col('LOST_SALES_VALUE'),
-            F.col('ANALYSIS_DATE'),
-            F.col('DEPARTMENT_ID'),
-        )
     )
 
-    item = (
-        session.table(hierarchy_table)
-        .select(
-            F.col('MASTER_ITEM_ID').alias('ITEM_CODE'),
-            F.col('ITEM_ID'),
-            F.col('DEPARTMENT_NAME'),
-            F.col('SUBCLASS_NAME'),
-            F.col('PRODUCT_PROFILE_GROUP_NAME'),
-        )
-        .distinct()
-    )
+    item = session.table(cfg['tables']['hierarchy'])
 
     return (
         osa_raw
@@ -152,7 +121,7 @@ def load_osa(session, lookback_start, analysis_date, cfg: dict = None):
     )
 
 
-def load_wmd(session, wmd_lookback, analysis_date, cfg: dict = None):
+def load_wmd(session, wmd_lookback, analysis_date, cfg: dict):
     """
     Load and cache all WMD tables (markdown log, markdown sales, wastage,
     item hierarchy, store hierarchy) for the 4-week lookback window.
@@ -165,69 +134,28 @@ def load_wmd(session, wmd_lookback, analysis_date, cfg: dict = None):
     dict with keys: markdown_log, markdown_sales, wastage,
                     item_hierarchy, store_hierarchy
     """
-    md_log_table    = _table(cfg, 'markdown_log',        _DEFAULT_MARKDOWN_LOG_TABLE)
-    md_sales_table  = _table(cfg, 'markdown_sales',      _DEFAULT_MARKDOWN_SALES_TABLE)
-    wastage_table   = _table(cfg, 'wastage',             _DEFAULT_WASTAGE_TABLE)
-    item_hier_table = _table(cfg, 'wmd_item_hierarchy',  _DEFAULT_WMD_ITEM_HIER_TABLE)
-    store_hier_table = _table(cfg, 'wmd_store_hierarchy', _DEFAULT_WMD_STORE_HIER_TABLE)
+    tables = cfg['tables']
 
-    # WMD_MARKDOWN_API renames STORE_ID→SITE_ID, LOCAL_DATE→MARKDOWN_DATE,
-    # QTY_MARKDOWN→MARKDOWN_QUANTITY vs the old SOURCE table.  Alias back here
-    # so all downstream detectors/gatherers are unchanged.
     markdown_log = (
-        session.table(md_log_table)
-        .with_column('STORE_ID',    F.col('SITE_ID'))
-        .with_column('LOCAL_DATE',  F.col('MARKDOWN_DATE'))
-        .with_column('QTY_MARKDOWN', F.col('MARKDOWN_QUANTITY'))
+        session.table(tables['markdown_log'])
         .filter(F.col('LOCAL_DATE') >= wmd_lookback)
         .filter(F.col('LOCAL_DATE') <= analysis_date)
         .cache_result()
     )
-    # WMD_SALES renames SITE_ID→STORE_ID, SALE_QUANTITY→MARKDOWN_QUANTITY, SALE_VALUE→MARKDOWN_VALUE.
     markdown_sales = (
-        session.table(md_sales_table)
-        .with_column('STORE_ID',          F.col('SITE_ID'))
-        .with_column('MARKDOWN_QUANTITY', F.col('SALE_QUANTITY'))
-        .with_column('MARKDOWN_VALUE',    F.col('SALE_VALUE'))
+        session.table(tables['markdown_sales'])
         .filter(F.col('DATE') >= wmd_lookback)
         .filter(F.col('DATE') <= analysis_date)
         .cache_result()
     )
-    # WMD_WASTAGE renames STORE_ID→SITE_ID and DATE→WASTE_DATE.
     wastage = (
-        session.table(wastage_table)
-        .with_column('STORE_ID', F.col('SITE_ID'))
-        .with_column('DATE',     F.col('WASTE_DATE'))
+        session.table(tables['wastage'])
         .filter(F.col('DATE') >= wmd_lookback)
         .filter(F.col('DATE') <= analysis_date)
         .cache_result()
     )
-
-    # WMD_ITEM_HIERARCHY renames VMECODE→VME_CODE and ITEM_DESCRIPTION→ITEM_NAME.
-    # Still snapshot-based so dedupe to latest per VME_CODE.
-    _item_w = Window.partitionBy('VME_CODE').orderBy(F.col('FILE_TIMESTAMP').desc())
-    item_hierarchy = (
-        session.table(item_hier_table)
-        .with_column('_RN', F.row_number().over(_item_w))
-        .filter(F.col('_RN') == 1)
-        .select(
-            F.col('VME_CODE').cast(LongType()).alias('ITEM_ID'),
-            F.col('ITEM_NAME').alias('ITEM_DESCRIPTION'),
-            F.col('HIERARCHY_LEVEL_1_ID').alias('DEPARTMENT'),
-            F.col('SECTION'),
-            F.col('SUB_SECTION'),
-        )
-        .filter(F.col('ITEM_ID').is_not_null())
-        .cache_result()
-    )
-
-    # WMD_SITE_HIERARCHY renames STORE_ID→SITE_ID and STORE_NAME→SITE_NAME.
-    store_hierarchy = (
-        session.table(store_hier_table)
-        .with_column('STORE_ID',   F.col('SITE_ID'))
-        .with_column('STORE_NAME', F.col('SITE_NAME'))
-        .cache_result()
-    )
+    item_hierarchy  = session.table(tables['wmd_item_hierarchy']).cache_result()
+    store_hierarchy = session.table(tables['wmd_store_hierarchy']).cache_result()
 
     return {
         'markdown_log':    markdown_log,
@@ -274,7 +202,8 @@ def _date_range(start: datetime.date, end: datetime.date):
 
 def run_single_date(
     session, analysis_date: datetime.date, run_date: str,
-    store_id=None, overwrite=False, cfg: dict = None,
+    store_id=None, overwrite=False, full_replace=False,
+    target_table: str | None = None, cfg: dict = None,
 ):
     """
     Run the full pipeline for one analysis_date and write results.
@@ -328,7 +257,11 @@ def run_single_date(
         cfg=cfg,
     )
 
-    write_alerts(session, cards, run_date=run_date, overwrite=overwrite, cfg=cfg)
+    write_alerts(
+        session, cards, run_date=run_date,
+        overwrite=overwrite, full_replace=full_replace,
+        target_table=target_table, cfg=cfg,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -350,8 +283,31 @@ def main():
                         help='Stamp date for output rows (YYYY-MM-DD). Defaults to today.')
     parser.add_argument('--store-id', type=int, nargs='+', default=None,
                         help='Restrict to one or more stores (space-separated, optional)')
-    parser.add_argument('--overwrite', action='store_true',
-                        help='Overwrite output table instead of appending')
+    write_mode = parser.add_mutually_exclusive_group()
+    write_mode.add_argument(
+        '--overwrite', action='store_true',
+        help='Replace this run_date\'s rows in the output table '
+             '(DELETE WHERE RUN_DATE = <run_date>, then INSERT).  Other '
+             'dates are untouched.  Safe against the production table.',
+    )
+    write_mode.add_argument(
+        '--full-replace', action='store_true',
+        help='DESTRUCTIVE.  Drop and recreate the entire output table.  '
+             'All historical RUN_DATEs are lost.  Mutually exclusive with '
+             '--overwrite.',
+    )
+    parser.add_argument(
+        '--target-table', default=None,
+        help='Override the output table for this run (does not change the '
+             'config file).  Use for ad-hoc test runs without mutating '
+             'cfg[\'output\'][\'alerts\'].',
+    )
+    parser.add_argument('--deterministic', action='store_true',
+                        help='Force every signal type to use the rule_based '
+                             'narrative engine, ignoring any cortex overrides '
+                             'in the client config.  Use this for byte-identical '
+                             'comparison runs, local dev without Cortex creds, '
+                             'and CI smoke tests.')
     args = parser.parse_args()
 
     analysis_date = datetime.date.fromisoformat(args.analysis_date)
@@ -361,6 +317,18 @@ def main():
     # ── Load config (merges base + client YAML, loads .env) ───────────────
     cfg = load_config(args.client)
     print(f'[run_batch] Config loaded: client={cfg["client_name"]}')
+
+    if args.deterministic:
+        # Strip per-signal-type engine overrides so investigate() falls back
+        # to signal_type_investigators.yaml defaults (all rule_based).
+        # Preserve non-engine settings like investigation.max_workers.
+        inv = cfg.get('investigation') or {}
+        cfg['investigation'] = {
+            k: v for k, v in inv.items()
+            if not (isinstance(v, dict) and 'engine' in v)
+        }
+        print('[run_batch] --deterministic: forcing rule_based narratives '
+              'for all signal types.')
 
     session = create_session(cfg)
     print('[run_batch] Snowflake session created.')
@@ -387,16 +355,19 @@ def main():
             print(f'\n[run_batch] ── Date {i}/{len(pending)}: {ad} ──')
             run_single_date(
                 session, ad, run_date=str(ad),
-                store_id=args.store_id, overwrite=False, cfg=cfg,
+                store_id=args.store_id, overwrite=False, full_replace=False,
+                target_table=args.target_table, cfg=cfg,
             )
 
         print(f'\n[run_batch] Backfill complete — {len(pending)} dates processed, '
               f'{len(skipped)} skipped.')
     else:
-        # ── Single-date mode (original behaviour) ────────────────────────
+        # ── Single-date mode ─────────────────────────────────────────────
         run_single_date(
             session, analysis_date, run_date=run_date,
-            store_id=args.store_id, overwrite=args.overwrite, cfg=cfg,
+            store_id=args.store_id,
+            overwrite=args.overwrite, full_replace=args.full_replace,
+            target_table=args.target_table, cfg=cfg,
         )
 
     print('[run_batch] Done.')
