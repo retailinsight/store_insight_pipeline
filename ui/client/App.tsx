@@ -13,6 +13,7 @@ import Login from "./pages/Login";
 import Index from "./pages/Index";
 import SmartActionsPage from "./pages/SmartActionsPage";
 import SuccessesPage from "./pages/SuccessesPage";
+import Chat from "./pages/Chat";
 import NotFound from "./pages/NotFound";
 import { useEffect } from "react";
 
@@ -73,6 +74,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <SuccessesPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/chat"
+                element={
+                  <ProtectedRoute>
+                    <Chat />
                   </ProtectedRoute>
                 }
               />
