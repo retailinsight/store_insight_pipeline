@@ -109,3 +109,69 @@
     width: 0;
   }
 }
+
+/* ── Chat page ── */
+.chat-page-wrapper {
+  @apply flex flex-1 overflow-hidden h-full;
+}
+
+.chat-submenu {
+  @apply hidden sm:flex shrink-0 items-start my-4 mx-2;
+}
+
+.chat-submenu-inner {
+  @apply flex flex-col items-center gap-1 py-4 px-2 rounded-[64px] bg-black/5;
+  width: 52px;
+}
+
+.chat-submenu-btn {
+  @apply flex items-center justify-center p-3 rounded-sm transition-colors hover:bg-black/5;
+}
+
+.chat-submenu-btn--bordered {
+  @apply border-b border-[#CDCECC] rounded-none pb-4 w-full justify-center;
+}
+
+.chat-main {
+  @apply flex flex-col flex-1 overflow-hidden pb-4;
+}
+
+.chat-greeting-area {
+  @apply flex flex-col flex-1 items-center justify-center px-4 sm:px-8;
+}
+
+.chat-greeting-content {
+  @apply flex flex-col gap-8 w-full max-w-2xl;
+}
+
+.chat-greeting-header {
+  @apply flex items-center justify-center gap-4;
+}
+
+.chat-greeting-title {
+  @apply font-dm-sans text-3xl font-normal text-brand-primary;
+}
+
+.chat-input-card {
+  @apply flex flex-col gap-2 p-3 rounded-2xl bg-white shadow-[0_0_16px_0_rgba(0,0,0,0.08)];
+  min-height: 72px;
+}
+
+.chat-input-placeholder {
+  @apply flex-1 font-dm-sans text-sm font-normal text-black leading-5;
+}
+
+.chat-input-actions {
+  @apply flex justify-end items-center gap-2;
+}
+
+.chat-action-btn {
+  @apply flex items-center justify-center transition-opacity hover:opacity-80;
+}
+
+.chat-disclaimer {
+  @apply text-center font-dm-sans text-xs text-slate-400/60 px-4;
+  font-family: Tahoma, sans-serif;
+  font-size: 11px;
+  line-height: 1.625;
+}
