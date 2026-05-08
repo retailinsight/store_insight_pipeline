@@ -119,10 +119,12 @@ export default function NavSidebar({ darkMode, onToggleDarkMode, mobileOpen, onT
   const pendingAndReminderCount = getVisibleActions().length;
   const completedSuccessesCount = getActionsByStatus("completed").length;
 
+  const showChat = import.meta.env.VITE_AI_CHAT !== "false";
+
   const navItems: NavItem[] = [
     { path: "/", label: "Dashboard", icon: <DashboardIcon /> },
     { path: "/smart-actions", label: "Smart Actions", badge: pendingAndReminderCount, icon: <SmartActionsIcon /> },
-    { path: "/chat", label: "Chat", icon: <ChatIcon /> },
+    { path: "/chat", label: "Chat", icon: <ChatIcon />, hidden: !showChat },
     { path: "/successes", label: "Successes", badge: completedSuccessesCount, icon: <MedalIcon />, hidden: true }, // Hidden - set to false to reinstate
   ];
 
