@@ -15,8 +15,8 @@ Usage
     # With client overrides
     cfg = load_config('eastofengland')
 
-The returned dict mirrors the YAML structure exactly.  Consumers access it
-as ``cfg['tables']['osa']``, ``cfg['thresholds']['min_wow_drop']``, etc.
+The returned PipelineConfig provides typed attribute access.  Consumers access it
+as ``cfg.tables.osa``, ``cfg.detector_config.thresholds.OSA.min_wow_drop``, etc.
 """
 
 import copy
@@ -24,6 +24,7 @@ import os
 from pathlib import Path
 
 import yaml
+from store_insight.pipeline.config.models import PipelineConfig
 
 _HERE       = Path(__file__).parent
 _BASE_PATH  = _HERE / 'base' / 'default.yaml'
@@ -97,7 +98,7 @@ def _load_env_file(env_path: Path) -> None:
 # Public API
 # ---------------------------------------------------------------------------
 
-def load_config(client: str = None) -> dict:
+def load_config(client: str = None) -> PipelineConfig:
     """
     Load the base config, optionally deep-merge a client override, resolve
     output table placeholders, and load the client's ``.env`` for secrets.
@@ -110,8 +111,10 @@ def load_config(client: str = None) -> dict:
 
     Returns
     -------
-    dict — fully merged and interpolated configuration
+    PipelineConfig — fully merged and interpolated configuration
     """
+    from store_insight.pipeline.config.models import PipelineConfig
+
     # ── Load base ──────────────────────────────────────────────────────────
     with open(_BASE_PATH, encoding='utf-8') as f:
         cfg = yaml.safe_load(f)
@@ -145,4 +148,5 @@ def load_config(client: str = None) -> dict:
     # ── Interpolate {database}/{schema} placeholders in tables + output ────
     cfg = _interpolate_placeholders(cfg)
 
-    return cfg
+    # ── Instantiate PipelineConfig (Pydantic validates) ───────────────────
+    return PipelineConfig(**cfg)

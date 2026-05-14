@@ -5,6 +5,7 @@ Typed configuration models for the alerts pipeline.
 Provides validation, interpolation, and type safety for all config sections.
 """
 
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, field_validator, model_validator
@@ -14,12 +15,21 @@ from store_insight.pipeline.stages._1_detect import registry as detector_registr
 from store_insight.pipeline.stages._3_facts import registry as gatherer_registry
 
 
+class AlertBucket(StrEnum):
+    """Alert bucket types for signal type categorization in output table TYPE column."""
+
+    AVAILABILITY = "Availability"
+    COMPLIANCE = "Compliance"
+    MARKDOWN = "Markdown"
+    WASTE = "Waste"
+
+
 class ConnectionConfig(BaseModel):
     """Snowflake connection configuration (non-secret fields only)."""
 
     warehouse: str
     database: str
-    schema_name: str  # renamed from 'schema' to avoid shadowing BaseModel.schema
+    schema_name: str = ""  # YAML uses 'schema', mapped via field alias
     role: str | None = None
 
 
@@ -57,6 +67,14 @@ class OutputConfig(BaseModel):
 
     alerts: str
     top_n_per_store: int = 0
+    signal_type_buckets: dict[str, AlertBucket] = {
+        "OSA": AlertBucket.AVAILABILITY,
+        "COMPLIANCE": AlertBucket.COMPLIANCE,
+        "MARKDOWN_OVERRIDE": AlertBucket.MARKDOWN,
+        "MARKDOWN_SELLTHROUGH": AlertBucket.MARKDOWN,
+        "MARKDOWN_SKU": AlertBucket.MARKDOWN,
+        "WASTE": AlertBucket.WASTE,
+    }
 
     # Interpolation context - set during PipelineConfig validation
     _database: str = ""
@@ -71,6 +89,21 @@ class OutputConfig(BaseModel):
                     database=self._database, schema=self._schema_name
                 )
         return self
+
+
+class LookbackWindowsConfig(BaseModel):
+    """Lookback window lengths in days for detector time windows."""
+
+    osa: int = 69
+    wmd: int = 28
+
+    @field_validator("osa", "wmd")
+    @classmethod
+    def validate_positive_int(cls, v: int) -> int:
+        """Validate lookback days are positive integers."""
+        if v <= 0:
+            raise ValueError(f"Lookback days must be positive, got {v}")
+        return v
 
 
 class ThresholdsConfig(BaseModel):
@@ -180,7 +213,14 @@ class ThresholdsConfig(BaseModel):
         return v
 
 
-class DetectorsConfig(BaseModel):
+class DetectorConfigConfig(BaseModel):
+    """Detector configuration grouping thresholds and lookback windows."""
+
+    thresholds: ThresholdsConfig = ThresholdsConfig()
+    lookback_windows: LookbackWindowsConfig = LookbackWindowsConfig()
+
+
+class DetectorConfig(BaseModel):
     """Enabled detector list with validation against known modules."""
 
     enabled: list[str]
@@ -289,8 +329,8 @@ class PipelineConfig(BaseModel):
     connection: ConnectionConfig
     tables: TablesConfig
     output: OutputConfig
-    thresholds: ThresholdsConfig
-    detectors: DetectorsConfig
+    detector_config: DetectorConfigConfig = DetectorConfigConfig()
+    detectors: DetectorConfig
     gatherers: GatherersConfig
     investigation: InvestigationConfig
     schedule: ScheduleConfig

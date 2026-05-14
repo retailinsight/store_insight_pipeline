@@ -201,7 +201,7 @@ def _make_describe_columns(session):
 
 def validate(client: str, contract: str | None = None) -> int:
     cfg = load_config(client)
-    table_map: dict[str, str] = cfg.get('tables', {}) or {}
+    table_map: dict[str, str] = cfg.tables.model_dump() if cfg.tables else {}
     if not table_map:
         print(f"[validate_views] ERROR: client '{client}' has no tables: block in config",
               file=sys.stderr)
