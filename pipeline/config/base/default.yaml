@@ -38,8 +38,15 @@ tables:
 # ── Output tables ─────────────────────────────────────────────────────────────
 # {database} and {schema} are interpolated from the connection block above.
 output:
-  alerts:          "{database}.{schema}.ALERTS_PIPELINE"
-  top_n_per_store: 10   # 0 = no limit; set to e.g. 10 to cap alerts per store
+  alerts:              "{database}.{schema}.ALERTS_PIPELINE"
+  top_n_per_store:     10   # 0 = no limit; set to e.g. 10 to cap alerts per store
+  signal_type_buckets:
+    OSA:                  Availability
+    COMPLIANCE:           Compliance
+    MARKDOWN_OVERRIDE:    Markdown
+    MARKDOWN_SELLTHROUGH: Markdown
+    MARKDOWN_SKU:         Markdown
+    WASTE:                Waste
 
 # ── Detectors ─────────────────────────────────────────────────────────────────
 # Module names relative to stages/_1_detect/detectors/.
@@ -59,46 +66,51 @@ detectors:
     - markdown_sku.repeat_request
     - markdown_sku.excessive_override
 
-# ── Detector thresholds ──────────────────────────────────────────────────────
-# Top-level keys shared across detectors; sub-keys group by alert type.
-thresholds:
-  shared:
-    section:              DEPARTMENT_NAME
-    min_lost_sales_value: 200.0
+# ── Detector configuration ─────────────────────────────────────────────────────
+# Thresholds and time windows for detectors
+detector_config:
+  thresholds:
+    shared:
+      section:              DEPARTMENT_NAME
+      min_lost_sales_value: 200.0
 
-  OSA:
-    min_wow_drop:         0.01      # WOW — min WoW drop to fire
-    min_chain_gap:        0.03      # VS_CHAIN — min gap vs chain to fire
-    min_alert_weeks:      4         # REPEAT — min weeks with alerts
-    min_osa_drop:         0.05      # REPEAT — min OSA drop
-    min_weekly_lsv:       50.0      # REPEAT — min weekly lost-sales value
+    OSA:
+      min_wow_drop:         0.01      # WOW — min WoW drop to fire
+      min_chain_gap:        0.03      # VS_CHAIN — min gap vs chain to fire
+      min_alert_weeks:      4         # REPEAT — min weeks with alerts
+      min_osa_drop:         0.05      # REPEAT — min OSA drop
+      min_weekly_lsv:       50.0      # REPEAT — min weekly lost-sales value
 
-  COMPLIANCE:
-    min_wow_increase:        0.10   # TICK_AND_FLICK — min WoW rise
-    min_chain_outperform:    0.05   # TICK_AND_FLICK — min gap above chain
-    min_alerts_worked:       5      # TICK_AND_FLICK — min alerts worked
+    COMPLIANCE:
+      min_wow_increase:        0.10   # TICK_AND_FLICK — min WoW rise
+      min_chain_outperform:    0.05   # TICK_AND_FLICK — min gap above chain
+      min_alerts_worked:       5      # TICK_AND_FLICK — min alerts worked
 
-  MARKDOWN_OVERRIDE:
-    min_override_chain_gap:    0.05 # pp — min gap vs chain to fire VS_CHAIN
-    min_override_wow_increase: 0.05 # pp — min WoW rise to fire WOW
-    min_total_markdowns:       10   # min markdown events in window to qualify
+    MARKDOWN_OVERRIDE:
+      min_override_chain_gap:    0.05 # pp — min gap vs chain to fire VS_CHAIN
+      min_override_wow_increase: 0.05 # pp — min WoW rise to fire WOW
+      min_total_markdowns:       10   # min markdown events in window to qualify
 
-  WASTE:
-    min_stb_chain_gap:       0.05   # pp — min gap vs chain to fire VS_CHAIN
-    min_stb_wow_increase:    0.05   # pp — min WoW rise to fire WOW
-    min_waste_qty:           5      # min total waste units to qualify
+    WASTE:
+      min_stb_chain_gap:       0.05   # pp — min gap vs chain to fire VS_CHAIN
+      min_stb_wow_increase:    0.05   # pp — min WoW rise to fire WOW
+      min_waste_qty:           5      # min total waste units to qualify
 
-  MARKDOWN_SELLTHROUGH:
-    min_sellthrough_chain_gap: 0.05 # pp — min gap vs chain to fire VS_CHAIN
-    min_sellthrough_wow_drop:  0.05 # pp — min WoW drop to fire WOW
-    min_markdown_qty:          10   # min markdown units to qualify
+    MARKDOWN_SELLTHROUGH:
+      min_sellthrough_chain_gap: 0.05 # pp — min gap vs chain to fire VS_CHAIN
+      min_sellthrough_wow_drop:  0.05 # pp — min WoW drop to fire WOW
+      min_markdown_qty:          10   # min markdown units to qualify
 
-  MARKDOWN_SKU:
-    lookback_weeks:          4      # rolling window for SKU-level detectors
-    min_markdown_weeks:      3      # REPEAT_REQUEST — min distinct weeks with a request
-    min_markdown_requests:   8      # REPEAT_REQUEST — min total requests in window (guards against low-volume, routine markdowns)
-    min_sku_override_rate:   0.90   # EXCESSIVE_OVERRIDE — min override rate (0.0–1.0)
-    min_sku_requests:        5      # EXCESSIVE_OVERRIDE — min requests in window
+    MARKDOWN_SKU:
+      lookback_weeks:          4      # rolling window for SKU-level detectors
+      min_markdown_weeks:      3      # REPEAT_REQUEST — min distinct weeks with a request
+      min_markdown_requests:   8      # REPEAT_REQUEST — min total requests in window (guards against low-volume, routine markdowns)
+      min_sku_override_rate:   0.90   # EXCESSIVE_OVERRIDE — min override rate (0.0–1.0)
+      min_sku_requests:        5      # EXCESSIVE_OVERRIDE — min requests in window
+
+  lookback_windows:
+    osa: 69   # ~10 weeks — required by the OSA REPEAT detector
+    wmd: 28   # 4 weeks — required by MARKDOWN_SKU detectors
 
 # ── Gatherers — which fact gatherers run per signal type ─────────────────────
 gatherers:
@@ -144,6 +156,21 @@ investigation:
 schedule:
   cron:     "0 6 * * *"
   timezone: Europe/London
+
+# ── Scoring weights ───────────────────────────────────────────────────────────
+# Per-signal-type multiplier applied after projected_cost() and before the
+# _MULTIPLIERS pipeline in score.py.  Default 1.0 = no scaling.
+# Override in config/clients/<name>/client.yaml to tune individual signal types.
+# Example: set MARKDOWN_OVERRIDE to 0.05 to treat 5 % of gross markdown value
+# as the "at-risk" cost rather than the full value.
+scoring:
+  score_weights:
+    OSA:                  1.0
+    COMPLIANCE:           1.0
+    MARKDOWN_OVERRIDE:    0.05
+    WASTE:                1.0
+    MARKDOWN_SELLTHROUGH: 1.0
+    MARKDOWN_SKU:         1.0
 
 # ── Logging / intermediate writes ────────────────────────────────────────────
 # Only the final alerts table is written. Intermediate tables are not saved.

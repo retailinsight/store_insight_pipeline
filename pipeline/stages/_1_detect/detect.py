@@ -37,6 +37,7 @@ import datetime
 from dataclasses import asdict
 
 from store_insight.pipeline.pipeline.config import DetectorConfig
+from store_insight.pipeline.pipeline.dispatch import matching_kwargs
 from store_insight.pipeline.stages._1_detect import registry as _registry
 
 
@@ -156,8 +157,6 @@ def detect_signals(
     -------
     list of signal dicts, one per (store_id, department) pair
     """
-    import inspect
-
     from snowflake.snowpark import functions as F
 
     det_cfg = config if config is not None else DetectorConfig()
@@ -211,9 +210,7 @@ def detect_signals(
     all_signals = []
     counts = {}
     for detector in detectors:
-        params = inspect.signature(detector.detect).parameters
-        kwargs = {k: v for k, v in all_kwargs.items() if k in params}
-        result = detector.detect(**kwargs)
+        result = detector.detect(**matching_kwargs(detector.detect, all_kwargs))
         all_signals.extend(result)
         label = result[0]['trigger_types'][0] if result else detector.__name__.split('.')[-1].upper()
         counts[label] = len(result)

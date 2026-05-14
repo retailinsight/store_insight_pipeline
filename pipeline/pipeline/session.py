@@ -1,7 +1,7 @@
 """
 Snowflake Session Factory
 ==========================
-Creates a Snowpark session from a combination of config dict values and
+Creates a Snowpark session from a combination of config values and
 environment variables.
 
 Preferred usage (with config system)
@@ -20,7 +20,7 @@ Legacy usage (env vars only)
     session = create_session()
 
 Resolution order for each connection param:
-    1. ``cfg['connection'][key]``  (if a config dict is passed)
+    1. ``cfg.connection.key``  (if a config is passed)
     2. ``os.environ['SNOWFLAKE_<KEY>']``
 
 Secrets (account, user, password) always come from environment variables,
@@ -54,16 +54,16 @@ def load_env(env_path=None):
                 os.environ.setdefault(key.strip(), val.strip())
 
 
-def create_session(cfg: dict = None):
+def create_session(cfg=None):
     """
     Create and return a Snowpark Session.
 
     Parameters
     ----------
-    cfg : dict or None
-        Merged config dict from ``config.loader.load_config``.  If provided,
+    cfg : PipelineConfig or None
+        Merged config from ``config.loader.load_config``.  If provided,
         non-secret connection params (warehouse, database, schema, role) are
-        read from ``cfg['connection']`` with env-var fallback.  Secrets
+        read from ``cfg.connection`` with env-var fallback.  Secrets
         (account, user, password) always come from env vars.
 
     Returns
@@ -72,17 +72,17 @@ def create_session(cfg: dict = None):
     """
     from snowflake.snowpark import Session
 
-    conn = (cfg or {}).get('connection', {})
+    conn = cfg.connection if cfg else {}
 
     password = os.environ.get('SNOWFLAKE_PASSWORD')
 
     params = {
         'account':   os.environ['SNOWFLAKE_ACCOUNT'],
         'user':      os.environ['SNOWFLAKE_USER'],
-        'role':      conn.get('role')      or os.environ['SNOWFLAKE_ROLE'],
-        'warehouse': conn.get('warehouse') or os.environ['SNOWFLAKE_WAREHOUSE'],
-        'database':  conn.get('database')  or os.environ['SNOWFLAKE_DATABASE'],
-        'schema':    conn.get('schema')    or os.environ['SNOWFLAKE_SCHEMA'],
+        'role':      conn.role or os.environ.get('SNOWFLAKE_ROLE'),
+        'warehouse': conn.warehouse or os.environ.get('SNOWFLAKE_WAREHOUSE'),
+        'database':  conn.database or os.environ.get('SNOWFLAKE_DATABASE'),
+        'schema':    conn.schema_name or os.environ.get('SNOWFLAKE_SCHEMA'),
     }
 
     if password:

@@ -10,6 +10,7 @@ import textwrap
 
 import pytest
 from store_insight.pipeline.config.loader import _deep_merge
+from store_insight.pipeline.config.models import PipelineConfig
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -81,14 +82,67 @@ class TestLoadConfigBaseOnly:
         tables:
           osa:       "{database}.{schema}.OSA_V1"
           hierarchy: "{database}.{schema}.HIERARCHY_V1"
+          feedback:  "{database}.{schema}.FEEDBACK_V1"
+          markdown_log: "{database}.{schema}.MARKDOWN_LOG_V1"
+          markdown_sales: "{database}.{schema}.MARKDOWN_SALES_V1"
+          wastage: "{database}.{schema}.WASTAGE_V1"
+          wmd_item_hierarchy: "{database}.{schema}.WMD_ITEM_HIERARCHY_V1"
+          wmd_store_hierarchy: "{database}.{schema}.WMD_STORE_HIERARCHY_V1"
         output:
           alerts: "{database}.{schema}.ALERTS_PIPELINE"
           signals: "{database}.{schema}.ALERTS_SIGNALS"
-        thresholds:
+          top_n_per_store: 10
+          signal_type_buckets:
+            OSA: Availability
+            COMPLIANCE: Compliance
+            MARKDOWN_OVERRIDE: Markdown
+            MARKDOWN_SELLTHROUGH: Markdown
+            MARKDOWN_SKU: Markdown
+            WASTE: Waste
+        detector_config:
+          thresholds:
+            shared:
+              section: DEPARTMENT_NAME
+            OSA:
+              min_wow_drop: 0.01
+            COMPLIANCE: {}
+            MARKDOWN_OVERRIDE: {}
+            WASTE: {}
+            MARKDOWN_SELLTHROUGH: {}
+            MARKDOWN_SKU: {}
+          lookback_windows:
+            osa: 69
+            wmd: 28
+        detectors:
+          enabled:
+            - osa.wow
+        gatherers:
+          OSA: []
+          COMPLIANCE: []
+          MARKDOWN_OVERRIDE: []
+          WASTE: []
+          MARKDOWN_SELLTHROUGH: []
+          MARKDOWN_SKU: []
+        investigation:
           OSA:
-            min_wow_drop: 0.01
+            engine: rule_based
+            skill_file: skills/osa_investigation_skill.md
+          COMPLIANCE: {}
+          MARKDOWN_OVERRIDE: {}
+          WASTE: {}
+          MARKDOWN_SELLTHROUGH: {}
+          MARKDOWN_SKU: {}
+          max_workers: 8
+        schedule:
+          cron: "0 6 * * *"
+          timezone: Europe/London
+        scoring:
+          score_weights:
+            OSA: 1.0
         logging:
           write_signals: true
+          write_enriched: false
+          write_run_log: false
     """
 
     @pytest.fixture()
@@ -103,27 +157,36 @@ class TestLoadConfigBaseOnly:
         monkeypatch.setattr(loader_module, "_CLIENTS_DIR", tmp_path / "clients")
         return loader_module
 
-    def test_returns_dict(self, patched_loader):
+    def test_returns_pipeline_config(self, patched_loader):
         cfg = patched_loader.load_config()
-        assert isinstance(cfg, dict)
+        assert isinstance(cfg, PipelineConfig)
 
     def test_client_name_defaults_to_default(self, patched_loader):
         cfg = patched_loader.load_config()
-        assert cfg["client_name"] == "default"
+        assert cfg.client_name == "default"
 
     def test_output_placeholders_interpolated(self, patched_loader):
         cfg = patched_loader.load_config()
-        assert cfg["output"]["alerts"]  == "TEST_DB.TEST_SCHEMA.ALERTS_PIPELINE"
-        assert cfg["output"]["signals"] == "TEST_DB.TEST_SCHEMA.ALERTS_SIGNALS"
+        assert cfg.output.alerts  == "TEST_DB.TEST_SCHEMA.ALERTS_PIPELINE"
 
     def test_tables_placeholders_interpolated(self, patched_loader):
         cfg = patched_loader.load_config()
-        assert cfg["tables"]["osa"]       == "TEST_DB.TEST_SCHEMA.OSA_V1"
-        assert cfg["tables"]["hierarchy"] == "TEST_DB.TEST_SCHEMA.HIERARCHY_V1"
+        assert cfg.tables.osa       == "TEST_DB.TEST_SCHEMA.OSA_V1"
+        assert cfg.tables.hierarchy == "TEST_DB.TEST_SCHEMA.HIERARCHY_V1"
 
     def test_base_thresholds_present(self, patched_loader):
         cfg = patched_loader.load_config()
-        assert cfg["thresholds"]["OSA"]["min_wow_drop"] == 0.01
+        assert cfg.detector_config.thresholds.OSA["min_wow_drop"] == 0.01
+
+    def test_lookback_windows_present(self, patched_loader):
+        cfg = patched_loader.load_config()
+        assert cfg.detector_config.lookback_windows.osa == 69
+        assert cfg.detector_config.lookback_windows.wmd == 28
+
+    def test_signal_type_buckets_present(self, patched_loader):
+        cfg = patched_loader.load_config()
+        assert cfg.output.signal_type_buckets["OSA"].value == "Availability"
+        assert cfg.output.signal_type_buckets["WASTE"].value == "Waste"
 
 
 # ---------------------------------------------------------------------------
@@ -138,25 +201,81 @@ class TestLoadConfigWithClient:
           database:  BASE_DB
           schema:    BASE_SCHEMA
           role:      SYSADMIN
+        tables:
+          osa: "{database}.{schema}.OSA_V1"
+          hierarchy: "{database}.{schema}.HIERARCHY_V1"
+          feedback: "{database}.{schema}.FEEDBACK_V1"
+          markdown_log: "{database}.{schema}.MARKDOWN_LOG_V1"
+          markdown_sales: "{database}.{schema}.MARKDOWN_SALES_V1"
+          wastage: "{database}.{schema}.WASTAGE_V1"
+          wmd_item_hierarchy: "{database}.{schema}.WMD_ITEM_HIERARCHY_V1"
+          wmd_store_hierarchy: "{database}.{schema}.WMD_STORE_HIERARCHY_V1"
         output:
           alerts: "{database}.{schema}.ALERTS_PIPELINE"
-        thresholds:
-          OSA:
-            min_wow_drop:  0.01
-            min_chain_gap: 0.03
+          top_n_per_store: 10
+          signal_type_buckets:
+            OSA: Availability
+            COMPLIANCE: Compliance
+            MARKDOWN_OVERRIDE: Markdown
+            MARKDOWN_SELLTHROUGH: Markdown
+            MARKDOWN_SKU: Markdown
+            WASTE: Waste
+        detector_config:
+          thresholds:
+            shared:
+              section: DEPARTMENT_NAME
+            OSA:
+              min_wow_drop:  0.01
+              min_chain_gap: 0.03
+            COMPLIANCE: {}
+            MARKDOWN_OVERRIDE: {}
+            WASTE: {}
+            MARKDOWN_SELLTHROUGH: {}
+            MARKDOWN_SKU: {}
+          lookback_windows:
+            osa: 69
+            wmd: 28
         detectors:
           enabled:
             - osa.wow
             - osa.vs_chain
+        gatherers:
+          OSA: []
+          COMPLIANCE: []
+          MARKDOWN_OVERRIDE: []
+          WASTE: []
+          MARKDOWN_SELLTHROUGH: []
+          MARKDOWN_SKU: []
+        investigation:
+          OSA:
+            engine: rule_based
+            skill_file: skills/osa_investigation_skill.md
+          COMPLIANCE: {}
+          MARKDOWN_OVERRIDE: {}
+          WASTE: {}
+          MARKDOWN_SELLTHROUGH: {}
+          MARKDOWN_SKU: {}
+          max_workers: 8
+        schedule:
+          cron: "0 6 * * *"
+          timezone: Europe/London
+        scoring:
+          score_weights:
+            OSA: 1.0
+        logging:
+          write_signals: false
+          write_enriched: false
+          write_run_log: false
     """
 
     CLIENT_YAML = """
         connection:
           database: CLIENT_DB
           schema:   CLIENT_SCHEMA
-        thresholds:
-          OSA:
-            min_wow_drop: 0.05
+        detector_config:
+          thresholds:
+            OSA:
+              min_wow_drop: 0.05
     """
 
     @pytest.fixture()
@@ -176,29 +295,29 @@ class TestLoadConfigWithClient:
 
     def test_client_override_replaces_scalar(self, patched_loader):
         cfg = patched_loader.load_config("testclient")
-        assert cfg["thresholds"]["OSA"]["min_wow_drop"] == 0.05
+        assert cfg.detector_config.thresholds.OSA["min_wow_drop"] == 0.05
 
     def test_base_key_not_in_override_is_preserved(self, patched_loader):
         cfg = patched_loader.load_config("testclient")
-        assert cfg["thresholds"]["OSA"]["min_chain_gap"] == 0.03
+        assert cfg.detector_config.thresholds.OSA["min_chain_gap"] == 0.03
 
     def test_connection_nested_merge(self, patched_loader):
         cfg = patched_loader.load_config("testclient")
-        assert cfg["connection"]["database"]  == "CLIENT_DB"
-        assert cfg["connection"]["schema"]    == "CLIENT_SCHEMA"
-        assert cfg["connection"]["warehouse"] == "COMPUTE_WH"
+        assert cfg.connection.database  == "CLIENT_DB"
+        assert cfg.connection.schema_name    == "CLIENT_SCHEMA"
+        assert cfg.connection.warehouse == "COMPUTE_WH"
 
     def test_output_interpolated_with_client_connection(self, patched_loader):
         cfg = patched_loader.load_config("testclient")
-        assert cfg["output"]["alerts"] == "CLIENT_DB.CLIENT_SCHEMA.ALERTS_PIPELINE"
+        assert cfg.output.alerts == "CLIENT_DB.CLIENT_SCHEMA.ALERTS_PIPELINE"
 
     def test_client_name_set_in_config(self, patched_loader):
         cfg = patched_loader.load_config("testclient")
-        assert cfg["client_name"] == "testclient"
+        assert cfg.client_name == "testclient"
 
     def test_list_in_base_survives_when_not_overridden(self, patched_loader):
         cfg = patched_loader.load_config("testclient")
-        assert cfg["detectors"]["enabled"] == ["osa.wow", "osa.vs_chain"]
+        assert cfg.detectors.enabled == ["osa.wow", "osa.vs_chain"]
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +348,69 @@ class TestLoadConfigErrors:
 
 class TestEnvLoading:
 
-    BASE_YAML = "connection:\n  database: X\n  schema: Y\n"
+    BASE_YAML = """
+        connection:
+          warehouse: COMPUTE_WH
+          database: X
+          schema: Y
+        tables:
+          osa: "{database}.{schema}.OSA_V1"
+          hierarchy: "{database}.{schema}.HIERARCHY_V1"
+          feedback: "{database}.{schema}.FEEDBACK_V1"
+          markdown_log: "{database}.{schema}.MARKDOWN_LOG_V1"
+          markdown_sales: "{database}.{schema}.MARKDOWN_SALES_V1"
+          wastage: "{database}.{schema}.WASTAGE_V1"
+          wmd_item_hierarchy: "{database}.{schema}.WMD_ITEM_HIERARCHY_V1"
+          wmd_store_hierarchy: "{database}.{schema}.WMD_STORE_HIERARCHY_V1"
+        output:
+          alerts: "{database}.{schema}.ALERTS_PIPELINE"
+          top_n_per_store: 10
+          signal_type_buckets:
+            OSA: Availability
+            COMPLIANCE: Compliance
+            MARKDOWN_OVERRIDE: Markdown
+            MARKDOWN_SELLTHROUGH: Markdown
+            MARKDOWN_SKU: Markdown
+            WASTE: Waste
+        detector_config:
+          thresholds:
+            shared: {}
+            OSA: {}
+            COMPLIANCE: {}
+            MARKDOWN_OVERRIDE: {}
+            WASTE: {}
+            MARKDOWN_SELLTHROUGH: {}
+            MARKDOWN_SKU: {}
+          lookback_windows:
+            osa: 69
+            wmd: 28
+        detectors:
+          enabled: []
+        gatherers:
+          OSA: []
+          COMPLIANCE: []
+          MARKDOWN_OVERRIDE: []
+          WASTE: []
+          MARKDOWN_SELLTHROUGH: []
+          MARKDOWN_SKU: []
+        investigation:
+          OSA: {}
+          COMPLIANCE: {}
+          MARKDOWN_OVERRIDE: {}
+          WASTE: {}
+          MARKDOWN_SELLTHROUGH: {}
+          MARKDOWN_SKU: {}
+          max_workers: 8
+        schedule:
+          cron: "0 6 * * *"
+          timezone: Europe/London
+        scoring:
+          score_weights: {}
+        logging:
+          write_signals: false
+          write_enriched: false
+          write_run_log: false
+    """
 
     @pytest.fixture()
     def patched_loader(self, tmp_path, monkeypatch):
