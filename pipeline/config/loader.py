@@ -68,7 +68,7 @@ def _interpolate_placeholders(cfg: dict) -> dict:
     """
     conn = cfg.get('connection', {})
     db   = conn.get('database', '')
-    sch  = conn.get('schema', '')
+    sch  = conn.get('schema_name', '')
 
     for section in ('output', 'tables'):
         block = cfg.get(section, {})
@@ -144,6 +144,10 @@ def load_config(client: str = None) -> PipelineConfig:
 
     # ── Store client name in config ────────────────────────────────────────
     cfg.setdefault('client_name', client or 'default')
+
+    # ── Map YAML 'schema' to model 'schema_name' ────────────────────────────
+    if 'connection' in cfg and 'schema' in cfg['connection']:
+        cfg['connection']['schema_name'] = cfg['connection'].pop('schema')
 
     # ── Interpolate {database}/{schema} placeholders in tables + output ────
     cfg = _interpolate_placeholders(cfg)
