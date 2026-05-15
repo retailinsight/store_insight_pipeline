@@ -89,20 +89,20 @@ from store_insight.pipeline.pipeline.session import create_session
 # aliasing, dedup, and casting; this module only filters by the analysis
 # window and applies pipeline-level joins / NULL filters.
 
-def load_feedback(session, last_week_start, this_week_end, cfg: dict):
+def load_feedback(session, last_week_start, this_week_end, cfg=None):
     """
     Load and cache alert feedback for the two-week window.
     Used by the TICK_AND_FLICK detector and fact gatherer.
     """
     return (
-        session.table(cfg['tables']['feedback'])
+        session.table(cfg.tables.feedback if cfg else 'FEEDBACK_V1')
         .filter(F.col('ALERT_ANALYSIS_DATE') >= last_week_start)
         .filter(F.col('ALERT_ANALYSIS_DATE') <= this_week_end)
         .cache_result()
     )
 
 
-def load_osa(session, lookback_start, analysis_date, cfg: dict):
+def load_osa(session, lookback_start, analysis_date, cfg=None):
     """
     Load and join OSA + item hierarchy data for the lookback window.
     Result is cached in Snowflake for fast repeated access during the pipeline.
@@ -113,12 +113,12 @@ def load_osa(session, lookback_start, analysis_date, cfg: dict):
     the SQL views.
     """
     osa_raw = (
-        session.table(cfg['tables']['osa'])
+        session.table(cfg.tables.osa if cfg else 'OSA_V1')
         .filter(F.col('ANALYSIS_DATE') >= lookback_start)
         .filter(F.col('ANALYSIS_DATE') <= analysis_date)
     )
 
-    item = session.table(cfg['tables']['hierarchy'])
+    item = session.table(cfg.tables.hierarchy if cfg else 'HIERARCHY_V1')
 
     return (
         osa_raw
@@ -128,7 +128,7 @@ def load_osa(session, lookback_start, analysis_date, cfg: dict):
     )
 
 
-def load_wmd(session, wmd_lookback, analysis_date, cfg: dict):
+def load_wmd(session, wmd_lookback, analysis_date, cfg=None):
     """
     Load and cache all WMD tables (markdown log, markdown sales, wastage,
     item hierarchy, store hierarchy) for the 4-week lookback window.
@@ -141,28 +141,28 @@ def load_wmd(session, wmd_lookback, analysis_date, cfg: dict):
     dict with keys: markdown_log, markdown_sales, wastage,
                     item_hierarchy, store_hierarchy
     """
-    tables = cfg['tables']
+    tables = cfg.tables if cfg else None
 
     markdown_log = (
-        session.table(tables['markdown_log'])
+        session.table(tables.markdown_log if tables else 'MARKDOWN_LOG_V1')
         .filter(F.col('LOCAL_DATE') >= wmd_lookback)
         .filter(F.col('LOCAL_DATE') <= analysis_date)
         .cache_result()
     )
     markdown_sales = (
-        session.table(tables['markdown_sales'])
+        session.table(tables.markdown_sales if tables else 'MARKDOWN_SALES_V1')
         .filter(F.col('DATE') >= wmd_lookback)
         .filter(F.col('DATE') <= analysis_date)
         .cache_result()
     )
     wastage = (
-        session.table(tables['wastage'])
+        session.table(tables.wastage if tables else 'WASTAGE_V1')
         .filter(F.col('DATE') >= wmd_lookback)
         .filter(F.col('DATE') <= analysis_date)
         .cache_result()
     )
-    item_hierarchy  = session.table(tables['wmd_item_hierarchy']).cache_result()
-    store_hierarchy = session.table(tables['wmd_store_hierarchy']).cache_result()
+    item_hierarchy  = session.table(tables.wmd_item_hierarchy if tables else 'WMD_ITEM_HIERARCHY_V1').cache_result()
+    store_hierarchy = session.table(tables.wmd_store_hierarchy if tables else 'WMD_STORE_HIERARCHY_V1').cache_result()
 
     return {
         'markdown_log':    markdown_log,
@@ -177,15 +177,13 @@ def load_wmd(session, wmd_lookback, analysis_date, cfg: dict):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _get_existing_run_dates(session, cfg: dict = None):
+def _get_existing_run_dates(session, cfg=None):
     """
     Return the set of RUN_DATE values already present in the output table.
     Returns an empty set if the table does not yet exist.
     """
     if cfg:
-        output_table = cfg.get('output', {}).get(
-            'alerts', 'SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_PIPELINE'
-        )
+        output_table = cfg.output.alerts
     else:
         output_table = os.environ.get(
             'ALERTS_OUTPUT_TABLE', 'SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_PIPELINE'
@@ -210,15 +208,15 @@ def _date_range(start: datetime.date, end: datetime.date):
 def run_single_date(
     session, analysis_date: datetime.date, run_date: str,
     store_id=None, overwrite=False, full_replace=False,
-    target_table: str | None = None, cfg: dict = None,
+    target_table: str | None = None, cfg=None,
 ):
     """
     Run the full pipeline for one analysis_date and write results.
     OSA and feedback data are loaded fresh for each call.
     """
-    w = derive_windows(analysis_date)
+    w = derive_windows(analysis_date, cfg=cfg)
 
-    client = (cfg or {}).get('client_name', 'default')
+    client = cfg.client_name if cfg else 'default'
     print(f'[run_batch] client        : {client}')
     print(f'[run_batch] analysis_date : {analysis_date}')
     print(f'[run_batch] run_date      : {run_date}')
@@ -328,7 +326,7 @@ def main():
 
     # ── Load config (merges base + client YAML, loads .env) ───────────────
     cfg = load_config(args.client)
-    print(f'[run_batch] Config loaded: client={cfg["client_name"]}')
+    print(f'[run_batch] Config loaded: client={cfg.client_name}')
 
     # ── Capability validation: every enabled detector/gatherer must have
     #    its required contracts deployed for this client.  Fail fast here
@@ -350,11 +348,11 @@ def main():
         # Strip per-signal-type engine overrides so investigate() falls back
         # to signal_type_investigators.yaml defaults (all rule_based).
         # Preserve non-engine settings like investigation.max_workers.
-        inv = cfg.get('investigation') or {}
-        cfg['investigation'] = {
-            k: v for k, v in inv.items()
+        inv_dict = cfg.investigation.model_dump() if cfg and cfg.investigation else {}
+        cfg.investigation = type(cfg.investigation)(**{
+            k: v for k, v in inv_dict.items()
             if not (isinstance(v, dict) and 'engine' in v)
-        }
+        }) if cfg else None
         print('[run_batch] --deterministic: forcing rule_based narratives '
               'for all signal types.')
 

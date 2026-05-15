@@ -61,9 +61,9 @@ pipeline/        ← orchestrate a single weekly run
     ↓
 stages/
   _1_detect/     ← run detectors → list of signals
-  _2_facts/      ← run gatherers → enrich each signal with supporting data
-  _3_investigate/← run narrative engine → write plain-English explanation per signal
-  _4_score/      ← rank signals by cost / severity → sort_value
+  _3_facts/      ← run gatherers → enrich each signal with supporting data
+  _4_investigate/← run narrative engine → write plain-English explanation per signal
+  _2_score/      ← rank signals by cost / severity → sort_value
     ↓
 Snowflake output tables
 ```
@@ -91,9 +91,9 @@ pipeline/
 │
 ├── stages/
 │   ├── _1_detect/           Detector registry + detectors/{osa,compliance,markdown_override,markdown_sellthrough,markdown_sku,waste}/
-│   ├── _2_facts/            Fact gatherer registry + individual gatherers
-│   ├── _3_investigate/      Rule-based and Cortex narrative engines + skills/
-│   └── _4_score/            LSV-weighted scoring
+│   ├── _3_facts/            Fact gatherer registry + individual gatherers
+│   ├── _4_investigate/      Rule-based and Cortex narrative engines + skills/
+│   └── _2_score/            LSV-weighted scoring
 │
 ├── deploy/                  Snowflake SP + Task deployment (see deploy/README.md)
 ├── docs/                    architecture.md, semantic_model.md
@@ -111,7 +111,7 @@ Configuration is split across two layers:
 | Layer | File | Purpose |
 |---|---|---|
 | Deployment config | `config/base/default.yaml` | Snowflake connection, table names, enabled detectors, schedules |
-| Runtime config | `pipeline/config.py` `DetectorConfig` | Typed threshold values passed into the pipeline at runtime |
+| Runtime config | `pipeline/config/models.py` `PipelineConfig` | Typed Pydantic models with validation |
 
 Client-specific overrides live in `config/clients/<name>/client.yaml`.  
 Only keys that differ from the defaults need to be listed — everything else is inherited.
@@ -121,6 +121,20 @@ To load config for a client:
 from store_insight.pipeline.config.loader import load_config
 
 cfg = load_config('eastofengland')
+```
+
+The returned `PipelineConfig` provides typed attribute access:
+```python
+# Table names with interpolation
+cfg.tables.osa
+cfg.output.alerts
+
+# Detector configuration
+cfg.detector_config.thresholds.OSA.min_wow_drop
+cfg.detector_config.lookback_windows.osa
+
+# Signal type buckets
+cfg.output.signal_type_buckets['OSA']
 ```
 
 ---

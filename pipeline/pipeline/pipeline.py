@@ -1,12 +1,16 @@
 """
 Alerts Pipeline — Orchestrator
 =================================
-Wires the four stages together into a single ``run_pipeline`` call:
+Wires the five stages together into a single ``run_pipeline`` call:
 
-    Stage 1  1_detect/detect.py       detect_signals()
-    Stage 2  2_facts/facts.py         enrich_signals()
-    Stage 3  3_investigate/investigate.py  investigate()
-    Stage 4  4_score/score.py         score()
+    Stage 1  _1_detect/detect.py          detect_signals()  — all signals
+    Stage 2  _2_score/score.py            score_all()       — score stamped on each signal
+    Stage 3  (filter)                     top_n_per_store   — drop low-priority signals
+    Stage 4  _3_facts/facts.py            enrich_signals()  — facts for filtered signals only
+    Stage 5  _4_investigate/investigate.py investigate()     — narratives for filtered signals only
+
+Scoring before enrichment means ``top_n_per_store`` drops low-priority signals
+before any DB work or LLM calls run, significantly reducing cost on large batches.
 
 Also provides ``write_alerts()`` to persist the resulting alert cards to
 Snowflake, and ``save_signals`` / ``load_signals`` / ``run_pipeline_from_signals``
@@ -54,79 +58,79 @@ from concurrent.futures import ThreadPoolExecutor
 
 from store_insight.pipeline.pipeline.config import DetectorConfig
 from store_insight.pipeline.stages._1_detect.detect import detect_signals
-from store_insight.pipeline.stages._2_facts.facts import enrich_signals
-from store_insight.pipeline.stages._3_investigate.investigate import investigate
-from store_insight.pipeline.stages._4_score.score import score
-
-_DEFAULT_OUTPUT_TABLE = 'SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_PIPELINE'
-
-# Maps a signal's ``signal_type`` to the coarse alert bucket written to the
-# output table's ``TYPE`` column. Used by downstream dashboards.
-_SIGNAL_TYPE_BUCKET = {
-    'OSA':                  'Availability',
-    'COMPLIANCE':           'Compliance',
-    'MARKDOWN_OVERRIDE':    'Markdown',
-    'MARKDOWN_SELLTHROUGH': 'Markdown',
-    'MARKDOWN_SKU':         'Markdown',
-    'WASTE':                'Waste',
-}
-
-# Lookback lengths in days, used by ``derive_windows``.
-_OSA_LOOKBACK_DAYS = 69   # ~10 weeks — required by the OSA REPEAT detector
-_WMD_LOOKBACK_DAYS = 28   # 4 weeks — required by MARKDOWN_SKU detectors
-
+from store_insight.pipeline.stages._2_score.score import score_all
+from store_insight.pipeline.stages._3_facts.facts import enrich_signals
+from store_insight.pipeline.stages._4_investigate.investigate import investigate
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def derive_windows(analysis_date) -> dict:
+def derive_windows(analysis_date, cfg=None) -> dict:
     """
     Return the date-string windows used throughout the pipeline.
 
     Parameters
     ----------
     analysis_date : datetime.date | str — last day of the current week.
+    cfg : PipelineConfig | None — config for lookback window lengths.
 
     Returns
     -------
     dict with keys:
         this_week_start, this_week_end,
         last_week_start, last_week_end,
-        lookback_start   — 10-week OSA REPEAT window,
-        wmd_lookback     — 4-week WMD window.
+        lookback_start   — OSA REPEAT window,
+        wmd_lookback     — WMD window.
     """
     if isinstance(analysis_date, str):
         ad = datetime.date.fromisoformat(analysis_date)
     else:
         ad = analysis_date
+
+    # Get lookback days from config, use defaults if not provided
+    osa_lookback = cfg.detector_config.lookback_windows.osa if cfg else 69
+    wmd_lookback = cfg.detector_config.lookback_windows.wmd if cfg else 28
+
     return {
         'this_week_end':   str(ad),
         'this_week_start': str(ad - datetime.timedelta(days=6)),
         'last_week_end':   str(ad - datetime.timedelta(days=7)),
         'last_week_start': str(ad - datetime.timedelta(days=13)),
-        'lookback_start':  str(ad - datetime.timedelta(days=_OSA_LOOKBACK_DAYS)),
-        'wmd_lookback':    str(ad - datetime.timedelta(days=_WMD_LOOKBACK_DAYS)),
+        'lookback_start':  str(ad - datetime.timedelta(days=osa_lookback)),
+        'wmd_lookback':    str(ad - datetime.timedelta(days=wmd_lookback)),
     }
 
 
-def _resolve_config(config: 'DetectorConfig' = None, cfg: dict = None) -> DetectorConfig:
+def _resolve_config(config: 'DetectorConfig' = None, cfg=None) -> DetectorConfig:
     """Pick the most-specific DetectorConfig: explicit arg > cfg dict > defaults."""
     if config is not None:
         return config
     if cfg is not None:
-        return DetectorConfig.from_config(cfg)
+        # Extract thresholds from detector_config
+        thresholds_dict = cfg.detector_config.thresholds.model_dump() if cfg.detector_config else {}
+        return DetectorConfig.from_config({'thresholds': thresholds_dict})
     return DetectorConfig()
 
 
-def _build_card(sig: dict, narrative: dict, sort_value: float) -> dict:
+def _build_card(sig: dict, narrative: dict, sort_value: float, cfg=None) -> dict:
     """Assemble a single alert-card dict from enriched signal + narrative + score."""
     signal_wo_facts = {k: v for k, v in sig.items() if k != 'facts'}
+
+    # Get signal type bucket from config, use default if not provided
+    signal_type_buckets = cfg.output.signal_type_buckets if cfg else None
+    default_type = 'Availability'
+    if signal_type_buckets:
+        bucket = signal_type_buckets.get(sig['signal_type'])
+        type_value = bucket.value if bucket else default_type
+    else:
+        type_value = default_type
+
     return {
         'alert_type':         ','.join(sorted(sig['trigger_types'])),
         'store_id':           sig['store_id'],
         'section':            sig.get('department'),
-        'type':               _SIGNAL_TYPE_BUCKET.get(sig['signal_type'], 'Availability'),
+        'type':               type_value,
         'trigger_types':      sig['trigger_types'],
         'issue':              narrative['issue'],
         'explanation':        narrative['explanation'],
@@ -197,11 +201,11 @@ def _card_to_row(card: dict, run_date: str) -> tuple:
     )
 
 
-def _output_table(cfg: dict = None) -> str:
+def _output_table(cfg=None) -> str:
     """Resolve the output table name from config or env var fallback."""
     if cfg:
-        return cfg.get('output', {}).get('alerts', _DEFAULT_OUTPUT_TABLE)
-    return os.environ.get('ALERTS_OUTPUT_TABLE', _DEFAULT_OUTPUT_TABLE)
+        return cfg.output.alerts
+    return os.environ.get('ALERTS_OUTPUT_TABLE', 'SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_PIPELINE')
 
 
 def run_pipeline(
@@ -223,7 +227,7 @@ def run_pipeline(
     item_hierarchy=None,
     store_hierarchy=None,
     config: DetectorConfig = None,
-    cfg: dict = None,
+    cfg=None,
 ):
     """
     Run the full alerts pipeline and return a list of alert card dicts.
@@ -254,8 +258,8 @@ def run_pipeline(
     store_hierarchy  : optional cached Snowpark DataFrame — SOURCE_WMD_STORE_HIERARCHY;
                        required for MARKDOWN_SKU detectors (site_name lookup)
     config           : optional DetectorConfig — threshold overrides
-    cfg              : optional dict — merged config from config.loader.load_config;
-                       used for output table names and detector/gatherer selection
+    cfg              : optional PipelineConfig — merged config from config.loader.load_config;
+                       used for output table names, detector/gatherer selection, and lookback windows
 
     Returns
     -------
@@ -365,7 +369,7 @@ def run_pipeline_from_signals(
     wastage=None,
     item_hierarchy=None,
     config: DetectorConfig = None,
-    cfg: dict = None,
+    cfg=None,
 ):
     """
     Run Stages 2–4 (facts → investigate → score) from a pre-computed signals list,
@@ -397,6 +401,7 @@ def run_pipeline_from_signals(
     item_hierarchy   : optional cached Snowpark DataFrame — SOURCE_WMD_ITEM_HIERARCHY;
                        required for WMD dept breakdown gatherers
     config           : optional DetectorConfig — threshold overrides
+    cfg              : optional PipelineConfig — merged config from config.loader.load_config
 
     Returns
     -------
@@ -411,6 +416,29 @@ def run_pipeline_from_signals(
         lookback_start = str(end - datetime.timedelta(weeks=10))
 
     det_cfg = _resolve_config(config, cfg)
+
+    score_all(
+        signals,
+        this_week_start=this_week_start,
+        this_week_end=this_week_end,
+        osa=osa,
+        markdown_log=markdown_log,
+        markdown_sales=markdown_sales,
+        score_weights=cfg.scoring.score_weights if cfg and cfg.scoring else None,
+    )
+
+    top_n = top_n_per_store if top_n_per_store is not None else int((cfg.output.top_n_per_store if cfg else 0) or 0) or None
+    if top_n:
+        signals = sorted(signals, key=lambda s: s.get('score', 0), reverse=True)
+        store_counts: dict[int, int] = {}
+        filtered_signals = []
+        for sig in signals:
+            sid = sig['store_id']
+            if store_counts.get(sid, 0) < top_n:
+                filtered_signals.append(sig)
+                store_counts[sid] = store_counts.get(sid, 0) + 1
+        print(f'[pipeline] top_n_per_store={top_n}: {len(signals)} → {len(filtered_signals)} signals before enrichment')
+        signals = filtered_signals
 
     enriched = enrich_signals(
         signals,
@@ -431,7 +459,7 @@ def run_pipeline_from_signals(
         cfg=cfg,
     )
 
-    max_workers = int((cfg or {}).get('investigation', {}).get('max_workers', 8))
+    max_workers = int(cfg.investigation.max_workers if cfg and cfg.investigation else 8)
 
     def _investigate_one(sig):
         return sig, investigate(sig, session=session, cfg=cfg)
@@ -445,22 +473,9 @@ def run_pipeline_from_signals(
         results = [_investigate_one(sig) for sig in enriched]
 
     for sig, narrative in results:
-        sort_value = score({**sig, **narrative})
-        cards.append(_build_card(sig, narrative, sort_value))
+        cards.append(_build_card(sig, narrative, sig['score'], cfg=cfg))
 
     cards.sort(key=lambda x: x['sort_value'], reverse=True)
-
-    top_n = top_n_per_store if top_n_per_store is not None else int((cfg or {}).get('output', {}).get('top_n_per_store', 0)) or None
-    if top_n:
-        store_counts: dict[int, int] = {}
-        filtered = []
-        for card in cards:
-            sid = card['store_id']
-            if store_counts.get(sid, 0) < top_n:
-                filtered.append(card)
-                store_counts[sid] = store_counts.get(sid, 0) + 1
-        print(f'[pipeline] top_n_per_store={top_n}: {len(cards)} → {len(filtered)} cards')
-        cards = filtered
 
     print(f'[pipeline] {len(cards)} alert cards produced')
     return cards
@@ -471,7 +486,7 @@ def write_alerts(
     overwrite: bool = False,
     full_replace: bool = False,
     target_table: str | None = None,
-    cfg: dict = None,
+    cfg=None,
 ):
     """
     Write alert cards to Snowflake.
@@ -504,9 +519,9 @@ def write_alerts(
     full_replace  : bool — switch to FULL_REPLACE mode (destructive)
     target_table  : str | None — if provided, write to this fully-qualified
                     Snowflake table instead of the one in
-                    ``cfg['output']['alerts']``.  Useful for ad-hoc test
+                    ``cfg.output.alerts``.  Useful for ad-hoc test
                     runs without editing the YAML config.
-    cfg           : optional dict — merged config; resolves output table name
+    cfg           : optional PipelineConfig — merged config; resolves output table name
     """
     if overwrite and full_replace:
         raise ValueError(
