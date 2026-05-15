@@ -116,20 +116,16 @@
 }
 
 .chat-submenu {
-  @apply hidden sm:flex shrink-0 items-start my-4 mx-2;
+  @apply flex shrink-0 items-start my-4 mx-2;
 }
 
 .chat-submenu-inner {
-  @apply flex flex-col items-center gap-1 py-4 px-2 rounded-[64px] bg-black/5;
+  @apply flex flex-col items-center gap-3 py-4 px-2 rounded-[64px] bg-black/5;
   width: 52px;
 }
 
 .chat-submenu-btn {
-  @apply flex items-center justify-center p-3 rounded-sm transition-colors hover:bg-black/5;
-}
-
-.chat-submenu-btn--bordered {
-  @apply border-b border-[#CDCECC] rounded-none pb-4 w-full justify-center;
+  @apply flex items-center justify-center p-2 rounded-sm transition-colors hover:bg-black/5;
 }
 
 .chat-main {
@@ -157,8 +153,8 @@
   min-height: 72px;
 }
 
-.chat-input-placeholder {
-  @apply flex-1 font-dm-sans text-sm font-normal text-black leading-5;
+.chat-input-field {
+  @apply w-full bg-transparent border-0 font-dm-sans text-sm font-normal text-black leading-5 placeholder:text-brand-secondary-300 focus:outline-none;
 }
 
 .chat-input-actions {
@@ -174,4 +170,10 @@
   font-family: Tahoma, sans-serif;
   font-size: 11px;
   line-height: 1.625;
+}
+
+@media (max-width: 767px) {
+  .chat-submenu {
+    margin-top: 72px;
+  }
 }
