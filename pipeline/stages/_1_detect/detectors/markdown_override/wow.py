@@ -38,8 +38,8 @@ def _weekly_store_override_rates(markdown_log, week_start, week_end, prefix):
     return (
         markdown_log
         .filter(
-            (F.col('LOCAL_DATE') >= week_start) &
-            (F.col('LOCAL_DATE') <= week_end)
+            (F.col('DATE') >= week_start) &
+            (F.col('DATE') <= week_end)
         )
         .group_by('STORE_ID')
         .agg(

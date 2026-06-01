@@ -17,7 +17,7 @@ description: |
 
 grain:
   - STORE_ID
-  - ITEM_ID
+  - UPC
   - WASTE_DATETIME
 
 columns:
@@ -26,13 +26,13 @@ columns:
     required: true
     description: Store the waste was recorded at.
 
-  ITEM_ID:
+  UPC:
     type: NUMBER
     required: true
     description: |
-      Item identifier.  Required because the department-breakdown gatherer
-      joins waste rows to wmd_item_hierarchy via this column; rows with
-      NULL ITEM_ID would silently drop out of departmental breakdowns.
+      Item identifier (UPC).  Required because the department-breakdown gatherer
+      joins waste rows to wmd_hierarchy via this column; rows with
+      NULL UPC would silently drop out of departmental breakdowns.
       Waste detectors that aggregate at store/week grain will simply ignore
       this column.
 
@@ -72,12 +72,12 @@ columns:
       future segmentation.
 
 joins:
-  - contract: wmd_item_hierarchy
+  - contract: wmd_hierarchy
     cardinality: many_to_one
     match:
-      ITEM_ID: ITEM_ID
+      UPC: UPC
     purpose: Resolve department for department-breakdown gatherer.
-  - contract: wmd_store_hierarchy
+  - contract: store_hierarchy
     cardinality: many_to_one
     match:
       STORE_ID: STORE_ID

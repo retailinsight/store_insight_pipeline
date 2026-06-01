@@ -9,12 +9,18 @@
 -- the source so duplicate rows are eliminated up front; the NULL-department
 -- filter remains a pipeline concern (since whether a NULL department row
 -- should be excluded is a detector-level decision).
+--
+-- 2026-06-01: Updated to match actual LSM_ITEM_HIERARCHY schema and enable
+-- unified hierarchy usage for both OSA and WMD pipelines.
 
 CREATE OR REPLACE VIEW SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.HIERARCHY_V1 AS
 SELECT DISTINCT
-    MASTER_ITEM_ID              AS ITEM_CODE,
-    ITEM_ID,
-    DEPARTMENT_NAME,
-    SUBCLASS_NAME,
-    PRODUCT_PROFILE_GROUP_NAME
+    ITEM_ID                     AS ITEM_CODE,
+    DIVISION_NAME               AS ITEM_HIERARCHY_1,
+    DEPARTMENT_NAME             AS ITEM_HIERARCHY_2,
+    PRODUCT_PROFILE_GROUP_NAME  AS ITEM_HIERARCHY_3,
+    DIVISION_ID                 AS ITEM_HIERARCHY_ID_1,
+    DEPARTMENT_ID               AS ITEM_HIERARCHY_ID_2,
+    PRODUCT_PROFILE_GROUP_ID    AS ITEM_HIERARCHY_ID_3,
+    ITEM_NAME                   AS ITEM_DESCRIPTION
 FROM ANALYSIS.FINAL.LSM_ITEM_HIERARCHY;

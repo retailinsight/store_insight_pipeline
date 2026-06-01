@@ -15,9 +15,9 @@ from pathlib import Path
 import yaml
 from store_insight.pipeline.stages._1_detect import registry as detect_registry
 from store_insight.pipeline.stages._1_detect.protocols import DetectorModule
-from store_insight.pipeline.stages._2_facts import registry as facts_registry
-from store_insight.pipeline.stages._2_facts.protocols import GathererModule
-from store_insight.pipeline.stages._3_investigate import investigate as inv_mod
+from store_insight.pipeline.stages._3_facts import registry as facts_registry
+from store_insight.pipeline.stages._3_facts.protocols import GathererModule
+from store_insight.pipeline.stages._4_investigate import investigate as inv_mod
 
 # ---------------------------------------------------------------------------
 # Protocol compliance (runtime_checkable)
@@ -42,7 +42,7 @@ def test_every_gatherer_satisfies_protocol():
 # ---------------------------------------------------------------------------
 
 def _gatherer_yaml_path():
-    import store_insight.pipeline.stages._2_facts.registry as reg
+    import store_insight.pipeline.stages._3_facts.registry as reg
     return Path(reg.__file__).parent / 'signal_type_gatherers.yaml'
 
 
@@ -121,25 +121,15 @@ def test_every_known_signal_type_has_an_investigator():
     assert KNOWN_SIGNAL_TYPES.issubset(inv_mod.SIGNAL_TYPE_MAP.keys())
 
 
-def test_every_known_signal_type_has_a_scoring_branch():
-    """
-    If the `score` function doesn't explicitly handle a signal_type, it falls
-    through to the default scorer that multiplies `this_week_lsv` by trigger
-    weight — that's meaningless for non-OSA types that don't track LSV, so we
-    want an explicit branch for each.  OSA is designed to use the default.
-    COMPLIANCE is dispatched via its trigger-type marker 'TICK_AND_FLICK'
-    rather than the signal_type string, so we accept either.
-    """
-    import inspect
+def test_every_known_signal_type_has_a_scorer():
+    """Every signal type must have a registered scorer in SIGNAL_TYPE_SCORERS."""
+    from store_insight.pipeline.stages._2_score import registry as score_registry
 
-    from store_insight.pipeline.stages._4_score import score as score_mod
-    src = inspect.getsource(score_mod.score)
-
-    trigger_marker = {'COMPLIANCE': 'TICK_AND_FLICK'}
-
-    for stype in KNOWN_SIGNAL_TYPES - {'OSA'}:
-        marker = trigger_marker.get(stype, stype)
-        assert f"'{marker}'" in src, (
-            f'{stype} is not explicitly handled in score.score '
-            f'(looked for {marker!r})'
+    for stype in KNOWN_SIGNAL_TYPES:
+        assert stype in score_registry.SIGNAL_TYPE_SCORERS, (
+            f'{stype} has no entry in signal_type_scorers.yaml'
+        )
+        scorer = score_registry.SIGNAL_TYPE_SCORERS[stype]
+        assert callable(getattr(scorer, 'projected_cost', None)), (
+            f'{stype} scorer has no projected_cost() function'
         )

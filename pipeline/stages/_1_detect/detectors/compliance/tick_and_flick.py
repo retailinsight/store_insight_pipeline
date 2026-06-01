@@ -45,8 +45,8 @@ def _weekly_store_scores(feedback, week_start, week_end, prefix):
     return (
         feedback
         .filter(
-            (F.col('ALERT_ANALYSIS_DATE') >= week_start) &
-            (F.col('ALERT_ANALYSIS_DATE') <= week_end)
+            (F.col('DATE') >= week_start) &
+            (F.col('DATE') <= week_end)
         )
         .group_by('STORE_ID', 'SITE_NAME')
         .agg(
@@ -69,8 +69,8 @@ def _chain_tf_rate(feedback, week_start, week_end):
     row = (
         feedback
         .filter(
-            (F.col('ALERT_ANALYSIS_DATE') >= week_start) &
-            (F.col('ALERT_ANALYSIS_DATE') <= week_end)
+            (F.col('DATE') >= week_start) &
+            (F.col('DATE') <= week_end)
         )
         .agg(
             F.count('INTERVENTION_ID').alias('TOTAL_WORKED'),
@@ -107,7 +107,7 @@ def detect(
     Parameters
     ----------
     feedback             : Snowpark DataFrame from LSM_ALERT_FEEDBACK with columns:
-                           STORE_ID, SITE_NAME, ALERT_ANALYSIS_DATE,
+                           STORE_ID, SITE_NAME, DATE,
                            INTERVENTION_ID, TICK_AND_FLICK_FLAG, ALERT_TYPE_NAME
     last_week_start/end  : date strings (YYYY-MM-DD) for the previous week
     this_week_start/end  : date strings for the current week

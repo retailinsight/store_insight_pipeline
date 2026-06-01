@@ -72,10 +72,10 @@ def detect(
     windowed = (
         data
         .filter(
-            (F.col('LOCAL_DATE') >= window_start) &
-            (F.col('LOCAL_DATE') <= window_end)
+            (F.col('DATE') >= window_start) &
+            (F.col('DATE') <= window_end)
         )
-        .group_by('STORE_ID', 'ITEM_ID')
+        .group_by('STORE_ID', 'UPC')
         .agg(
             F.count('*').alias('TOTAL_REQUESTS'),
             F.sum(
@@ -97,9 +97,9 @@ def detect(
     )
 
     items = item_hierarchy.select(
-        F.col('ITEM_ID'),
+        F.col('UPC'),
         F.col('ITEM_DESCRIPTION'),
-        F.col('DEPARTMENT'),
+        F.col('ITEM_HIERARCHY_2').alias('DEPARTMENT'),
     ).distinct()
 
     stores = store_hierarchy.select(
@@ -109,7 +109,7 @@ def detect(
 
     joined = (
         windowed
-        .join(items, on='ITEM_ID', how='left')
+        .join(items, on='UPC', how='left')
         .join(stores, on='STORE_ID', how='left')
     )
 
@@ -117,11 +117,11 @@ def detect(
     for row in joined.collect():
         signals.append(make_markdown_sku_signal(
             store_id               = int(row['STORE_ID']),
-            item_id                = int(row['ITEM_ID']),
+            item_id                = int(row['UPC']),
             trigger_types          = ['EXCESSIVE_OVERRIDE'],
             site_name              = row['SITE_NAME'],
             item_description       = row['ITEM_DESCRIPTION'] or '',
-            department             = row['DEPARTMENT'] or '',
+            department             = str(row['DEPARTMENT'] or '') if row['DEPARTMENT'] is not None else '',
             markdown_request_count = int(row['TOTAL_REQUESTS'] or 0),
             override_count         = int(row['OVERRIDE_COUNT'] or 0),
             lookback_weeks         = lookback_weeks,

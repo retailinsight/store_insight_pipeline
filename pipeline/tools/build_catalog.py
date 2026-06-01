@@ -57,7 +57,7 @@ if str(_REPO_ROOT) not in sys.path:
 from store_insight.pipeline.pipeline.config import DetectorConfig  # noqa: E402
 from store_insight.pipeline.stages._1_detect import registry as detect_reg  # noqa: E402
 from store_insight.pipeline.stages._1_detect import signals as signals_mod  # noqa: E402
-from store_insight.pipeline.stages._2_facts import registry as facts_reg  # noqa: E402
+from store_insight.pipeline.stages._3_facts import registry as facts_reg  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Static metadata that is not derivable from the code alone
@@ -173,7 +173,7 @@ def _signal_fields(signal_type: str) -> list[dict]:
 
 def _read_skill(signal_type: str, skill_file: str) -> str:
     """Load the markdown contents of an investigator skill file."""
-    skills_root = _PIPELINE / 'stages' / '_3_investigate'
+    skills_root = _PIPELINE / 'stages' / '_4_investigate'
     path = skills_root / skill_file
     if not path.is_file():
         return ''
@@ -229,7 +229,7 @@ def _build_gatherers_by_signal_type() -> dict[str, list[dict]]:
 def _build_investigators() -> dict[str, dict]:
     """Load signal_type_investigators.yaml and inline each skill's markdown."""
     yaml_path = (
-        _PIPELINE / 'stages' / '_3_investigate' / 'signal_type_investigators.yaml'
+        _PIPELINE / 'stages' / '_4_investigate' / 'signal_type_investigators.yaml'
     )
     raw = yaml.safe_load(yaml_path.read_text(encoding='utf-8')) or {}
     out: dict[str, dict] = {}
@@ -297,9 +297,9 @@ def build_catalog() -> dict:
         ),
         'stages': {
             '1_detect':      'Run lightweight statistical detectors → list of signals.',
-            '2_facts':       'Enrich each signal with supporting data via dispatched gatherers.',
-            '3_investigate': 'Generate human-readable issue / explanation / recommended_action.',
-            '4_score':       'Rank signals (default: LSV × trigger-count) into sort_value.',
+            '2_score':       'Score each signal by projected £ cost; filter top-N per store before enrichment.',
+            '3_facts':       'Enrich filtered signals with supporting data via dispatched gatherers.',
+            '4_investigate': 'Generate human-readable issue / explanation / recommended_action.',
         },
         'signal_types': signal_types,
         'thresholds':   _build_thresholds(),

@@ -45,9 +45,9 @@ pipeline/pipeline.py      ← orchestrate run_pipeline()
        ↓
   ┌────────────────────────────────────────────────────┐
   │ Stage 1  _1_detect/detect.py     → list[signal]    │
-  │ Stage 2  _2_facts/facts.py       → enriched signals│
-  │ Stage 3  _3_investigate/         → narrative fields │
-  │ Stage 4  _4_score/score.py       → sort_value      │
+  │ Stage 2  _2_score/score.py       → score + filter  │
+  │ Stage 3  _3_facts/facts.py       → enriched signals│
+  │ Stage 4  _4_investigate/         → narrative fields │
   └────────────────────────────────────────────────────┘
        ↓
 pipeline/pipeline.py      → write_alerts() → Snowflake
@@ -76,9 +76,13 @@ Detectors live in `stages/_1_detect/detectors/<alert_type>/`. The registry auto-
 
 Signals sharing the same `merge_key` (per signal type — typically `(signal_type, store_id, department)` for OSA or `(signal_type, store_id)` for store-level signals) are combined into a single signal with multiple `trigger_types`.
 
-### Stage 2 — Facts
+### Stage 2 — Score
 
-Gatherers live in `stages/_2_facts/gatherers/`. Each declares which `signal_types` it serves and is dispatched automatically.
+Each signal is scored with `score_all()` (projected weekly £ cost via a per-type scorer registry). The `top_n_per_store` filter then drops low-priority signals before any DB work runs. Scorers live in `stages/_2_score/scorers/`; adding a new scorer requires only a new module and a line in `signal_type_scorers.yaml`.
+
+### Stage 3 — Facts
+
+Gatherers live in `stages/_3_facts/gatherers/`. Each declares which `signal_types` it serves and is dispatched automatically.
 
 | Gatherer | Signal type | Facts produced |
 |---|---|---|
@@ -93,7 +97,7 @@ Gatherers live in `stages/_2_facts/gatherers/`. Each declares which `signal_type
 | `markdown_sellthrough_dept_breakdown` | MARKDOWN_SELLTHROUGH | Top-N departments by lowest sell-through rate |
 | `markdown_sku_history` | MARKDOWN_SKU | Week-by-week markdown request and override history per SKU |
 
-### Stage 3 — Investigate
+### Stage 4 — Investigate
 
 Generates human-readable narrative fields: `issue`, `explanation`, `cost_if_not_fixed`, `recommended_action`.
 
@@ -102,11 +106,7 @@ Two engines are available, dispatched per signal type via `signal_type_investiga
 - **rule_based** — Deterministic string templates. Default. No external dependencies.
 - **cortex** — Snowflake Cortex LLM. Requires a Snowpark session. Falls back to rule_based on failure.
 
-Prompt context is loaded from skill files in `stages/_3_investigate/skills/`.
-
-### Stage 4 — Score
-
-Assigns a numeric `sort_value` so the most urgent alerts appear first. Default scorer: `lsv_trigger_weight.py` (LSV × trigger-count weighting). Accepts a pluggable `scorer` callable.
+Prompt context is loaded from skill files in `stages/_4_investigate/skills/`.
 
 ---
 
@@ -176,9 +176,9 @@ store_insight/
 │   │
 │   ├── stages/
 │   │   ├── _1_detect/                     Detector registry + detectors/{osa,compliance,markdown_override,markdown_sellthrough,markdown_sku,waste}/
-│   │   ├── _2_facts/                      Gatherer registry + gatherers/ + signal_type_gatherers.yaml
-│   │   ├── _3_investigate/                rule_based.py, cortex.py, skills/, signal_type_investigators.yaml
-│   │   └── _4_score/                      lsv_trigger_weight.py, score.py
+│   │   ├── _3_facts/                      Gatherer registry + gatherers/ + signal_type_gatherers.yaml
+│   │   ├── _4_investigate/                rule_based.py, cortex.py, skills/, signal_type_investigators.yaml
+│   │   └── _2_score/                      lsv_trigger_weight.py, score.py
 │   │
 │   ├── deploy/                            Snowflake SP + Task deployment
 │   ├── docs/                              architecture.md, semantic_model.md

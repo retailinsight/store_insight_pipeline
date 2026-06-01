@@ -67,7 +67,7 @@ def test_required_contracts_handles_real_tick_and_flick_detector():
 
 
 def test_required_contracts_handles_real_waste_dept_breakdown_gatherer():
-    from store_insight.pipeline.stages._2_facts.gatherers import waste_dept_breakdown
+    from store_insight.pipeline.stages._3_facts.gatherers import waste_dept_breakdown
 
     assert caps.required_contracts(waste_dept_breakdown.gather) == {
         'wastage', 'markdown_log', 'wmd_item_hierarchy',

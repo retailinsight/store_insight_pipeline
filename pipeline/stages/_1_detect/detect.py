@@ -199,13 +199,15 @@ def detect_signals(
     # ── Filter detectors by config ──────────────────────────────────────────
     detectors = _registry.ALL_DETECTORS
     if cfg:
-        enabled = cfg.get('detectors', {}).get('enabled')
-        if enabled is not None:
-            enabled_set = set(enabled)
-            detectors = [
-                d for d in detectors
-                if _detector_module_name(d) in enabled_set
-            ]
+        detectors_cfg = getattr(cfg, 'detectors', None)
+        if detectors_cfg is not None:
+            enabled = getattr(detectors_cfg, 'enabled', None)
+            if enabled is not None:
+                enabled_set = set(enabled)
+                detectors = [
+                    d for d in detectors
+                    if _detector_module_name(d) in enabled_set
+                ]
 
     all_signals = []
     counts = {}

@@ -32,8 +32,8 @@ tables:
   markdown_log:        "{database}.{schema}.MARKDOWN_LOG_V1"
   markdown_sales:      "{database}.{schema}.MARKDOWN_SALES_V1"
   wastage:             "{database}.{schema}.WASTAGE_V1"
-  wmd_item_hierarchy:  "{database}.{schema}.WMD_ITEM_HIERARCHY_V1"
-  wmd_store_hierarchy: "{database}.{schema}.WMD_STORE_HIERARCHY_V1"
+  store_hierarchy:     "{database}.{schema}.STORE_HIERARCHY_V1"
+  wmd_hierarchy:       "{database}.{schema}.WMD_HIERARCHY_V1"
 
 # ── Output tables ─────────────────────────────────────────────────────────────
 # {database} and {schema} are interpolated from the connection block above.
@@ -71,7 +71,7 @@ detectors:
 detector_config:
   thresholds:
     shared:
-      section:              DEPARTMENT_NAME
+      section:              ITEM_HIERARCHY_2
       min_lost_sales_value: 200.0
 
     OSA:

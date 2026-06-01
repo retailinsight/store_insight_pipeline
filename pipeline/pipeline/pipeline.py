@@ -58,7 +58,11 @@ from concurrent.futures import ThreadPoolExecutor
 
 from store_insight.pipeline.pipeline.config import DetectorConfig
 from store_insight.pipeline.stages._1_detect.detect import detect_signals
-from store_insight.pipeline.stages._2_score.score import score_all
+from store_insight.pipeline.stages._2_score.score import (
+    apply_top_n_filter,
+    score_all,
+    short_long_term_label,
+)
 from store_insight.pipeline.stages._3_facts.facts import enrich_signals
 from store_insight.pipeline.stages._4_investigate.investigate import investigate
 
@@ -113,7 +117,7 @@ def _resolve_config(config: 'DetectorConfig' = None, cfg=None) -> DetectorConfig
     return DetectorConfig()
 
 
-def _build_card(sig: dict, narrative: dict, sort_value: float, cfg=None) -> dict:
+def _build_card(sig: dict, narrative: dict, sort_value: float, cfg=None, label: str = 'Structural') -> dict:
     """Assemble a single alert-card dict from enriched signal + narrative + score."""
     signal_wo_facts = {k: v for k, v in sig.items() if k != 'facts'}
 
@@ -127,19 +131,20 @@ def _build_card(sig: dict, narrative: dict, sort_value: float, cfg=None) -> dict
         type_value = default_type
 
     return {
-        'alert_type':         ','.join(sorted(sig['trigger_types'])),
-        'store_id':           sig['store_id'],
-        'section':            sig.get('department'),
-        'type':               type_value,
-        'trigger_types':      sig['trigger_types'],
-        'issue':              narrative['issue'],
-        'explanation':        narrative['explanation'],
-        'cost_if_not_fixed':  narrative['cost_if_not_fixed'],
-        'recommended_action': narrative['recommended_action'],
-        'sort_value':         sort_value,
-        'llm_prompt':         narrative.get('_prompt'),
-        'signal_json':        signal_wo_facts,
-        'facts_json':         sig.get('facts', {}),
+        'alert_type':            ','.join(sorted(sig['trigger_types'])),
+        'store_id':              sig['store_id'],
+        'section':               sig.get('department'),
+        'type':                  type_value,
+        'trigger_types':         sig['trigger_types'],
+        'short_long_term_label': label,
+        'issue':                 narrative['issue'],
+        'explanation':           narrative['explanation'],
+        'cost_if_not_fixed':     narrative['cost_if_not_fixed'],
+        'recommended_action':    narrative['recommended_action'],
+        'sort_value':            sort_value,
+        'llm_prompt':            narrative.get('_prompt'),
+        'signal_json':           signal_wo_facts,
+        'facts_json':            sig.get('facts', {}),
     }
 
 
@@ -159,7 +164,8 @@ def _card_schema():
         StructField('STORE_ID',           IntegerType()),
         StructField('SECTION',            StringType()),
         StructField('TYPE',               StringType()),
-        StructField('TRIGGER_TYPES',      StringType()),
+        StructField('TRIGGER_TYPES',          StringType()),
+        StructField('SHORT_LONG_TERM_LABEL',    StringType()),
         StructField('ISSUE',              StringType()),
         StructField('EXPLANATION',        StringType()),
         StructField('COST_IF_NOT_FIXED',  StringType()),
@@ -190,6 +196,7 @@ def _card_to_row(card: dict, run_date: str) -> tuple:
         card['section'],
         card['type'],
         ','.join(card['trigger_types']),
+        card.get('short_long_term_label', 'Structural'),
         card['issue'],
         card['explanation'],
         card['cost_if_not_fixed'],
@@ -425,20 +432,15 @@ def run_pipeline_from_signals(
         markdown_log=markdown_log,
         markdown_sales=markdown_sales,
         score_weights=cfg.scoring.score_weights if cfg and cfg.scoring else None,
+        scoring_cfg=cfg.scoring if cfg and cfg.scoring else None,
     )
 
     top_n = top_n_per_store if top_n_per_store is not None else int((cfg.output.top_n_per_store if cfg else 0) or 0) or None
-    if top_n:
-        signals = sorted(signals, key=lambda s: s.get('score', 0), reverse=True)
-        store_counts: dict[int, int] = {}
-        filtered_signals = []
-        for sig in signals:
-            sid = sig['store_id']
-            if store_counts.get(sid, 0) < top_n:
-                filtered_signals.append(sig)
-                store_counts[sid] = store_counts.get(sid, 0) + 1
-        print(f'[pipeline] top_n_per_store={top_n}: {len(signals)} → {len(filtered_signals)} signals before enrichment')
-        signals = filtered_signals
+    max_per_type = int((cfg.output.max_per_type_per_store if cfg else 0) or 0) or None
+    if top_n or max_per_type:
+        before = len(signals)
+        signals = apply_top_n_filter(signals, top_n=top_n, max_per_type=max_per_type)
+        print(f'[pipeline] top_n={top_n} max_per_type={max_per_type}: {before} → {len(signals)} signals before enrichment')
 
     enriched = enrich_signals(
         signals,
@@ -473,7 +475,8 @@ def run_pipeline_from_signals(
         results = [_investigate_one(sig) for sig in enriched]
 
     for sig, narrative in results:
-        cards.append(_build_card(sig, narrative, sig['score'], cfg=cfg))
+        cards.append(_build_card(sig, narrative, sig['score'], cfg=cfg,
+                                   label=short_long_term_label(sig)))
 
     cards.sort(key=lambda x: x['sort_value'], reverse=True)
 

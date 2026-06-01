@@ -5,10 +5,18 @@ Typed configuration models for the alerts pipeline.
 Provides validation, interpolation, and type safety for all config sections.
 """
 
-from enum import StrEnum
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, field_validator, model_validator
+
+# StrEnum compatibility for Python < 3.11
+try:
+    from enum import StrEnum
+except ImportError:
+    class StrEnum(str, Enum):
+        """Fallback StrEnum for Python < 3.11."""
+        pass
 
 # Import detector and gatherer registries for validation
 from store_insight.pipeline.stages._1_detect import registry as detector_registry
@@ -42,8 +50,8 @@ class TablesConfig(BaseModel):
     markdown_log: str
     markdown_sales: str
     wastage: str
-    wmd_item_hierarchy: str
-    wmd_store_hierarchy: str
+    store_hierarchy: str
+    wmd_hierarchy: str
 
     # Interpolation context - set during PipelineConfig validation
     _database: str = ""
@@ -67,6 +75,7 @@ class OutputConfig(BaseModel):
 
     alerts: str
     top_n_per_store: int = 0
+    max_per_type_per_store: int = 0
     signal_type_buckets: dict[str, AlertBucket] = {
         "OSA": AlertBucket.AVAILABILITY,
         "COMPLIANCE": AlertBucket.COMPLIANCE,
@@ -313,6 +322,10 @@ class ScoringConfig(BaseModel):
     """Scoring weight configuration per signal type."""
 
     score_weights: dict[str, float]
+    composite_weights: dict[str, float] = {}
+    cost_ceilings: dict[str, float] = {}
+    benchmark_ceilings: dict[str, float] = {}
+    wow_ceilings: dict[str, float] = {}
 
 
 class LoggingConfig(BaseModel):

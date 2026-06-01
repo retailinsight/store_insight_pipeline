@@ -48,7 +48,7 @@ def weekly_dept_scores(osa, start, end, group_cols, prefix):
     """
     return (
         osa
-        .filter((F.col('ANALYSIS_DATE') >= start) & (F.col('ANALYSIS_DATE') <= end))
+        .filter((F.col('DATE') >= start) & (F.col('DATE') <= end))
         .group_by(*group_cols)
         .agg(
             F.sum('ACTUAL_SALES_VOLUME').alias(f'{prefix}_SALES'),
