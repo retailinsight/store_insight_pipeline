@@ -113,6 +113,7 @@ def detect(
         by_dept[key].append({
             'item_code':      row['ITEM_CODE'],
             'ppg':            row['ITEM_HIERARCHY_3'],
+            'subclass':       row[section],
             'alert_weeks':    int(row['ALERT_WEEK_COUNT']),
             'cumulative_lsv': round(float(row['CUMULATIVE_LSV'] or 0), 2),
             'avg_alert_osa':  round(float(row['AVG_ALERT_OSA'] or 0) * 100, 2),

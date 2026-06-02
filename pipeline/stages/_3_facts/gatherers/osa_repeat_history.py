@@ -79,7 +79,7 @@ def gather(
         .with_column('YEAR_NUMBER',  F.year(F.col('DATE')))
         .group_by(
             'STORE_ID', dept_col, 'ITEM_CODE',
-            'PRODUCT_PROFILE_GROUP_NAME', 'YEAR_NUMBER', 'WEEK_NUMBER',
+            'ITEM_HIERARCHY_3', 'YEAR_NUMBER', 'WEEK_NUMBER',
         )
         .agg(
             F.sum('ACTUAL_SALES_VOLUME').alias('WEEKLY_SALES'),
