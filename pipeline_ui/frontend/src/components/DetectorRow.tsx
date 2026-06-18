@@ -9,7 +9,7 @@ const SHARED_KEYS = new Set([
 ]);
 
 function readThreshold(config: any, signalType: string, key: string): any {
-  const buckets = config?.thresholds ?? {};
+  const buckets = config?.detector_config?.thresholds ?? {};
   if (SHARED_KEYS.has(key) && buckets.shared && key in buckets.shared) {
     return buckets.shared[key];
   }
@@ -17,11 +17,13 @@ function readThreshold(config: any, signalType: string, key: string): any {
 }
 
 function writeThreshold(config: any, signalType: string, key: string, value: any): any {
-  const next = { ...config, thresholds: { ...(config.thresholds ?? {}) } };
-  const isShared = SHARED_KEYS.has(key) && next.thresholds.shared && key in next.thresholds.shared;
+  const detectorConfig = { ...(config.detector_config ?? {}) };
+  const thresholds = { ...(detectorConfig.thresholds ?? {}) };
+  const isShared = SHARED_KEYS.has(key) && thresholds.shared && key in thresholds.shared;
   const bucketKey = isShared ? "shared" : signalType;
-  next.thresholds[bucketKey] = { ...(next.thresholds[bucketKey] ?? {}), [key]: value };
-  return next;
+  thresholds[bucketKey] = { ...(thresholds[bucketKey] ?? {}), [key]: value };
+  detectorConfig.thresholds = thresholds;
+  return { ...config, detector_config: detectorConfig };
 }
 
 export default function DetectorRow({

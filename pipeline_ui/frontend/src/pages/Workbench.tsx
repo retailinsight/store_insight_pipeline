@@ -21,6 +21,9 @@ export default function Workbench({ client }: { client: string }) {
   const [result, setResult]     = useState<RunResult | null>(null);
   const [liveLogs, setLiveLogs] = useState<string[]>([]);
 
+  // Exact payload sent to the last run (params + config + skills) for the Run config tab.
+  const [runSnapshot, setRunSnapshot] = useState<Record<string, any> | null>(null);
+
   // Which signal type is currently being configured.
   const [selectedType, setSelectedType] = useState<string | null>(null);
 
@@ -47,6 +50,14 @@ export default function Workbench({ client }: { client: string }) {
   const onRun = async (analysisDate: string, storeIds: number[], signalTypes: string[]) => {
     if (!config) return;
     setRunning(true); setRunError(null); setResult(null); setLiveLogs([]);
+    setRunSnapshot({
+      client,
+      analysis_date: analysisDate,
+      store_ids: storeIds,
+      signal_types: signalTypes,
+      config: JSON.parse(JSON.stringify(config)),
+      skills: skills ? JSON.parse(JSON.stringify(skills)) : {},
+    });
     try {
       const r = await api.runStream(
         client,
@@ -280,7 +291,7 @@ export default function Workbench({ client }: { client: string }) {
           engine={globalEngine}
           onEngineChange={setAllEngines}
         />
-        {result && <StageResults result={result} />}
+        {result && <StageResults result={result} runConfig={runSnapshot} />}
       </aside>
     </div>
   );

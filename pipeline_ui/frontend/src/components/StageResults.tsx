@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
 import { RunResult } from "../lib/api";
 
-type Tab = "summary" | "cards" | "signals";
+type Tab = "summary" | "cards" | "signals" | "runconfig";
 
 const gbp = (n: number) =>
   `£${(Number(n) || 0).toLocaleString("en-GB", { maximumFractionDigits: 0 })}`;
 
-export default function StageResults({ result }: { result: RunResult }) {
+export default function StageResults({ result, runConfig }: { result: RunResult; runConfig?: Record<string, any> | null }) {
   const [tab, setTab]           = useState<Tab>("summary");
   const [storeFilter, setStore] = useState<string>("all");
   const [typeFilter, setType]   = useState<string>("all");
@@ -102,6 +102,7 @@ export default function StageResults({ result }: { result: RunResult }) {
         <TabBtn label="Summary" active={tab === "summary"} onClick={() => setTab("summary")} />
         <TabBtn label={`Cards (${result.counts.cards})`} active={tab === "cards"}   onClick={() => setTab("cards")} />
         <TabBtn label={`Signals (${result.counts.signals})`} active={tab === "signals"} onClick={() => setTab("signals")} />
+        {runConfig && <TabBtn label="Run config" active={tab === "runconfig"} onClick={() => setTab("runconfig")} />}
       </div>
 
       {/* Summary tab */}
@@ -164,6 +165,11 @@ export default function StageResults({ result }: { result: RunResult }) {
             </div>
           )}
         </>
+      )}
+
+      {/* Run config tab — exact payload sent to the run */}
+      {tab === "runconfig" && runConfig && (
+        <RunConfigView runConfig={runConfig} />
       )}
 
       {/* Raw signals tab */}
@@ -280,6 +286,67 @@ function SummaryTable({ title, rows, total }: { title: string; rows: SummaryRow[
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function RunConfigView({ runConfig }: { runConfig: Record<string, any> }) {
+  const [copied, setCopied] = useState(false);
+  const json = useMemo(() => JSON.stringify(runConfig, null, 2), [runConfig]);
+
+  const filename = useMemo(() => {
+    const client = runConfig.client ?? "experiment";
+    const date   = runConfig.analysis_date ?? "run";
+    const stamp  = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    return `experiment-${client}-${date}-${stamp}.json`;
+  }, [runConfig]);
+
+  const download = () => {
+    const blob = new Blob([json], { type: "application/json" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(json);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
+
+  const skillCount = runConfig.skills ? Object.keys(runConfig.skills).length : 0;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={download}
+          className="px-2.5 py-1 rounded text-xs font-medium bg-violet-600 text-white hover:bg-violet-700 transition"
+        >
+          Download JSON
+        </button>
+        <button
+          type="button"
+          onClick={copy}
+          className="px-2.5 py-1 rounded text-xs font-medium border border-slate-300 bg-white text-slate-700 hover:text-ink transition"
+        >
+          {copied ? "Copied✓" : "Copy"}
+        </button>
+        <span className="ml-auto text-[11px] text-muted">
+          analysis_date · config · {skillCount} skill{skillCount !== 1 ? "s" : ""}
+        </span>
+      </div>
+      <pre className="p-3 text-xs border rounded bg-slate-50 overflow-auto max-h-[60vh]">{json}</pre>
     </div>
   );
 }

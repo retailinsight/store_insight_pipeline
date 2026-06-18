@@ -245,6 +245,7 @@ def run_experiment(
                 markdown_log=wmd['markdown_log'],
                 markdown_sales=wmd['markdown_sales'],
                 score_weights=score_weights,
+                scoring_cfg=scoring_cfg,
             )
             timings['score_ms'] = round((time.perf_counter() - t0) * 1000, 1)
             print(f'[runner]   score done ({timings["score_ms"]}ms)')
