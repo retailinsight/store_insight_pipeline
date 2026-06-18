@@ -12,6 +12,7 @@ SELECT
     INTERVENTION_ID,
     SITE_ID                     AS STORE_ID,
     SITE_NAME,
+    ITEM_ID                     AS ITEM_CODE,
     ALERT_TYPE_NAME,
     ALERT_ANALYSIS_DATE         AS DATE,
     TICK_AND_FLICK_FLAG

@@ -38,12 +38,13 @@
 |---|---|---|---|
 | `SITE_ID` | `STORE_ID` | INT | Store identifier |
 | `SITE_NAME` | — | STRING | Store display name |
+| `ITEM_ID` | `ITEM_CODE` | INT | Item the alert was about — joins to OSA `ITEM_CODE` |
 | `ALERT_TYPE_NAME` | — | STRING | Category of alert that was worked |
 | `ALERT_ANALYSIS_DATE` | — | DATE | Date the alert was actioned |
 | `INTERVENTION_ID` | — | INT | PK — one row per intervention (counted to get `WORKED`) |
 | `TICK_AND_FLICK_FLAG` | — | BOOLEAN | True = alert was dismissed too quickly |
 
-> Filtered to a two-week window (`last_week_start` → `this_week_end`) on load. Used exclusively by the `TICK_AND_FLICK` detector and fact gatherer.
+> Filtered to a two-week window (`last_week_start` → `this_week_end`) on load. Used by the `TICK_AND_FLICK` detector, its fact gatherer, and the COMPLIANCE scorer (which joins tick-and-flicked rows to OSA on `(STORE_ID, ITEM_CODE, DATE)` to cost the lost sales behind dismissed alerts).
 
 ---
 
@@ -94,9 +95,11 @@ LSM_ITEM_STORE_DAY_REPORTING_PERIOD
     ITEM_ID (= ITEM_CODE) ──→ LSM_ITEM_HIERARCHY.MASTER_ITEM_ID
     SITE_ID (= STORE_ID)  ──→ [no FK in Snowflake, but matches]
                                LSM_ALERT_FEEDBACK.SITE_ID (= STORE_ID)
+    (SITE_ID, ITEM_ID, ANALYSIS_DATE) ──→ LSM_ALERT_FEEDBACK
+                               (SITE_ID, ITEM_ID, ALERT_ANALYSIS_DATE)
 ```
 
-The two source tables share `STORE_ID` as a logical key but there is no enforced FK — the join is done in Python/Snowpark at pipeline runtime.
+The two source tables share `STORE_ID` as a logical key but there is no enforced FK — the join is done in Python/Snowpark at pipeline runtime. The COMPLIANCE scorer additionally joins on `(STORE_ID, ITEM_CODE, DATE)` to attribute OSA `LOST_SALES_VALUE` to tick-and-flicked alerts.
 
 ---
 

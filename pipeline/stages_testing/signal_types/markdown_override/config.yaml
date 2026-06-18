@@ -1,0 +1,20 @@
+# MARKDOWN_OVERRIDE — markdown override rate alerts
+# ===================================================
+#   metric.py    — override-rate definition for generic WOW / VS_CHAIN detection
+#   scorer.py    — projected-cost scorer (needs a batch gather, so it is code)
+#   config.yaml  — this manifest
+
+signal_type: MARKDOWN_OVERRIDE
+
+detect:
+  triggers: [WOW, VS_CHAIN]   # generic detectors driven by metric.py
+
+# score: provided by scorer.py (gather + projected_cost)
+
+facts:
+  gatherers:
+    - markdown_override_dept_breakdown
+
+investigate:
+  engine: rule_based
+  skill_file: skills/markdown_override_investigation_skill.md

@@ -37,7 +37,7 @@ Append a callable ``multiplier(signal: dict) -> float`` to ``_MULTIPLIERS``:
 Public API
 ----------
     score_all(signals, this_week_start, this_week_end,
-              osa=None, markdown_log=None, markdown_sales=None,
+              osa=None, feedback=None, markdown_log=None, markdown_sales=None,
               score_weights=None, scoring_cfg=None) -> None
     Stamps ``signal['score']`` on every signal in-place.
 """
@@ -59,6 +59,7 @@ def score_all(
     this_week_start: str,
     this_week_end: str,
     osa=None,
+    feedback=None,
     markdown_log=None,
     markdown_sales=None,
     score_weights: dict[str, float] | None = None,
@@ -73,6 +74,8 @@ def score_all(
     this_week_start : date string (YYYY-MM-DD)
     this_week_end   : date string (YYYY-MM-DD)
     osa             : Snowpark DataFrame — required for COMPLIANCE scorer
+    feedback        : Snowpark DataFrame — required for COMPLIANCE scorer
+                      (tick-and-flicked items are joined to osa for their LSV)
     markdown_log    : Snowpark DataFrame — required for MARKDOWN_OVERRIDE scorer
     markdown_sales  : Snowpark DataFrame — required for MARKDOWN_OVERRIDE and
                       MARKDOWN_SKU scorers
@@ -92,6 +95,7 @@ def score_all(
 
     all_kwargs = dict(
         osa=osa,
+        feedback=feedback,
         markdown_log=markdown_log,
         markdown_sales=markdown_sales,
         this_week_start=this_week_start,
@@ -128,10 +132,12 @@ def score_all(
         for m in _MULTIPLIERS:
             cost *= m(signal)
 
+        signal['projected_cost'] = round(cost, 2)
+
         if scoring_cfg is not None and _composite._get(scoring_cfg, 'composite_weights'):
             signal['score'] = round(_composite.composite_score(signal, cost, scoring_cfg), 4)
         else:
-            signal['score'] = round(cost, 2)
+            signal['score'] = signal['projected_cost']
 
     print(f'[4_score] {len(signals)} signals scored')
 

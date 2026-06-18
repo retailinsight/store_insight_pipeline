@@ -123,7 +123,7 @@ def load_osa(session, lookback_start, analysis_date, cfg=None):
     return (
         osa_raw
         .join(item, on=['ITEM_CODE'], how='left')
-        .filter(F.col('DEPARTMENT_NAME').is_not_null())
+        .filter(F.col('ITEM_HIERARCHY_2').is_not_null())
         .cache_result()
     )
 

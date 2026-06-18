@@ -429,6 +429,7 @@ def run_pipeline_from_signals(
         this_week_start=this_week_start,
         this_week_end=this_week_end,
         osa=osa,
+        feedback=feedback,
         markdown_log=markdown_log,
         markdown_sales=markdown_sales,
         score_weights=cfg.scoring.score_weights if cfg and cfg.scoring else None,

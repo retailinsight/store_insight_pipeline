@@ -107,25 +107,18 @@ def test_markdown_sku_none_override_count_scores_zero():
 # COMPLIANCE
 # ---------------------------------------------------------------------------
 
-def test_compliance_tf_times_avg_lsv_per_worked():
-    sig = {'store_id': 7, 'this_week_tf': 5, 'this_week_worked': 20}
-    context = {7: 1_000.0}  # store_total_lsv = £1,000
-    # 5 * (1000 / 20) = 5 * 50 = 250
-    assert compliance.projected_cost(sig, context) == pytest.approx(250.0)
-
-
-def test_compliance_zero_worked_returns_zero():
-    sig = {'store_id': 7, 'this_week_tf': 5, 'this_week_worked': 0}
-    context = {7: 1_000.0}
-    assert compliance.projected_cost(sig, context) == 0.0
+def test_compliance_returns_tf_lsv_from_context():
+    # context maps store_id -> summed LSV of items behind tick-flicked alerts
+    sig = {'store_id': 7}
+    context = {7: 1_234.56}
+    assert compliance.projected_cost(sig, context) == pytest.approx(1_234.56)
 
 
 def test_compliance_missing_store_in_context_returns_zero():
-    sig = {'store_id': 99, 'this_week_tf': 3, 'this_week_worked': 10}
+    sig = {'store_id': 99}
     assert compliance.projected_cost(sig, context={}) == 0.0
 
 
-def test_compliance_none_tf_returns_zero():
-    sig = {'store_id': 7, 'this_week_tf': None, 'this_week_worked': 10}
-    context = {7: 500.0}
-    assert compliance.projected_cost(sig, context) == 0.0
+def test_compliance_none_context_returns_zero():
+    sig = {'store_id': 7}
+    assert compliance.projected_cost(sig, context=None) == 0.0

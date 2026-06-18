@@ -39,6 +39,15 @@ columns:
       feedback table directly rather than a join so that a store-hierarchy
       contract is not required for compliance alerts.
 
+  ITEM_CODE:
+    type: NUMBER
+    required: true
+    description: |
+      Item the alert intervention was about (source ITEM_ID).  Joins to
+      osa.ITEM_CODE on (STORE_ID, ITEM_CODE, DATE) so the COMPLIANCE scorer
+      can attribute the £ LOST_SALES_VALUE of the items behind tick-and-flick
+      dismissals, rather than diluting against whole-store LSV.
+
   ALERT_TYPE_NAME:
     type: VARCHAR
     required: true
@@ -59,6 +68,18 @@ columns:
     description: |
       True if the intervention was dismissed too quickly to count as
       meaningful engagement.  Drives the TF_RATE numerator.
+
+joins:
+  - contract: osa
+    cardinality: many_to_one
+    match:
+      STORE_ID: STORE_ID            # feedback.STORE_ID  → osa.STORE_ID
+      ITEM_CODE: ITEM_CODE          # feedback.ITEM_CODE → osa.ITEM_CODE
+      DATE: DATE                    # feedback.DATE      → osa.DATE
+    purpose: |
+      Attribute the £ LOST_SALES_VALUE of the item behind each tick-and-flick
+      dismissal.  Used by the COMPLIANCE scorer to cost the hidden availability
+      loss left behind by phantom alert resolutions.
 
 data_quality_findings:
   - column: TICK_AND_FLICK_FLAG

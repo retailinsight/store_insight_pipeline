@@ -77,25 +77,23 @@ class ScorerInfo:
 
 **Example from `compliance.py`:**
 ```python
-def gather(signals, osa, this_week_start, this_week_end) -> dict:
-    """Compute store_total_lsv for each store in the signal list."""
+def gather(signals, feedback, osa, this_week_start, this_week_end) -> dict:
+    """Sum the LSV of items behind each store's tick-and-flicked alerts."""
     store_ids = list({s['store_id'] for s in signals})
-    
-    result = (
-        osa
+
+    tf_items = (
+        feedback
         .filter(
             (F.col('DATE') >= this_week_start) &
             (F.col('DATE') <= this_week_end) &
+            (F.col('TICK_AND_FLICK_FLAG') == True) &
             F.col('STORE_ID').isin(store_ids)
         )
-        .group_by('STORE_ID')
-        .agg(F.sum('LOST_SALES_VALUE').alias('STORE_LSV'))
+        .select('STORE_ID', 'ITEM_CODE', 'DATE')
+        .distinct()
     )
-    
-    return {
-        int(r['STORE_ID']): float(r['STORE_LSV'] or 0)
-        for r in result.collect()
-    }
+    # join tf_items to osa on (STORE_ID, ITEM_CODE, DATE), sum LOST_SALES_VALUE
+    # -> {store_id: tick_and_flick_lsv}
 ```
 
 **Key points:**
@@ -119,16 +117,8 @@ def projected_cost(signal: dict, context: dict | None = None) -> float:
 **Example from `compliance.py` (uses gather context):**
 ```python
 def projected_cost(signal: dict, context: dict | None = None) -> float:
-    """Return projected weekly cost for a COMPLIANCE signal."""
-    this_week_tf = float(signal.get('this_week_tf') or 0)
-    this_week_worked = float(signal.get('this_week_worked') or 0)
-    store_total_lsv = (context or {}).get(signal['store_id'], 0.0)
-    
-    if this_week_worked == 0:
-        return 0.0
-    
-    avg_lsv_per_alert = store_total_lsv / this_week_worked
-    return this_week_tf * avg_lsv_per_alert
+    """Summed LSV of the items this store tick-and-flicked this week."""
+    return float((context or {}).get(signal['store_id'], 0.0))
 ```
 
 ---
@@ -150,7 +140,7 @@ WASTE:
 
 COMPLIANCE:
   name: compliance
-  description: projected_cost = this_week_tf × (store_total_lsv / this_week_worked)
+  description: projected_cost = SUM(osa.LOST_SALES_VALUE of items behind tick-and-flicked alerts)
 
 MARKDOWN_SKU:
   name: markdown_sku

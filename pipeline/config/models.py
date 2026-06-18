@@ -14,7 +14,7 @@ from pydantic import BaseModel, field_validator, model_validator
 try:
     from enum import StrEnum
 except ImportError:
-    class StrEnum(str, Enum):
+    class StrEnum(str, Enum):  # noqa: UP042
         """Fallback StrEnum for Python < 3.11."""
         pass
 

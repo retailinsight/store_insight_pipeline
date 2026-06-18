@@ -52,7 +52,7 @@ def enrich_signals(
     this_week_start,
     this_week_end,
     lookback_start=None,
-    section='DEPARTMENT_NAME',
+    section='ITEM_HIERARCHY_2',
     projection_weeks=4,
     drilldown_top_n=3,
     feedback=None,

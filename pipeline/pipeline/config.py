@@ -27,7 +27,7 @@ from dataclasses import dataclass, fields
 @dataclass
 class DetectorConfig:
     # ---- shared --------------------------------------------------------
-    section: str   = 'DEPARTMENT_NAME'
+    section: str   = 'ITEM_HIERARCHY_2'
     min_lost_sales_value: float = 200.0
 
     # ---- WOW -----------------------------------------------------------

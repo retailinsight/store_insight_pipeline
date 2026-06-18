@@ -33,4 +33,4 @@ MARKDOWN_SKU:
 
 COMPLIANCE:
   name: compliance
-  description: projected_cost = this_week_tf × (store_total_lsv / this_week_worked) (store_total_lsv queried from osa)
+  description: projected_cost = SUM(osa.LOST_SALES_VALUE of items behind tick-and-flicked alerts) (feedback joined to osa on store + item + date)

@@ -1,30 +1,33 @@
 """
 Scorer: COMPLIANCE
 ==================
-projected_cost(signal, context) = this_week_tf × (store_total_lsv / this_week_worked)
+projected_cost(signal, context) = SUM(LOST_SALES_VALUE of the items behind this
+store's tick-and-flicked alerts this week)
 
 A tick-and-flick event is a phantom resolution: the alert was closed without the
 item being genuinely checked, so the underlying availability problem persists and
-the store continues losing sales that are now hidden.
+the store keeps losing sales that now look resolved on paper.
 
-The cost per TF event = the average LSV that should have been recovered had the
-alert been genuinely actioned at this store:
+The cost is therefore the *actual* £ lost on the specific items that were
+tick-and-flicked, not a whole-store average.  We take the feedback rows where
+``TICK_AND_FLICK_FLAG`` is true and join each one to the OSA fact on
+``(STORE_ID, ITEM_CODE, DATE)`` to pick up that item-day's ``LOST_SALES_VALUE``:
 
-    store_total_lsv          = SUM(LOST_SALES_VALUE FROM osa WHERE STORE_ID = X, this week)
-    avg_lsv_per_worked_alert = store_total_lsv / this_week_worked
-    projected_cost           = this_week_tf × avg_lsv_per_worked_alert
+    tf_items      = DISTINCT (STORE_ID, ITEM_CODE, DATE) FROM feedback
+                    WHERE TICK_AND_FLICK_FLAG = TRUE, this week
+    projected_cost = SUM(osa.LOST_SALES_VALUE) over tf_items joined to osa
 
-Store-specific: a larger/busier store with higher OSA LSV scores a higher cost
-per TF event, reflecting the actual scale of the hidden problem.
+This attributes only the LSV genuinely tied to dismissed alerts, so a store that
+tick-and-flicks high-LSV items scores higher than one dismissing items with no
+lost sales — regardless of how many alerts it works overall.
 
-this_week_worked is already on the Stage-1 signal dict (from the compliance
-detector).  Only store_total_lsv requires an independent DB query against the
-same osa DataFrame used by the OSA detectors.
+Both the feedback and osa DataFrames are the same ones the detectors use, so no
+new data source is introduced.
 
 Public API
 ----------
-    gather(signals, osa, this_week_start, this_week_end)
-    -> dict keyed by store_id -> store_total_lsv (float)
+    gather(signals, feedback, osa, this_week_start, this_week_end)
+    -> dict keyed by store_id -> tick_and_flick_lsv (float)
 
     projected_cost(signal, context) -> float
 """
@@ -35,68 +38,100 @@ from store_insight.pipeline.stages._2_score.config import ScorerInfo
 METADATA = ScorerInfo(
     name        = 'compliance',
     signal_type = 'COMPLIANCE',
-    formula     = 'this_week_tf × (store_total_lsv / this_week_worked)',
+    formula     = 'SUM(osa.LOST_SALES_VALUE of items behind tick-and-flicked alerts)',
     description = (
         'Fires on "tick-and-flick": OSA alerts were closed without the item '
         'genuinely being checked, so the underlying availability gap persists '
-        'while looking resolved on paper. Score = the £ LSV that should have '
-        'been recovered had those alerts been worked properly (TF count × this '
-        'store\'s average LSV per genuinely worked alert), so larger / busier '
-        'stores carry a higher cost per TF event.'
+        'while looking resolved on paper. Score = the actual £ LSV of the items '
+        'behind those dismissed alerts (feedback rows with TICK_AND_FLICK_FLAG '
+        'joined to the OSA fact on store + item + date), so stores that dismiss '
+        'genuinely costly availability gaps score highest.'
     ),
 )
 
 
 def gather(
     signals: list[dict],
+    feedback,
     osa,
     this_week_start: str,
     this_week_end: str,
 ) -> dict:
     """
-    Batch-compute store_total_lsv for each COMPLIANCE store.
+    Batch-compute the tick-and-flick LSV for each COMPLIANCE store.
+
+    Takes the distinct (store, item, date) tuples that were tick-and-flicked
+    this week and joins them to the OSA fact to sum the LOST_SALES_VALUE of
+    those exact item-days.
 
     Parameters
     ----------
     signals         : list of COMPLIANCE signal dicts
-    osa             : Snowpark DataFrame — OSA source (ANALYSIS_DATE, STORE_ID, LOST_SALES_VALUE)
+    feedback        : Snowpark DataFrame — LSM_ALERT_FEEDBACK
+                      (STORE_ID, ITEM_CODE, DATE, TICK_AND_FLICK_FLAG)
+    osa             : Snowpark DataFrame — OSA source
+                      (STORE_ID, ITEM_CODE, DATE, LOST_SALES_VALUE)
     this_week_start : date string (YYYY-MM-DD)
     this_week_end   : date string (YYYY-MM-DD)
 
     Returns
     -------
-    dict keyed by store_id (int) -> store_total_lsv (float)
+    dict keyed by store_id (int) -> tick_and_flick_lsv (float)
     """
-    if not signals or osa is None:
+    if not signals or feedback is None or osa is None:
         return {}
 
     store_ids = list({s['store_id'] for s in signals})
 
-    result = (
+    tf_items = (
+        feedback
+        .filter(
+            (F.col('DATE') >= this_week_start) &
+            (F.col('DATE') <= this_week_end) &
+            (F.col('TICK_AND_FLICK_FLAG') == True) &
+            F.col('STORE_ID').isin(store_ids)
+        )
+        .select('STORE_ID', 'ITEM_CODE', 'DATE')
+        .distinct()
+    )
+
+    osa_lsv = (
         osa
         .filter(
             (F.col('DATE') >= this_week_start) &
             (F.col('DATE') <= this_week_end) &
             F.col('STORE_ID').isin(store_ids)
         )
+        .select(
+            F.col('STORE_ID').alias('OSA_STORE_ID'),
+            F.col('ITEM_CODE').alias('OSA_ITEM_CODE'),
+            F.col('DATE').alias('OSA_DATE'),
+            F.col('LOST_SALES_VALUE'),
+        )
+    )
+
+    joined = (
+        tf_items
+        .join(
+            osa_lsv,
+            (tf_items['STORE_ID'] == osa_lsv['OSA_STORE_ID']) &
+            (tf_items['ITEM_CODE'] == osa_lsv['OSA_ITEM_CODE']) &
+            (tf_items['DATE'] == osa_lsv['OSA_DATE']),
+            how='left',
+        )
         .group_by('STORE_ID')
-        .agg(F.sum('LOST_SALES_VALUE').alias('STORE_LSV'))
+        .agg(F.sum('LOST_SALES_VALUE').alias('TF_LSV'))
     )
 
     return {
-        int(r['STORE_ID']): float(r['STORE_LSV'] or 0)
-        for r in result.collect()
+        int(r['STORE_ID']): float(r['TF_LSV'] or 0)
+        for r in joined.collect()
     }
 
 
 def projected_cost(signal: dict, context: dict | None = None) -> float:
-    """Return projected weekly cost for a COMPLIANCE signal."""
-    this_week_tf     = float(signal.get('this_week_tf') or 0)
-    this_week_worked = float(signal.get('this_week_worked') or 0)
-    store_total_lsv  = (context or {}).get(signal['store_id'], 0.0)
-
-    if this_week_worked == 0:
-        return 0.0
-
-    avg_lsv_per_alert = store_total_lsv / this_week_worked
-    return this_week_tf * avg_lsv_per_alert
+    """
+    Return projected weekly cost for a COMPLIANCE signal: the summed
+    LOST_SALES_VALUE of the items this store tick-and-flicked this week.
+    """
+    return float((context or {}).get(signal['store_id'], 0.0))

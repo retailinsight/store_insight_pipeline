@@ -1,0 +1,23 @@
+# WASTE — straight-to-bin waste rate alerts
+# ===========================================
+# Everything about this signal type lives in this folder:
+#   metric.py    — waste-rate definition for generic WOW / VS_CHAIN detection
+#   config.yaml  — this manifest
+
+signal_type: WASTE
+
+detect:
+  triggers: [WOW, VS_CHAIN]   # generic detectors driven by metric.py
+
+score:
+  # £ retail value of stock destroyed rather than sold this week —
+  # revenue forgone, expected to recur weekly until fixed.
+  formula: "this_week_waste_value"
+
+facts:
+  gatherers:
+    - waste_dept_breakdown
+
+investigate:
+  engine: rule_based
+  skill_file: skills/waste_investigation_skill.md
