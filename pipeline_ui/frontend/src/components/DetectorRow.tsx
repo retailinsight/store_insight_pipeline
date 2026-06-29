@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { DetectorEntry } from "../lib/api";
 
-// Map signal_type → top-level threshold key in cfg.thresholds.
-// Most signal types map directly; "shared" thresholds live under cfg.thresholds.shared.
+// Thresholds live under cfg.detector_config.thresholds, keyed by signal type.
+// Most signal types map directly; "shared" thresholds live under
+// cfg.detector_config.thresholds.shared.
 const SHARED_KEYS = new Set([
   "section",
   "min_lost_sales_value",

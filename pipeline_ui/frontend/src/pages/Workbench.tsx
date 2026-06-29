@@ -216,7 +216,7 @@ export default function Workbench({ client }: { client: string }) {
                 </div>
               </Section>
 
-              <Section title="Scorer" subtitle="Score weight multiplier for this signal type." accentGradient="from-slate-200 to-slate-300">
+              <Section title="Scorer" subtitle="Score-weight multiplier, composite score dimensions and ceilings for this signal type." accentGradient="from-slate-200 to-slate-300">
                 <ScorerRow
                   signalType={selectedType}
                   config={config}

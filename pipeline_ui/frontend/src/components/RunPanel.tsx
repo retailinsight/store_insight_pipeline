@@ -238,7 +238,7 @@ export default function RunPanel({
           </div>
           {engine !== "rule_based" && (
             <p className="mt-1 text-[11px] text-amber-700">
-              Only the top 10 signals (by score) will be sent through the Cortex model to bound LLM cost. Rule-based runs process all signals.
+              When any signal uses Cortex, only the top 10 signals by score are investigated (enriched + narrated into cards) — the rest are dropped to bound DB + LLM cost. Runs where every signal is rule-based skip this cap and process all signals.
             </p>
           )}
         </div>

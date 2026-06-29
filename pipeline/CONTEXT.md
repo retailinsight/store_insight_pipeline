@@ -2,11 +2,14 @@
 
 ## Glossary
 
+### Contract
+A formal schema/interface plus documentation for an adapter view. A contract defines the canonical name, grain, columns, expected data types, and documented data-quality caveats for a source view that adapts raw customer data into a shape the pipeline can consume. Contracts are validated by `tools/validate_views.py` and referenced by `pipeline/capabilities.py` to discover which detectors a client can run.
+
 ### Signal
 A detected anomaly for a specific store (and optionally department or SKU), produced by Stage 1 (detection). A signal is a plain dict with a `signal_type`, `store_id`, `trigger_types`, and type-specific metric fields. Signals are the unit of work that flows through all subsequent pipeline stages.
 
 ### Signal Type
-The category of operational problem a signal represents. Current types: `OSA`, `COMPLIANCE`, `MARKDOWN_OVERRIDE`, `MARKDOWN_SELLTHROUGH`, `MARKDOWN_SKU`, `WASTE`.
+The category of operational problem a signal represents. Current types: `OSA`, `COMPLIANCE`, `MARKDOWN_OVERRIDE`, `MARKDOWN_SELLTHROUGH`, `MARKDOWN_SKU`, `WASTE`. The set of signal types is not closed; new operational domains (e.g. DSD supplier availability) may add new types.
 
 ### Trigger Type
 The detection rule that caused a signal to fire. A signal may carry multiple trigger types after merging (e.g. `['WOW', 'VS_CHAIN']`). Current trigger types: `WOW`, `VS_CHAIN`, `REPEAT`, `TICK_AND_FLICK`, `REPEAT_REQUEST`, `EXCESSIVE_OVERRIDE`.
@@ -16,6 +19,9 @@ The estimated weekly £ revenue impact of not fixing the problem surfaced by a s
 
 ### Composite Score
 The final numeric rank assigned to a signal, used to select and order alerts sent to stores. A weighted sum of normalised dimensions, each in [0, 1], with weights summing to 1.0. Replaces the raw `projected_cost` as the ranking value.
+
+### Fact
+Additional supporting evidence gathered for a signal after detection and scoring. Facts are produced by gatherers in Stage 3 and consumed by the investigation stage to build narrative explanations. A signal may have zero or more facts, each with a fact type and structured payload.
 
 ### Score Dimension
 One independently-weighted component of the composite score. Each dimension scores [0, 1]. Current dimensions: Financial Severity, VS Control Benchmark, VS Historical Benchmark, Thematic, Historical Recency, Special Cases.
