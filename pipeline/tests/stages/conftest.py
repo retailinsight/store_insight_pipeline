@@ -12,7 +12,7 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 from store_insight.pipeline.stages._1_detect.detector_info import DetectorInfo
-from store_insight.pipeline.stages._2_facts.config import GathererInfo
+from store_insight.pipeline.stages._3_facts.config import GathererInfo
 
 # ---------------------------------------------------------------------------
 # Snowpark DataFrame fake
@@ -100,7 +100,7 @@ def _make_gatherer_module(
 ) -> ModuleType:
     """Build a dummy gatherer module with controllable gather/extract_facts."""
     mod = ModuleType(name)
-    mod.__name__ = f'store_insight.pipeline.stages._2_facts.gatherers.{name}'
+    mod.__name__ = f'store_insight.pipeline.stages._3_facts.gatherers.{name}'
 
     mod.gather_calls: list = []
     mod.extract_calls: list = []

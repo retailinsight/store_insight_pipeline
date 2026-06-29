@@ -41,7 +41,7 @@ def detect(
     last_week_end,
     this_week_start,
     this_week_end,
-    section='DEPARTMENT_NAME',
+    section='ITEM_HIERARCHY_2',
     min_wow_drop=0.01,
     min_lost_sales_value=200,
 ):
@@ -53,7 +53,7 @@ def detect(
     osa                  : Snowpark DataFrame
     last_week_start/end  : date strings (YYYY-MM-DD) for the previous week
     this_week_start/end  : date strings for the current week
-    section              : column to group by (default: 'DEPARTMENT_NAME')
+    section              : column to group by (default: 'ITEM_HIERARCHY_2')
     min_wow_drop         : minimum OSA drop as a proportion, e.g. 0.01 = 1pp
     min_lost_sales_value : minimum £ lost sales this week to qualify
 

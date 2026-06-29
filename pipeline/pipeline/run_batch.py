@@ -96,8 +96,8 @@ def load_feedback(session, last_week_start, this_week_end, cfg=None):
     """
     return (
         session.table(cfg.tables.feedback if cfg else 'FEEDBACK_V1')
-        .filter(F.col('ALERT_ANALYSIS_DATE') >= last_week_start)
-        .filter(F.col('ALERT_ANALYSIS_DATE') <= this_week_end)
+        .filter(F.col('DATE') >= last_week_start)
+        .filter(F.col('DATE') <= this_week_end)
         .cache_result()
     )
 
@@ -114,8 +114,8 @@ def load_osa(session, lookback_start, analysis_date, cfg=None):
     """
     osa_raw = (
         session.table(cfg.tables.osa if cfg else 'OSA_V1')
-        .filter(F.col('ANALYSIS_DATE') >= lookback_start)
-        .filter(F.col('ANALYSIS_DATE') <= analysis_date)
+        .filter(F.col('DATE') >= lookback_start)
+        .filter(F.col('DATE') <= analysis_date)
     )
 
     item = session.table(cfg.tables.hierarchy if cfg else 'HIERARCHY_V1')
@@ -123,7 +123,7 @@ def load_osa(session, lookback_start, analysis_date, cfg=None):
     return (
         osa_raw
         .join(item, on=['ITEM_CODE'], how='left')
-        .filter(F.col('DEPARTMENT_NAME').is_not_null())
+        .filter(F.col('ITEM_HIERARCHY_2').is_not_null())
         .cache_result()
     )
 
@@ -145,8 +145,8 @@ def load_wmd(session, wmd_lookback, analysis_date, cfg=None):
 
     markdown_log = (
         session.table(tables.markdown_log if tables else 'MARKDOWN_LOG_V1')
-        .filter(F.col('LOCAL_DATE') >= wmd_lookback)
-        .filter(F.col('LOCAL_DATE') <= analysis_date)
+        .filter(F.col('DATE') >= wmd_lookback)
+        .filter(F.col('DATE') <= analysis_date)
         .cache_result()
     )
     markdown_sales = (
@@ -161,8 +161,8 @@ def load_wmd(session, wmd_lookback, analysis_date, cfg=None):
         .filter(F.col('DATE') <= analysis_date)
         .cache_result()
     )
-    item_hierarchy  = session.table(tables.wmd_item_hierarchy if tables else 'WMD_ITEM_HIERARCHY_V1').cache_result()
-    store_hierarchy = session.table(tables.wmd_store_hierarchy if tables else 'WMD_STORE_HIERARCHY_V1').cache_result()
+    item_hierarchy  = session.table(tables.wmd_hierarchy if tables else 'WMD_HIERARCHY_V1').cache_result()
+    store_hierarchy = session.table(tables.store_hierarchy if tables else 'STORE_HIERARCHY_V1').cache_result()
 
     return {
         'markdown_log':    markdown_log,

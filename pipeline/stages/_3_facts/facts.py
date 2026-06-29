@@ -52,7 +52,7 @@ def enrich_signals(
     this_week_start,
     this_week_end,
     lookback_start=None,
-    section='DEPARTMENT_NAME',
+    section='ITEM_HIERARCHY_2',
     projection_weeks=4,
     drilldown_top_n=3,
     feedback=None,
@@ -120,11 +120,11 @@ def enrich_signals(
     )
 
     # ── Build dispatch map (optionally filtered by config) ─────────────────
-    cfg_gatherers = cfg.get('gatherers', {}) if cfg else {}
+    cfg_gatherers = getattr(cfg, 'gatherers', None) if cfg else None
     dispatch = {}
     for stype, gatherers in _registry.SIGNAL_TYPE_GATHERERS.items():
-        if cfg_gatherers:
-            enabled = cfg_gatherers.get(stype)
+        if cfg_gatherers is not None:
+            enabled = getattr(cfg_gatherers, stype, None)
             if enabled is not None:
                 enabled_set = set(enabled)
                 gatherers = [g for g in gatherers if g.__name__.split('.')[-1] in enabled_set]

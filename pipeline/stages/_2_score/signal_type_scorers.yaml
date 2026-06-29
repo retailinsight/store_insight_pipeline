@@ -1,0 +1,36 @@
+# Signal Type → Scorer Mapping
+# ==============================
+# Defines which scorer module runs for each alert signal type.
+# This is the single source of truth for the Stage 4 dispatch.
+#
+# Rules
+# -----
+# - Exactly one scorer per signal type.
+# - Each name must match a module in the scorers/ sub-package.
+# - Add a new entry here when a new signal type is introduced.
+#
+# Displayed in the pipeline docs and QC notebooks.
+
+OSA:
+  name: osa
+  description: projected_cost = this_week_lsv (direct £ — no DB query)
+
+WASTE:
+  name: waste
+  description: projected_cost = this_week_waste_value (direct £ — no DB query)
+
+MARKDOWN_SELLTHROUGH:
+  name: markdown_sellthrough
+  description: projected_cost = this_week_markdown_value × (1 − sellthrough_rate / 100)
+
+MARKDOWN_OVERRIDE:
+  name: markdown_override
+  description: projected_cost = this_week_overrides × avg_£_per_markdown_event (queried from markdown_log + markdown_sales)
+
+MARKDOWN_SKU:
+  name: markdown_sku
+  description: projected_cost = (override_count / lookback_weeks) × avg_unit_markdown_value (queried from markdown_sales)
+
+COMPLIANCE:
+  name: compliance
+  description: projected_cost = SUM(osa.LOST_SALES_VALUE of items behind tick-and-flicked alerts) (feedback joined to osa on store + item + date)

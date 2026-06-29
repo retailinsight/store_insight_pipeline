@@ -37,8 +37,8 @@ Append a callable ``multiplier(signal: dict) -> float`` to ``_MULTIPLIERS``:
 Public API
 ----------
     score_all(signals, this_week_start, this_week_end,
-              osa=None, markdown_log=None, markdown_sales=None,
-              score_weights=None) -> None
+              osa=None, feedback=None, markdown_log=None, markdown_sales=None,
+              score_weights=None, scoring_cfg=None) -> None
     Stamps ``signal['score']`` on every signal in-place.
 """
 
@@ -48,6 +48,7 @@ import datetime
 from collections.abc import Callable
 
 from store_insight.pipeline.pipeline.dispatch import matching_kwargs
+from store_insight.pipeline.stages._2_score import composite as _composite
 from store_insight.pipeline.stages._2_score import registry as _registry
 
 _MULTIPLIERS: list[Callable[[dict], float]] = []
@@ -58,9 +59,11 @@ def score_all(
     this_week_start: str,
     this_week_end: str,
     osa=None,
+    feedback=None,
     markdown_log=None,
     markdown_sales=None,
     score_weights: dict[str, float] | None = None,
+    scoring_cfg=None,
 ) -> None:
     """
     Stamp ``signal['score']`` on every signal in the list, in-place.
@@ -71,12 +74,17 @@ def score_all(
     this_week_start : date string (YYYY-MM-DD)
     this_week_end   : date string (YYYY-MM-DD)
     osa             : Snowpark DataFrame — required for COMPLIANCE scorer
+    feedback        : Snowpark DataFrame — required for COMPLIANCE scorer
+                      (tick-and-flicked items are joined to osa for their LSV)
     markdown_log    : Snowpark DataFrame — required for MARKDOWN_OVERRIDE scorer
     markdown_sales  : Snowpark DataFrame — required for MARKDOWN_OVERRIDE and
                       MARKDOWN_SKU scorers
     score_weights   : optional dict mapping signal_type -> float multiplier;
                       missing types default to 1.0.  Loaded from
                       cfg['scoring']['score_weights'] by the pipeline runner.
+    scoring_cfg     : optional dict or ScoringConfig — when it contains
+                      'composite_weights', the composite score is used as
+                      signal['score'] instead of raw projected_cost.
     """
     if not signals:
         return
@@ -87,6 +95,7 @@ def score_all(
 
     all_kwargs = dict(
         osa=osa,
+        feedback=feedback,
         markdown_log=markdown_log,
         markdown_sales=markdown_sales,
         this_week_start=this_week_start,
@@ -123,6 +132,63 @@ def score_all(
         for m in _MULTIPLIERS:
             cost *= m(signal)
 
-        signal['score'] = round(cost, 2)
+        signal['projected_cost'] = round(cost, 2)
+
+        if scoring_cfg is not None and _composite._get(scoring_cfg, 'composite_weights'):
+            signal['score'] = round(_composite.composite_score(signal, cost, scoring_cfg), 4)
+        else:
+            signal['score'] = signal['projected_cost']
 
     print(f'[4_score] {len(signals)} signals scored')
+
+
+def apply_top_n_filter(
+    signals: list[dict],
+    top_n: int | None,
+    max_per_type: int | None,
+) -> list[dict]:
+    """
+    Filter a pre-sorted (descending score) signals list, enforcing per-store
+    top-N and per-(store, type) variety constraints.
+
+    Parameters
+    ----------
+    signals      : list of signal dicts, assumed sorted by score descending
+    top_n        : max signals per store_id; None = no limit
+    max_per_type : max signals per (store_id, signal_type); None = no limit
+
+    Returns
+    -------
+    Filtered list preserving the input sort order.
+    """
+    if not top_n and not max_per_type:
+        return list(signals)
+    store_counts: dict[int, int] = {}
+    store_type_counts: dict[tuple, int] = {}
+    result = []
+    for sig in sorted(signals, key=lambda s: s.get('score', 0), reverse=True):
+        sid   = sig['store_id']
+        stype = sig.get('signal_type', '')
+        if top_n and store_counts.get(sid, 0) >= top_n:
+            continue
+        if max_per_type and store_type_counts.get((sid, stype), 0) >= max_per_type:
+            continue
+        result.append(sig)
+        store_counts[sid] = store_counts.get(sid, 0) + 1
+        store_type_counts[(sid, stype)] = store_type_counts.get((sid, stype), 0) + 1
+    return result
+
+
+_STRUCTURAL_TRIGGERS = frozenset({'VS_CHAIN', 'REPEAT', 'TICK_AND_FLICK',
+                                   'REPEAT_REQUEST', 'EXCESSIVE_OVERRIDE'})
+
+
+def short_long_term_label(signal: dict) -> str:
+    """
+    Return 'Acute' if the signal fired only on a WOW trigger, 'Structural'
+    otherwise (VS_CHAIN, REPEAT, mixed, or no triggers).
+    """
+    triggers = set(signal.get('trigger_types', []))
+    if triggers == {'WOW'}:
+        return 'Acute'
+    return 'Structural'

@@ -12,7 +12,7 @@ Design
   / ``gather`` function signatures.  The Stage 1 / Stage 2 dispatchers
   already use ``inspect.signature`` to filter context kwargs to only those
   the function declares (see ``stages/_1_detect/detect.py:detect_signals``
-  and ``stages/_2_facts/facts.py:enrich_signals``).  We piggyback on that
+  and ``stages/_3_facts/facts.py:enrich_signals``).  We piggyback on that
   source of truth — no new declarations needed in detector files.
 
 - A small explicit mapping ``PARAM_TO_CONTRACTS`` translates kwarg names
@@ -131,7 +131,7 @@ def _detector_module_name(mod) -> str:
 
 def _gatherer_module_name(mod) -> str:
     """
-    ``store_insight.pipeline.stages._2_facts.gatherers.osa_chain_drift``
+    ``store_insight.pipeline.stages._3_facts.gatherers.osa_chain_drift``
     →
     ``'osa_chain_drift'``
     """
@@ -171,28 +171,30 @@ def validate(cfg: dict) -> list[str]:
     # Lazy imports — keep this module decoupled from the registry so it
     # can be unit-tested without spinning up the full pipeline import graph.
     from store_insight.pipeline.stages._1_detect import registry as det_reg
-    from store_insight.pipeline.stages._2_facts import registry as gth_reg
+    from store_insight.pipeline.stages._3_facts import registry as gth_reg
 
     issues: list[str] = []
-    client = cfg.get('client_name', 'default')
+    client = getattr(cfg, 'client_name', 'default')
 
-    # ── Resolve capabilities ──────────────────────────────────────────────
-    if cfg.get('capabilities') is not None:
-        capabilities = set(cfg['capabilities'])
+    # ── Resolve capabilities ────────────────────────────────
+    capabilities_attr = getattr(cfg, 'capabilities', None)
+    if capabilities_attr is not None:
+        capabilities = set(capabilities_attr)
     else:
         capabilities = discover_capabilities(client)
 
-    # ── Which detectors are enabled? ──────────────────────────────────────
+    # ── Which detectors are enabled? ────────────────────────
     enabled_detectors: set[str] | None = None
-    if (cfg.get('detectors') or {}).get('enabled') is not None:
-        enabled_detectors = set(cfg['detectors']['enabled'])
+    detectors_cfg = getattr(cfg, 'detectors', None)
+    if detectors_cfg is not None and getattr(detectors_cfg, 'enabled', None) is not None:
+        enabled_detectors = set(detectors_cfg.enabled)
 
     # Track which signal types still have any enabled detector — gatherers
     # for fully-disabled signal types are dead code and don't need
     # validation.
     enabled_signal_types: set[str] = set()
 
-    # ── Validate detectors ────────────────────────────────────────────────
+    # ── Validate detectors ──────────────────────────────────
     for mod in det_reg.ALL_DETECTORS:
         name = _detector_module_name(mod)
         if enabled_detectors is not None and name not in enabled_detectors:
@@ -226,8 +228,8 @@ def validate(cfg: dict) -> list[str]:
             except ValueError:
                 pass
 
-    # ── Validate gatherers ────────────────────────────────────────────────
-    cfg_gatherers = (cfg.get('gatherers') or {})
+    # ── Validate gatherers ──────────────────────────────────
+    cfg_gatherers = getattr(cfg, 'gatherers', None)
 
     for signal_type, gatherers in gth_reg.SIGNAL_TYPE_GATHERERS.items():
         # If detector filtering is active and *no* detector for this signal
@@ -236,9 +238,11 @@ def validate(cfg: dict) -> list[str]:
             continue
 
         # Per-signal-type gatherer filter.
-        if cfg_gatherers.get(signal_type) is not None:
-            allowed   = set(cfg_gatherers[signal_type])
-            gatherers = [g for g in gatherers if _gatherer_module_name(g) in allowed]
+        if cfg_gatherers is not None:
+            signal_gatherers = getattr(cfg_gatherers, signal_type, None)
+            if signal_gatherers is not None:
+                allowed   = set(signal_gatherers)
+                gatherers = [g for g in gatherers if _gatherer_module_name(g) in allowed]
 
         for mod in gatherers:
             gname  = _gatherer_module_name(mod)

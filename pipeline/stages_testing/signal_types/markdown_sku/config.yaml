@@ -1,0 +1,19 @@
+# MARKDOWN_SKU — SKU-level markdown alerts (store × item)
+# =========================================================
+#   detectors.py — custom REPEAT_REQUEST / EXCESSIVE_OVERRIDE detectors
+#                  (item-grained over a lookback window)
+#   scorer.py    — projected-cost scorer (needs a batch gather)
+#   config.yaml  — this manifest
+
+signal_type: MARKDOWN_SKU
+
+# detect: custom detectors provided by detectors.py
+# score:  provided by scorer.py (gather + projected_cost)
+
+facts:
+  gatherers:
+    - markdown_sku_history
+
+investigate:
+  engine: rule_based
+  skill_file: skills/markdown_sku_investigation_skill.md

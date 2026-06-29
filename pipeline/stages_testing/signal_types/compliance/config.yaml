@@ -1,0 +1,18 @@
+# COMPLIANCE — tick-and-flick alert-working compliance
+# ======================================================
+#   detectors.py — custom tick-and-flick detector (feedback-data based)
+#   scorer.py    — projected-cost scorer (needs a batch gather)
+#   config.yaml  — this manifest
+
+signal_type: COMPLIANCE
+
+# detect: custom detector provided by detectors.py
+# score:  provided by scorer.py (gather + projected_cost)
+
+facts:
+  gatherers:
+    - tick_and_flick_breakdown
+
+investigate:
+  engine: rule_based
+  skill_file: skills/compliance_investigation_skill.md

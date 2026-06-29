@@ -55,8 +55,8 @@ def _weekly_store_waste_rates(wastage, markdown_log, week_start, week_end, prefi
     md = (
         markdown_log
         .filter(
-            (F.col('LOCAL_DATE') >= week_start) &
-            (F.col('LOCAL_DATE') <= week_end)
+            (F.col('DATE') >= week_start) &
+            (F.col('DATE') <= week_end)
         )
         .group_by('STORE_ID')
         .agg(F.sum('QTY_MARKDOWN').alias(f'{prefix}_MD_QTY'))

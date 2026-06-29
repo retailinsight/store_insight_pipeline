@@ -1,0 +1,22 @@
+# MARKDOWN_SELLTHROUGH — markdown sell-through rate alerts
+# ==========================================================
+#   metric.py    — sell-through-rate definition for generic WOW / VS_CHAIN detection
+#   config.yaml  — this manifest
+
+signal_type: MARKDOWN_SELLTHROUGH
+
+detect:
+  triggers: [WOW, VS_CHAIN]   # generic detectors driven by metric.py
+
+score:
+  # £ value of markdown stock that failed to sell this week — the at-risk
+  # amount that will likely become waste or need a deeper emergency markdown.
+  formula: "this_week_markdown_value * max(0.0, 1 - this_week_sellthrough_rate / 100)"
+
+facts:
+  gatherers:
+    - markdown_sellthrough_dept_breakdown
+
+investigate:
+  engine: rule_based
+  skill_file: skills/markdown_sellthrough_investigation_skill.md

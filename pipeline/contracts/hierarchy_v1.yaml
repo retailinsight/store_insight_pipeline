@@ -10,9 +10,10 @@ name: hierarchy
 version: v1
 
 description: |
-  Item master.  Provides DEPARTMENT_NAME, SUBCLASS_NAME, and
-  PRODUCT_PROFILE_GROUP_NAME for grouping and narrative text on every OSA
-  alert.  One row per ITEM_CODE.
+  Item master with 4-level hierarchy (division, department, subclass, PPG).
+  Provides ITEM_HIERARCHY_1-4 (names) and ITEM_HIERARCHY_ID_1-4 (numeric IDs)
+  plus ITEM_DESCRIPTION for unified OSA and WMD pipeline usage.
+  One row per ITEM_CODE.
 
 grain:
   - ITEM_CODE
@@ -33,32 +34,59 @@ columns:
       no downstream detector reads it directly (item resolution goes via
       ITEM_CODE).  Kept optional for forward compatibility.
 
-  DEPARTMENT_NAME:
+  ITEM_HIERARCHY_1:
     type: VARCHAR
     required: true
-    description: |
-      Primary grouping dimension across all OSA alerts.  Rows where this
-      column is NULL are filtered out post-join — adapters should produce
-      NULL only for items that should be excluded from alerts entirely.
+    description: Division level name (top of hierarchy).
 
-  SUBCLASS_NAME:
+  ITEM_HIERARCHY_2:
+    type: VARCHAR
+    required: true
+    description: Department level name. Rows with NULL are filtered post-join.
+
+  ITEM_HIERARCHY_3:
     type: VARCHAR
     required: false
-    description: Sub-departmental grouping; used in some narrative breakdowns.
+    description: Subclass level name.
 
-  PRODUCT_PROFILE_GROUP_NAME:
+  ITEM_HIERARCHY_4:
     type: VARCHAR
     required: false
-    description: PPG — used by the OSA PPG drilldown gatherer.
+    description: Product Profile Group (PPG) name.
+
+  ITEM_HIERARCHY_ID_1:
+    type: NUMBER
+    required: false
+    description: Division level numeric ID.
+
+  ITEM_HIERARCHY_ID_2:
+    type: NUMBER
+    required: false
+    description: Department level numeric ID (used for WMD grouping).
+
+  ITEM_HIERARCHY_ID_3:
+    type: NUMBER
+    required: false
+    description: Subclass level numeric ID.
+
+  ITEM_HIERARCHY_ID_4:
+    type: NUMBER
+    required: false
+    description: PPG level numeric ID.
+
+  ITEM_DESCRIPTION:
+    type: VARCHAR
+    required: false
+    description: Human-readable item name for markdown/waste narratives.
 
 data_quality_findings:
-  - column: DEPARTMENT_NAME
+  - column: ITEM_HIERARCHY_2
     severity: high
     concern: |
-      Rows with NULL DEPARTMENT_NAME are silently dropped from all OSA
-      output by the loader's post-join filter.  Adapter authors should
-      ensure non-saleable / archived items are the only ones with NULL
-      here, otherwise live items will be invisible to alerts.
+      Rows with NULL ITEM_HIERARCHY_2 (department) are silently dropped
+      from all OSA output by the loader's post-join filter. Adapter authors
+      should ensure non-saleable / archived items are the only ones with
+      NULL here, otherwise live items will be invisible to alerts.
 
 notes: |
   - Pipeline applies .distinct() at load time, so duplicate ITEM_CODE rows

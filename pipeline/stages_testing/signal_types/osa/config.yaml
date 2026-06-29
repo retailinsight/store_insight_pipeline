@@ -1,0 +1,26 @@
+# OSA — on-shelf availability alerts (store × department)
+# =========================================================
+#   detectors.py — custom WOW / VS_CHAIN / REPEAT detectors (dept-grained,
+#                  so they do not use the generic store-rate machinery)
+#   config.yaml  — this manifest
+
+signal_type: OSA
+
+# detect: custom detectors provided by detectors.py
+
+score:
+  # £ revenue that did not happen this week because items were absent from
+  # shelf; assumed to repeat each week until fixed.
+  formula: "this_week_lsv"
+
+facts:
+  gatherers:
+    - osa_ppg_drilldown
+    - osa_dow
+    - osa_chain_drift
+    - osa_repeat_history
+    - osa_cost_projection
+
+investigate:
+  engine: rule_based
+  skill_file: skills/osa_investigation_skill.md

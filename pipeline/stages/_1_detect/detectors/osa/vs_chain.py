@@ -39,7 +39,7 @@ def detect(
     osa,
     this_week_start,
     this_week_end,
-    section='DEPARTMENT_NAME',
+    section='ITEM_HIERARCHY_2',
     min_chain_gap=0.03,
     min_lost_sales_value=200,
 ):
@@ -50,7 +50,7 @@ def detect(
     ----------
     osa                  : Snowpark DataFrame (full chain — not store-filtered)
     this_week_start/end  : date strings for the current week
-    section              : column to group by (default: 'DEPARTMENT_NAME')
+    section              : column to group by (default: 'ITEM_HIERARCHY_2')
     min_chain_gap        : minimum gap below chain average, e.g. 0.03 = 3pp
     min_lost_sales_value : minimum £ lost sales this week to qualify
 
@@ -63,7 +63,7 @@ def detect(
 
     chain = (
         osa
-        .filter((F.col('ANALYSIS_DATE') >= this_week_start) & (F.col('ANALYSIS_DATE') <= this_week_end))
+        .filter((F.col('DATE') >= this_week_start) & (F.col('DATE') <= this_week_end))
         .group_by(section)
         .agg(
             F.sum('ACTUAL_SALES_VOLUME').alias('CHAIN_SALES'),

@@ -44,7 +44,7 @@ def detect(
     osa,
     lookback_start,
     lookback_end,
-    section='DEPARTMENT_NAME',
+    section='ITEM_HIERARCHY_2',
     min_alert_weeks=4,
     min_osa_drop=0.05,
     min_weekly_lsv=50,
@@ -57,7 +57,7 @@ def detect(
     osa              : Snowpark DataFrame (must cover the full lookback window)
     lookback_start   : start of rolling window, e.g. ~10 weeks back
     lookback_end     : end of rolling window (= this_week_end)
-    section          : column to group by (default: 'DEPARTMENT_NAME')
+    section          : column to group by (default: 'ITEM_HIERARCHY_2')
     min_alert_weeks  : minimum number of flagged weeks to fire the trigger
     min_osa_drop     : per-week OSA drop threshold as a proportion (e.g. 0.05)
     min_weekly_lsv   : minimum weekly £ LSV to count a week as a flagged week
@@ -68,12 +68,12 @@ def detect(
     """
     weekly = (
         osa
-        .filter((F.col('ANALYSIS_DATE') >= lookback_start) & (F.col('ANALYSIS_DATE') <= lookback_end))
-        .with_column('WEEK_NUMBER', F.weekofyear(F.col('ANALYSIS_DATE')))
-        .with_column('YEAR_NUMBER',  F.year(F.col('ANALYSIS_DATE')))
+        .filter((F.col('DATE') >= lookback_start) & (F.col('DATE') <= lookback_end))
+        .with_column('WEEK_NUMBER', F.weekofyear(F.col('DATE')))
+        .with_column('YEAR_NUMBER',  F.year(F.col('DATE')))
         .group_by(
             'STORE_ID', 'ITEM_CODE', section,
-            'SUBCLASS_NAME', 'PRODUCT_PROFILE_GROUP_NAME',
+            'ITEM_HIERARCHY_3',
             'YEAR_NUMBER', 'WEEK_NUMBER',
         )
         .agg(
@@ -98,7 +98,7 @@ def detect(
     repeated = (
         flagged
         .filter(F.col('IS_ALERT_WEEK') == True)
-        .group_by('STORE_ID', 'ITEM_CODE', section, 'SUBCLASS_NAME', 'PRODUCT_PROFILE_GROUP_NAME')
+        .group_by('STORE_ID', 'ITEM_CODE', section, 'ITEM_HIERARCHY_3')
         .agg(
             F.count('WEEK_NUMBER').alias('ALERT_WEEK_COUNT'),
             F.sum('WEEKLY_LSV').alias('CUMULATIVE_LSV'),
@@ -112,8 +112,8 @@ def detect(
         key = (int(row['STORE_ID']), row[section])
         by_dept[key].append({
             'item_code':      row['ITEM_CODE'],
-            'subclass':       row['SUBCLASS_NAME'],
-            'ppg':            row['PRODUCT_PROFILE_GROUP_NAME'],
+            'ppg':            row['ITEM_HIERARCHY_3'],
+            'subclass':       row[section],
             'alert_weeks':    int(row['ALERT_WEEK_COUNT']),
             'cumulative_lsv': round(float(row['CUMULATIVE_LSV'] or 0), 2),
             'avg_alert_osa':  round(float(row['AVG_ALERT_OSA'] or 0) * 100, 2),

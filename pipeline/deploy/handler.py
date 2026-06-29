@@ -72,9 +72,9 @@ def run(session, client: str = None, analysis_date: str = None, overwrite: bool 
     print(f'[handler] wmd lookback  : {w["wmd_lookback"]} – {w["this_week_end"]}')
 
     # ── enable Cortex LLM narrative engine ───────────────────────────────────
-    import store_insight.pipeline.stages._3_investigate.investigate as _investigate
+    import store_insight.pipeline.stages._4_investigate.investigate as _investigate
     _investigate._engine     = __import__(
-        'store_insight.pipeline.stages._3_investigate.cortex', fromlist=['cortex']
+        'store_insight.pipeline.stages._4_investigate.cortex', fromlist=['cortex']
     )
     _investigate._USE_CORTEX = True
     print('[handler] Cortex narrative engine enabled.')
