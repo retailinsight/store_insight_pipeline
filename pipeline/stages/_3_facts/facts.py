@@ -120,11 +120,22 @@ def enrich_signals(
     )
 
     # ── Build dispatch map (optionally filtered by config) ─────────────────
-    cfg_gatherers = getattr(cfg, 'gatherers', None) if cfg else None
+    cfg_gatherers = None
+    if cfg:
+        if isinstance(cfg, dict):
+            cfg_gatherers = cfg.get('gatherers')
+        else:
+            # Pydantic model
+            cfg_gatherers = getattr(cfg, 'gatherers', None)
+
     dispatch = {}
     for stype, gatherers in _registry.SIGNAL_TYPE_GATHERERS.items():
         if cfg_gatherers is not None:
-            enabled = getattr(cfg_gatherers, stype, None)
+            if isinstance(cfg_gatherers, dict):
+                enabled = cfg_gatherers.get(stype)
+            else:
+                # Pydantic model
+                enabled = getattr(cfg_gatherers, stype, None)
             if enabled is not None:
                 enabled_set = set(enabled)
                 gatherers = [g for g in gatherers if g.__name__.split('.')[-1] in enabled_set]

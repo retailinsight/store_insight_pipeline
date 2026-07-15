@@ -1,0 +1,1073 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Store Insight Pipeline — Engineering System Map</title>
+  <style>
+    :root {
+      --ink: #182033;
+      --muted: #5b6475;
+      --line: #dbe1ec;
+      --soft: #f6f8fc;
+      --card: #ffffff;
+      --blue: #2457a6;
+      --blue2: #eaf1ff;
+      --green: #16724a;
+      --green2: #eaf7f0;
+      --amber: #9a5b00;
+      --amber2: #fff4dc;
+      --red: #a43a35;
+      --red2: #fff0ef;
+      --violet: #5a3ca0;
+      --violet2: #f1edff;
+      --teal: #0f6f78;
+      --teal2: #e7f7f9;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: #edf2f8;
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      line-height: 1.42;
+    }
+
+    .page {
+      max-width: 1320px;
+      margin: 28px auto;
+      background: var(--card);
+      border: 1px solid var(--line);
+      box-shadow: 0 14px 38px rgba(22, 34, 51, .09);
+      border-radius: 18px;
+      overflow: hidden;
+    }
+
+    header {
+      padding: 28px 34px 22px;
+      background: linear-gradient(135deg, #14213d 0%, #2457a6 58%, #5d7bd7 100%);
+      color: white;
+    }
+
+    header h1 {
+      margin: 0 0 8px;
+      font-size: 30px;
+      letter-spacing: -.02em;
+    }
+
+    header p {
+      margin: 0;
+      max-width: 1000px;
+      color: #dce7ff;
+      font-size: 15px;
+    }
+
+    .content {
+      padding: 24px 30px 32px;
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .grid.two {
+      grid-template-columns: 1.05fr .95fr;
+    }
+
+    .grid.three {
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: #fff;
+      padding: 16px;
+    }
+
+    .card h2,
+    .card h3 {
+      margin: 0 0 10px;
+      letter-spacing: -.01em;
+    }
+
+    h2 {
+      font-size: 20px;
+    }
+
+    h3 {
+      font-size: 16px;
+    }
+
+    p {
+      margin: 8px 0;
+    }
+
+    .small {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      background: #f2f4f8;
+      border: 1px solid #e3e7ef;
+      border-radius: 6px;
+      padding: 1px 5px;
+      color: #18233a;
+      white-space: nowrap;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid transparent;
+      margin: 2px 4px 2px 0;
+    }
+
+    .pill.blue {
+      background: var(--blue2);
+      color: var(--blue);
+      border-color: #cddcff;
+    }
+
+    .pill.green {
+      background: var(--green2);
+      color: var(--green);
+      border-color: #c9ead8;
+    }
+
+    .pill.amber {
+      background: var(--amber2);
+      color: var(--amber);
+      border-color: #f1d28d;
+    }
+
+    .pill.red {
+      background: var(--red2);
+      color: var(--red);
+      border-color: #f1c6c2;
+    }
+
+    .pill.violet {
+      background: var(--violet2);
+      color: var(--violet);
+      border-color: #d8cef9;
+    }
+
+    .pill.teal {
+      background: var(--teal2);
+      color: var(--teal);
+      border-color: #bce6ea;
+    }
+
+    .diagram-wrap {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fbfcff;
+      padding: 14px;
+      overflow: auto;
+    }
+
+    svg {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      padding: 10px 9px;
+      border-bottom: 1px solid #e7ebf2;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: #536079;
+      background: #f7f9fd;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    .priority {
+      font-weight: 800;
+      border-radius: 8px;
+      padding: 3px 7px;
+      display: inline-block;
+      font-size: 12px;
+    }
+
+    .p0 {
+      background: var(--red2);
+      color: var(--red);
+    }
+
+    .p1 {
+      background: var(--amber2);
+      color: var(--amber);
+    }
+
+    .p2 {
+      background: var(--blue2);
+      color: var(--blue);
+    }
+
+    .callout {
+      border-left: 4px solid var(--blue);
+      background: #f7faff;
+      border-radius: 10px;
+      padding: 12px 13px;
+      margin: 12px 0;
+      color: #24324d;
+    }
+
+    .callout strong {
+      color: #0f3f87;
+    }
+
+    .warn {
+      border-left-color: var(--red);
+      background: #fff7f7;
+    }
+
+    .warn strong {
+      color: var(--red);
+    }
+
+    .kpi {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .kpi div {
+      background: #f8fafc;
+      border: 1px solid #e2e7f0;
+      border-radius: 12px;
+      padding: 10px;
+    }
+
+    .kpi b {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 3px;
+    }
+
+    .kpi span {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .section-title {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      margin: 22px 0 10px;
+    }
+
+    .section-title h2 {
+      margin: 0;
+    }
+
+    ul {
+      margin: 8px 0 0 18px;
+      padding: 0;
+    }
+
+    li {
+      margin: 4px 0;
+    }
+
+    .footer {
+      margin-top: 18px;
+      font-size: 12px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      padding-top: 12px;
+    }
+
+    @media print {
+      body {
+        background: white;
+      }
+
+      .page {
+        box-shadow: none;
+        border: 0;
+        margin: 0;
+        max-width: none;
+        border-radius: 0;
+      }
+
+      .content {
+        padding: 18px 22px;
+      }
+
+      .card {
+        break-inside: avoid;
+      }
+
+      header {
+        padding: 20px 24px;
+      }
+
+      .grid.two,
+      .grid.three {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 900px) {
+
+      .grid.two,
+      .grid.three,
+      .kpi {
+        grid-template-columns: 1fr;
+      }
+
+      .content {
+        padding: 18px;
+      }
+
+      header {
+        padding: 22px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page">
+    <header>
+      <h1>Store Insight Pipeline — Engineering System Map</h1>
+      <p>Visual engineering review for the Store Insight alert-card pipeline: how source data becomes signals,
+        investigations, scored cards, and downstream feedback — plus the most practical improvements to harden identity,
+        lineage, validation, Cortex control, replay, and closed-loop measurement.</p>
+    </header>
+
+    <main class="content">
+      <div class="grid two">
+        <section class="card">
+          <h2>Purpose and operating model</h2>
+          <p>Store Insight turns store performance data into explainable business alert cards. Source data and YAML
+            configuration feed detector logic; raw signals are enriched and merged into traceable candidates;
+            investigations generate rule-based or Cortex-backed narratives; final cards are scored, validated, and
+            written for downstream use.</p>
+          <div>
+            <span class="pill blue">YAML thresholds</span>
+            <span class="pill green">Detector-driven signals</span>
+            <span class="pill violet">Rule/Cortex investigation</span>
+            <span class="pill amber">Ranked alert cards</span>
+            <span class="pill red">Identity + lineage need hardening</span>
+          </div>
+          <div class="kpi">
+            <div><b>15 recommendations</b><span>identity, lineage, validation, CI/CD, replay, lifecycle</span></div>
+            <div><b>2 narrative paths</b><span>deterministic rule mode plus Cortex-backed investigation</span></div>
+            <div><b>4 replay stages</b><span>raw signals, enriched signals, investigations, score audit</span></div>
+            <div><b>1 closed loop</b><span>alert generation → user action → KPI measurement</span></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Primary entry points</h2>
+          <table>
+            <tr>
+              <th>Area</th>
+              <th>Actual files / classes / functions in <code>store-insight-main</code></th>
+            </tr>
+            <tr>
+              <td>Snowflake stored procedure</td>
+              <td>
+                <code>pipeline/deploy/handler.py::run()</code><br><code>CALL RUN_ALERTS_PIPELINE(client, analysis_date, overwrite)</code>
+              </td>
+            </tr>
+            <tr>
+              <td>CLI / batch entrypoint</td>
+              <td><code>pipeline/pipeline/run_batch.py::main()</code><br><code>run_single_date()</code>,
+                <code>load_osa()</code>, <code>load_feedback()</code>, <code>load_wmd()</code>
+              </td>
+            </tr>
+            <tr>
+              <td>Run orchestration</td>
+              <td><code>pipeline/pipeline/pipeline.py::derive_windows()</code><br><code>run_pipeline()</code> →
+                <code>run_pipeline_from_signals()</code> → <code>write_alerts()</code>
+              </td>
+            </tr>
+            <tr>
+              <td>Configuration and capability validation</td>
+              <td>
+                <code>pipeline/config/loader.py::load_config()</code><br><code>pipeline/config/base/default.yaml</code><br><code>pipeline/config/clients/eastofengland/client.yaml</code><br><code>pipeline/pipeline/capabilities.py::validate()</code>
+              </td>
+            </tr>
+            <tr>
+              <td>Stage 1 — detect</td>
+              <td><code>pipeline/stages/_1_detect/detect.py::detect_signals()</code><br><code>detectors/osa</code>,
+                <code>compliance</code>, <code>markdown_override</code>, <code>waste</code>,
+                <code>markdown_sellthrough</code>, <code>markdown_sku</code>
+              </td>
+            </tr>
+            <tr>
+              <td>Stage 2 — gather facts</td>
+              <td>
+                <code>pipeline/stages/_2_facts/facts.py::enrich_signals()</code><br><code>signal_type_gatherers.yaml</code>
+                and gatherers such as <code>osa_ppg_drilldown</code>, <code>waste_dept_breakdown</code>,
+                <code>markdown_sku_history</code>
+              </td>
+            </tr>
+            <tr>
+              <td>Stage 3 — investigate</td>
+              <td>
+                <code>pipeline/stages/_3_investigate/investigate.py::investigate()</code><br><code>rule_based.py</code>,
+                <code>cortex.py</code>, <code>signal_type_investigators.yaml</code>, <code>skills/*.md</code>
+              </td>
+            </tr>
+            <tr>
+              <td>Stage 4 — score and write</td>
+              <td>
+                <code>pipeline/stages/_4_score/score.py::score()</code><br><code>pipeline/pipeline/pipeline.py::_build_card()</code>,
+                <code>_card_schema()</code>, <code>write_alerts()</code>
+              </td>
+            </tr>
+            <tr>
+              <td>Tests / QC / deploy tools</td>
+              <td><code>pipeline/tests/</code>, <code>pipeline/qc/*.ipynb</code>,
+                <code>pipeline/tools/validate_views.py</code>, <code>pipeline/tools/deploy_views.py</code>
+              </td>
+            </tr>
+          </table>
+        </section>
+      </div>
+
+      <section class="card" style="margin-top:16px">
+        <h2>Alignment check against <code>store-insight-main</code></h2>
+        <p>The architecture is aligned to the actual four-stage pipeline in <code>pipeline/pipeline/pipeline.py</code>:
+          <code>detect_signals()</code> → <code>enrich_signals()</code> → <code>investigate()</code> →
+          <code>score()</code> → <code>write_alerts()</code>. The page now uses the exact repository entry points, stage
+          names, enabled detector families, Snowflake adapter/contracts model, and the real output table concept
+          <code>ALERTS_PIPELINE</code>.
+        </p>
+        <div class="callout"><strong>Important distinction:</strong> debug tables such as
+          <code>ALERT_SIGNALS_RAW</code>, <code>ALERT_SIGNALS_ENRICHED</code>, <code>ALERT_INVESTIGATIONS</code>, and
+          <code>ALERT_SCORE_AUDIT</code> are recommended future hardening tables. They are not currently written by the
+          pipeline; current checkpointing is file-based through <code>save_signals()</code> /
+          <code>load_signals()</code>, and final output is written through <code>write_alerts()</code>.
+        </div>
+      </section>
+
+      <section class="card" style="margin-top:16px">
+        <div class="section-title">
+          <div>
+            <h2>End-to-end system diagram</h2>
+            <p class="small">The red tags mark the most important engineering decisions to tighten before promotion and
+              wider operational use.</p>
+          </div>
+        </div>
+        <div class="diagram-wrap">
+          <svg width="1240" height="540" viewBox="0 0 1240 540" role="img"
+            aria-label="Store Insight pipeline system diagram">
+            <defs>
+              <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"
+                markerUnits="strokeWidth">
+                <path d="M0,0 L0,6 L9,3 z" fill="#536079" />
+              </marker>
+              <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#172033" flood-opacity="0.12" />
+              </filter>
+            </defs>
+            <style>
+              .box {
+                fill: #fff;
+                stroke: #d9deea;
+                stroke-width: 1.2;
+                filter: url(#shadow)
+              }
+
+              .blue {
+                fill: #eef4ff;
+                stroke: #bfd0f5
+              }
+
+              .green {
+                fill: #eefaf4;
+                stroke: #b7e2cb
+              }
+
+              .violet {
+                fill: #f4f0ff;
+                stroke: #d5c8fb
+              }
+
+              .amber {
+                fill: #fff7e8;
+                stroke: #ecd09a
+              }
+
+              .red {
+                fill: #fff1f0;
+                stroke: #e6b8b4
+              }
+
+              .teal {
+                fill: #e8f8f9;
+                stroke: #bde4e8
+              }
+
+              .gray {
+                fill: #f7f9fc;
+                stroke: #d9deea
+              }
+
+              .t {
+                font: 700 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Arial;
+                fill: #172033
+              }
+
+              .s {
+                font: 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Arial;
+                fill: #536079
+              }
+
+              .m {
+                font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Arial;
+                fill: #a43a35
+              }
+
+              .lane {
+                font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Arial;
+                fill: #2457a6
+              }
+
+              .line {
+                stroke: #536079;
+                stroke-width: 1.6;
+                fill: none;
+                marker-end: url(#arrow)
+              }
+
+              .dash {
+                stroke-dasharray: 5 5
+              }
+
+              .note {
+                font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Arial;
+                fill: #0f6f78
+              }
+            </style>
+
+            <text class="lane" x="34" y="28">SOURCES + CONFIG</text>
+            <text class="lane" x="258" y="28">DETECTION</text>
+            <text class="lane" x="492" y="28">ENRICH + MERGE</text>
+            <text class="lane" x="712" y="28">INVESTIGATION</text>
+            <text class="lane" x="928" y="28">SCORING + OUTPUT</text>
+            <text class="lane" x="1100" y="28">FEEDBACK</text>
+
+            <rect class="box blue" x="26" y="52" width="184" height="134" rx="15" />
+            <text class="t" x="46" y="80">Source data</text>
+            <text class="s" x="46" y="104">OSA + feedback</text>
+            <text class="s" x="46" y="124">markdown log/sales</text>
+            <text class="s" x="46" y="144">wastage + hierarchies</text>
+            <text class="m" x="46" y="166">Improve: completeness checks</text>
+
+            <rect class="box blue" x="26" y="230" width="184" height="108" rx="15" />
+            <text class="t" x="46" y="258">Config + thresholds</text>
+            <text class="s" x="46" y="282">YAML values</text>
+            <text class="s" x="46" y="302">enabled capabilities</text>
+            <text class="m" x="46" y="324">Improve: backtest changes</text>
+
+            <rect class="box green" x="256" y="76" width="190" height="160" rx="15" />
+            <text class="t" x="276" y="104">Detector layer</text>
+            <text class="s" x="276" y="128">OSA lost sales</text>
+            <text class="s" x="276" y="148">WASTE vs chain/WOW</text>
+            <text class="s" x="276" y="168">markdown overrides</text>
+            <text class="s" x="276" y="188">sell-through / SKU signals</text>
+            <text class="m" x="276" y="212">Improve: golden-run counts</text>
+
+            <rect class="box violet" x="494" y="76" width="190" height="160" rx="15" />
+            <text class="t" x="514" y="104">Fact enrichment</text>
+            <text class="s" x="514" y="128">gatherers add facts</text>
+            <text class="s" x="514" y="148">trigger combinations</text>
+            <text class="s" x="514" y="168">entity context</text>
+            <text class="s" x="514" y="188">candidate alert rows</text>
+            <text class="m" x="514" y="212">Improve: stable signal_id</text>
+
+            <rect class="box red" x="494" y="292" width="190" height="108" rx="15" />
+            <text class="t" x="514" y="320">Signal merge rules</text>
+            <text class="s" x="514" y="344">OSA and non-OSA joins</text>
+            <text class="s" x="514" y="364">preserve trigger fields</text>
+            <text class="m" x="514" y="386">Improve: fix OSA LSV max</text>
+
+            <rect class="box amber" x="730" y="76" width="190" height="160" rx="15" />
+            <text class="t" x="750" y="104">Investigation engine</text>
+            <text class="s" x="750" y="128">rule-based narratives</text>
+            <text class="s" x="750" y="148">Cortex-backed narratives</text>
+            <text class="s" x="750" y="168">parallel workers</text>
+            <text class="s" x="750" y="188">fallback path</text>
+            <text class="m" x="750" y="212">Improve: budget + quality gate</text>
+
+            <rect class="box red" x="730" y="292" width="190" height="108" rx="15" />
+            <text class="t" x="750" y="320">Concurrency boundary</text>
+            <text class="s" x="750" y="344">ThreadPoolExecutor</text>
+            <text class="s" x="750" y="364">shared Snowpark session</text>
+            <text class="m" x="750" y="386">Improve: session-safe workers</text>
+
+            <rect class="box teal" x="962" y="76" width="190" height="160" rx="15" />
+            <text class="t" x="982" y="104">Alert cards</text>
+            <text class="s" x="982" y="128">issue / explanation</text>
+            <text class="s" x="982" y="148">recommended action</text>
+            <text class="s" x="982" y="168">sort_value ranking</text>
+            <text class="s" x="982" y="188">downstream output</text>
+            <text class="m" x="982" y="212">Improve: card validation</text>
+
+            <rect class="box green" x="962" y="292" width="190" height="108" rx="15" />
+            <text class="t" x="982" y="320">Lifecycle feedback</text>
+            <text class="s" x="982" y="344">seen / worked / closed</text>
+            <text class="s" x="982" y="364">KPI after alert</text>
+            <text class="m" x="982" y="386">Improve: post-action impact</text>
+
+            <path class="line" d="M210 118 L256 150" />
+            <path class="line" d="M210 284 C236 284 234 204 256 188" />
+            <path class="line" d="M446 156 L494 156" />
+            <path class="line" d="M684 156 L730 156" />
+            <path class="line" d="M920 156 L962 156" />
+            <path class="line" d="M589 236 L589 292" />
+            <path class="line" d="M684 346 C706 346 706 236 730 206" />
+            <path class="line" d="M825 236 L825 292" />
+            <path class="line" d="M1057 236 L1057 292" />
+
+            <rect class="box gray" x="96" y="446" width="1048" height="62" rx="14" />
+            <text class="t" x="118" y="472">Cross-cutting hardening layer</text>
+            <text class="s" x="118" y="494">Add deterministic alert identity, run lineage, stage-level debug tables,
+              CI/CD gates, score component audit, and package/import cleanup so every card can be explained, replayed,
+              and compared across runs.</text>
+            <path class="line dash" d="M118 446 C140 414 148 372 118 338" />
+            <path class="line dash" d="M352 446 C352 400 352 294 352 236" />
+            <path class="line dash" d="M590 446 L590 400" />
+            <path class="line dash" d="M826 446 L826 400" />
+            <path class="line dash" d="M1058 446 L1058 400" />
+          </svg>
+        </div>
+        <div class="callout warn"><strong>Most important product/engineering gap:</strong> the pipeline already creates
+          useful alert cards, but without deterministic <code>alert_id</code>/<code>signal_id</code> and full run
+          lineage, it is hard to prove whether an alert is new, continuing, rerun-created, threshold-created,
+          Cortex-created, or actually resolved after action.</div>
+      </section>
+
+      <section class="card" style="margin-top:16px">
+        <div class="section-title">
+          <div>
+            <h2>Detailed flow and improvement insertion points</h2>
+            <p class="small">A lower-level view of where to add the recommended hardening items without redesigning the
+              core alert-card pipeline.</p>
+          </div>
+        </div>
+        <div class="diagram-wrap">
+          <svg width="1260" height="760" viewBox="0 0 1260 760" role="img"
+            aria-label="Detailed Store Insight flow and code-level improvement insertion points">
+            <defs>
+              <marker id="detailArrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"
+                markerUnits="strokeWidth">
+                <path d="M0,0 L0,6 L9,3 z" fill="#536079" />
+              </marker>
+              <filter id="detailShadow" x="-20%" y="-20%" width="140%" height="140%">
+                <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#172033" flood-opacity="0.10" />
+              </filter>
+            </defs>
+            <style>
+              .dBox {
+                fill: #fff;
+                stroke: #d9deea;
+                stroke-width: 1.2;
+                filter: url(#detailShadow)
+              }
+
+              .dBlue {
+                fill: #eef4ff;
+                stroke: #bfd0f5
+              }
+
+              .dGreen {
+                fill: #eefaf4;
+                stroke: #b7e2cb
+              }
+
+              .dViolet {
+                fill: #f4f0ff;
+                stroke: #d5c8fb
+              }
+
+              .dAmber {
+                fill: #fff7e8;
+                stroke: #ecd09a
+              }
+
+              .dRed {
+                fill: #fff1f0;
+                stroke: #e6b8b4
+              }
+
+              .dTeal {
+                fill: #e8f8f9;
+                stroke: #bde4e8
+              }
+
+              .dGray {
+                fill: #f7f9fc;
+                stroke: #d9deea
+              }
+
+              .dt {
+                font: 700 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Arial;
+                fill: #172033
+              }
+
+              .ds {
+                font: 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Arial;
+                fill: #536079
+              }
+
+              .dm {
+                font: 700 10px -apple-system, BlinkMacSystemFont, "Segoe UI", Arial;
+                fill: #a43a35
+              }
+
+              .dlane {
+                font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Arial;
+                fill: #2457a6
+              }
+
+              .dline {
+                stroke: #536079;
+                stroke-width: 1.6;
+                fill: none;
+                marker-end: url(#detailArrow)
+              }
+
+              .ddash {
+                stroke-dasharray: 5 5
+              }
+
+              .dlabel {
+                font: 700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Arial;
+                fill: #0f6f78
+              }
+            </style>
+
+            <text class="dlane" x="34" y="32">RUN SETUP</text>
+            <text class="dlane" x="290" y="32">SOURCE QUALITY</text>
+            <text class="dlane" x="540" y="32">SIGNAL PROCESSING</text>
+            <text class="dlane" x="796" y="32">NARRATIVE + SCORING</text>
+            <text class="dlane" x="1042" y="32">OUTPUT + OPS</text>
+
+            <rect class="dBox dBlue" x="34" y="58" width="220" height="112" rx="14" />
+            <text class="dt" x="54" y="86">CLI / SP invocation</text>
+            <text class="ds" x="54" y="110">run_batch.py or handler.py</text>
+            <text class="ds" x="54" y="130">
+              <tspan>--deterministic</tspan> mode
+            </text>
+            <text class="dm" x="54" y="152">Add golden regression suite</text>
+
+            <rect class="dBox dBlue" x="34" y="218" width="220" height="128" rx="14" />
+            <text class="dt" x="54" y="246">Configuration load</text>
+            <text class="ds" x="54" y="270">YAML thresholds</text>
+            <text class="ds" x="54" y="290">enabled detectors/gatherers</text>
+            <text class="ds" x="54" y="310">prompt / skill files</text>
+            <text class="dm" x="54" y="332">Store config_hash + prompt_hash</text>
+
+            <rect class="dBox dGreen" x="290" y="58" width="220" height="128" rx="14" />
+            <text class="dt" x="310" y="86">Source checks</text>
+            <text class="ds" x="310" y="110">week completeness</text>
+            <text class="ds" x="310" y="130">store coverage</text>
+            <text class="ds" x="310" y="150">join drop rates</text>
+            <text class="dm" x="310" y="172">Fail safe or mark low confidence</text>
+
+            <rect class="dBox dGreen" x="290" y="234" width="220" height="112" rx="14" />
+            <text class="dt" x="310" y="262">Threshold backtest</text>
+            <text class="ds" x="310" y="286">current vs proposed YAML</text>
+            <text class="ds" x="310" y="306">alert volume / top 10 impact</text>
+            <text class="dm" x="310" y="328">Prevent alert fatigue</text>
+
+            <rect class="dBox dViolet" x="548" y="58" width="222" height="128" rx="14" />
+            <text class="dt" x="568" y="86">Stage 1 raw signals</text>
+            <text class="ds" x="568" y="110">OSA, waste, markdown</text>
+            <text class="ds" x="568" y="130">repeat / chain / WOW</text>
+            <text class="ds" x="568" y="150">business entity keys</text>
+            <text class="dm" x="568" y="172">Create deterministic signal_id</text>
+
+            <rect class="dBox dRed" x="548" y="234" width="222" height="134" rx="14" />
+            <text class="dt" x="568" y="262">Stage 2 facts + merge</text>
+            <text class="ds" x="568" y="286">preserve multi-trigger facts</text>
+            <text class="ds" x="568" y="306">fix OSA LSV aggregation</text>
+            <text class="ds" x="568" y="326">build alert candidates</text>
+            <text class="dm" x="568" y="350">Use signal-type specific rules</text>
+
+            <rect class="dBox dAmber" x="812" y="58" width="220" height="144" rx="14" />
+            <text class="dt" x="832" y="86">Stage 3 investigation</text>
+            <text class="ds" x="832" y="110">rule narrative or Cortex</text>
+            <text class="ds" x="832" y="130">raw_llm_response</text>
+            <text class="ds" x="832" y="150">validated_json flag</text>
+            <text class="ds" x="832" y="170">fallback reason</text>
+            <text class="dm" x="832" y="190">Add budget + quality gates</text>
+
+            <rect class="dBox dAmber" x="812" y="250" width="220" height="118" rx="14" />
+            <text class="dt" x="832" y="278">Stage 4 score</text>
+            <text class="ds" x="832" y="302">commercial impact</text>
+            <text class="ds" x="832" y="322">severity / confidence</text>
+            <text class="ds" x="832" y="342">final_sort_value</text>
+            <text class="dm" x="832" y="360">Explain ranking components</text>
+
+            <rect class="dBox dTeal" x="1070" y="58" width="160" height="128" rx="14" />
+            <text class="dt" x="1090" y="86">Card assembly</text>
+            <text class="ds" x="1090" y="110">issue</text>
+            <text class="ds" x="1090" y="130">explanation</text>
+            <text class="ds" x="1090" y="150">action</text>
+            <text class="dm" x="1090" y="172">Validate before write</text>
+
+            <rect class="dBox dTeal" x="1070" y="234" width="160" height="134" rx="14" />
+            <text class="dt" x="1090" y="262">ALERTS_PIPELINE</text>
+            <text class="ds" x="1090" y="286">alert_id</text>
+            <text class="ds" x="1090" y="306">run_id / version</text>
+            <text class="ds" x="1090" y="326">source watermark</text>
+            <text class="dm" x="1090" y="350">Add lineage columns</text>
+
+            <rect class="dBox dGreen" x="1070" y="416" width="160" height="128" rx="14" />
+            <text class="dt" x="1090" y="444">Feedback / UI action</text>
+            <text class="ds" x="1090" y="468">seen / assigned</text>
+            <text class="ds" x="1090" y="488">worked / closed</text>
+            <text class="ds" x="1090" y="508">reopened / ignored</text>
+            <text class="dm" x="1090" y="530">Measure KPI impact</text>
+
+            <rect class="dBox dGray" x="126" y="616" width="1008" height="88" rx="14" />
+            <text class="dt" x="148" y="644">Optional replay/debug tables</text>
+            <text class="ds" x="148" y="668">ALERT_SIGNALS_RAW → ALERT_SIGNALS_ENRICHED → ALERT_INVESTIGATIONS →
+              ALERT_SCORE_AUDIT</text>
+            <text class="dm" x="148" y="690">Replay only investigation after prompt changes, only scoring after rank
+              changes, or compare Cortex output against deterministic rule-based output.</text>
+
+            <path class="dline" d="M254 114 L290 122" />
+            <path class="dline" d="M254 282 L290 290" />
+            <path class="dline" d="M510 122 L548 122" />
+            <path class="dline" d="M659 186 L659 234" />
+            <path class="dline" d="M770 302 L812 126" />
+            <path class="dline" d="M922 202 L922 250" />
+            <path class="dline" d="M1032 126 L1070 126" />
+            <path class="dline" d="M1032 309 L1070 300" />
+            <path class="dline" d="M1150 368 L1150 416" />
+            <path class="dline ddash" d="M658 368 C658 484 658 566 630 616" />
+            <path class="dline ddash" d="M922 368 C922 484 874 566 830 616" />
+            <path class="dline ddash" d="M1150 368 C1150 484 1070 566 1030 616" />
+            <path class="dline ddash" d="M144 346 C144 470 190 548 256 616" />
+          </svg>
+        </div>
+        <div class="callout"><strong>How to read this section:</strong> the main path is configuration and source checks
+          → raw detector signals → enriched/merged candidates → investigation → score audit → final card write →
+          lifecycle measurement. The red notes inside each box are practical insertion points from the review.</div>
+      </section>
+
+      <section class="card" style="margin-top:16px">
+        <div class="section-title">
+          <h2>Recommended improvements shown as engineering insertion points</h2><span class="small">Prioritised from
+            production safety and traceability first, then cost, tuning, and product feedback.</span>
+        </div>
+        <table>
+          <tr>
+            <th>Priority</th>
+            <th>Improvement</th>
+            <th>Where to address</th>
+            <th>Practical solution</th>
+          </tr>
+          <tr>
+            <td><span class="priority p0">P0</span></td>
+            <td>Add stable <code>alert_id</code> and <code>signal_id</code>.</td>
+            <td>raw signal creation, enriched candidates, final alert table</td>
+            <td>Create deterministic IDs from client, analysis date, signal type, store, department, and item/business
+              key. Use them for rerun dedupe, lifecycle tracking, and UI action joins.</td>
+          </tr>
+          <tr>
+            <td><span class="priority p0">P0</span></td>
+            <td>Add run lineage to every output row.</td>
+            <td>final alert write, replay tables, score audit</td>
+            <td>Store <code>run_id</code>, <code>pipeline_version</code>, <code>config_hash</code>,
+              <code>prompt_hash</code>, <code>skill_file_used</code>, <code>engine_used</code>,
+              <code>fallback_used</code>, and <code>source_data_watermark</code>.
+            </td>
+          </tr>
+          <tr>
+            <td><span class="priority p0">P0</span></td>
+            <td>Add source-data completeness checks before detection.</td>
+            <td>source loading / pre-detector gate</td>
+            <td>Validate current-week completeness, comparison-window completeness, store coverage, hierarchy join drop
+              rates, non-negative commercial values, and WMD freshness. Fail safely or mark cards low confidence.</td>
+          </tr>
+          <tr>
+            <td><span class="priority p0">P0</span></td>
+            <td>Turn <code>--deterministic</code> into a regression test mode.</td>
+            <td>pipeline invocation, CI test fixture, golden-run data</td>
+            <td>For a fixed sample window, assert raw/enriched/final counts, top stores, trigger combinations,
+              <code>sort_value</code> distribution, and required card fields.
+            </td>
+          </tr>
+          <tr>
+            <td><span class="priority p0">P0</span></td>
+            <td>Fix and generalise signal merging.</td>
+            <td>merge logic for OSA and non-OSA alert types</td>
+            <td>Use signal-type-specific merge rules. Fix or explicitly document OSA lost-sales handling so
+              <code>this_week_lsv</code> matches intended max-vs-latest behaviour.
+            </td>
+          </tr>
+          <tr>
+            <td><span class="priority p1">P1</span></td>
+            <td>Promote validators into CI/CD gates.</td>
+            <td>release workflow and target-client deployment checks</td>
+            <td>Gate releases on <code>ruff</code>, <code>pytest</code>, target-client <code>validate_views</code>,
+              capability validation, contract validation, and deterministic golden-run comparison.</td>
+          </tr>
+          <tr>
+            <td><span class="priority p1">P1</span></td>
+            <td>Put Cortex behind a budget and quality gate.</td>
+            <td>Cortex investigation path and fallback handler</td>
+            <td>Add max calls/tokens per run, retry/backoff, raw response capture, JSON validation, card quality status,
+              and a rule-based fallback when budget or quality fails.</td>
+          </tr>
+          <tr>
+            <td><span class="priority p1">P1</span></td>
+            <td>Validate shared-session safety for parallel Cortex calls.</td>
+            <td><code>run_pipeline_from_signals</code>, <code>ThreadPoolExecutor</code>, Snowpark session usage</td>
+            <td>Use a bounded Cortex queue, session-safe worker handling, or sequential Cortex execution unless parallel
+              mode is explicitly enabled and tested.</td>
+          </tr>
+          <tr>
+            <td><span class="priority p1">P1</span></td>
+            <td>Add threshold backtesting before changing YAML values.</td>
+            <td>threshold tuning workflow</td>
+            <td>Compare current vs proposed thresholds for alert count, stores added/removed, alert-type mix, top-10
+              changes, and low-value/noisy cards.</td>
+          </tr>
+          <tr>
+            <td><span class="priority p2">P2</span></td>
+            <td>Add stage-level debug tables for replay beyond current save/load checkpointing.</td>
+            <td>current save_signals/load_signals workflow plus optional Snowflake debug tables</td>
+            <td>Persist <code>ALERT_SIGNALS_RAW</code>, <code>ALERT_SIGNALS_ENRICHED</code>,
+              <code>ALERT_INVESTIGATIONS</code>, and <code>ALERT_SCORE_AUDIT</code> so investigation/scoring can be
+              replayed independently.
+            </td>
+          </tr>
+          <tr>
+            <td><span class="priority p2">P2</span></td>
+            <td>Add card-level validation before writing.</td>
+            <td>final output writer and Cortex validation layer</td>
+            <td>Reject or flag missing issue/explanation/action, generic recommendations,
+              <code>None</code>/<code>nan</code> text leakage, invalid JSON, excessive text length, and missing facts.
+            </td>
+          </tr>
+          <tr>
+            <td><span class="priority p2">P2</span></td>
+            <td>Make score components explainable.</td>
+            <td>ranking/scoring layer and score audit table</td>
+            <td>Store commercial impact, severity, trigger weight, confidence, final sort value, and a score reason for
+              every card.</td>
+          </tr>
+          <tr>
+            <td><span class="priority p2">P2</span></td>
+            <td>Add lifecycle and post-action measurement.</td>
+            <td>UI action integration, downstream analytics</td>
+            <td>Track generated, seen, assigned, worked, closed, reopened, resolved, and ignored states; measure OSA,
+              waste, and markdown KPI movement after the card is acted on.</td>
+          </tr>
+          <tr>
+            <td><span class="priority p2">P2</span></td>
+            <td>Clean up package/import setup for automation.</td>
+            <td>project packaging, local development, CI</td>
+            <td>Make the package installable with a standard development setup such as <code>pip install -e .</code> so
+              tests and automation do not rely on fragile import paths.</td>
+          </tr>
+        </table>
+      </section>
+
+      <div class="grid two" style="margin-top:16px">
+        <section class="card">
+          <h2>Good design choices to keep</h2>
+          <ul>
+            <li><strong>Externalised thresholds:</strong> YAML configuration makes threshold review and client tuning
+              easier.</li>
+            <li><strong>Detector-based signal model:</strong> signal-specific detectors keep the business logic
+              understandable.</li>
+            <li><strong>Deterministic mode:</strong> rule-based narrative generation is a strong foundation for
+              regression testing.</li>
+            <li><strong>Cortex fallback option:</strong> the split between LLM-backed and rule-backed cards is a good
+              production-control pattern.</li>
+            <li><strong>Existing validation pieces:</strong> capability, contract, view, and unit validations are
+              already the right primitives for deployment gates.</li>
+            <li><strong>Replay foundation:</strong> <code>save_signals()</code> and <code>load_signals()</code> are
+              useful foundations for cheaper, safer debugging.</li>
+          </ul>
+        </section>
+        <section class="card">
+          <h2>First hardening sprint</h2>
+          <div class="callout"><strong>1. Traceability:</strong> add deterministic
+            <code>alert_id</code>/<code>signal_id</code> plus run lineage columns.
+          </div>
+          <div class="callout"><strong>2. Data safety:</strong> add completeness checks before detector execution.</div>
+          <div class="callout"><strong>3. Regression safety:</strong> turn <code>--deterministic</code> into a
+            golden-run CI check.</div>
+          <div class="callout"><strong>4. Signal correctness:</strong> fix/generalise merge rules, especially OSA
+            lost-sales handling.</div>
+          <div class="callout"><strong>5. Cortex control:</strong> add cost budget, quality validation, fallback
+            metadata, and concurrency guardrails.</div>
+        </section>
+      </div>
+
+      <section class="card" style="margin-top:16px">
+        <h2>Definition of done for this diagram’s recommendations</h2>
+        <ul>
+          <li>Every generated alert card has a deterministic business identity and can be deduplicated across reruns.
+          </li>
+          <li>Every output row can explain the exact data watermark, configuration, prompt, engine, fallback path, and
+            pipeline version that produced it.</li>
+          <li>Detection does not proceed silently when this week, last week, store coverage, hierarchy, or WMD inputs
+            are incomplete.</li>
+          <li>Deterministic golden-run tests catch accidental changes in detector counts, merge logic, ranking, and
+            output shape.</li>
+          <li>Signal merge rules preserve facts from all relevant triggers and handle OSA lost-sales value
+            intentionally.</li>
+          <li>Cortex execution has explicit budget, retry, quality, fallback, and concurrency controls.</li>
+          <li>Final cards are validated before write and score components are available for business explanation.</li>
+          <li>User action and KPI follow-up close the loop from generated recommendation to measurable store outcome.
+          </li>
+        </ul>
+      </section>
+
+      <div class="footer">
+        Based on the Store Insight pipeline review package.
+      </div>
+    </main>
+  </div>
+</body>
+
+</html>

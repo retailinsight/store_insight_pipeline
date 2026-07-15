@@ -1,11 +1,11 @@
 {
-  "generated_at": "2026-04-25T18:12:45+00:00",
+  "generated_at": "2026-07-09T15:59:20+00:00",
   "pipeline_summary": "Weekly batch that detects retail availability and markdown anomalies, enriches each signal with supporting facts, generates plain-English narrative cards, and scores them so the highest-impact issues surface first.",
   "stages": {
     "1_detect": "Run lightweight statistical detectors → list of signals.",
-    "2_facts": "Enrich each signal with supporting data via dispatched gatherers.",
-    "3_investigate": "Generate human-readable issue / explanation / recommended_action.",
-    "4_score": "Rank signals (default: LSV × trigger-count) into sort_value."
+    "2_score": "Score each signal by projected £ cost; filter top-N per store before enrichment.",
+    "3_facts": "Enrich filtered signals with supporting data via dispatched gatherers.",
+    "4_investigate": "Generate human-readable issue / explanation / recommended_action."
   },
   "signal_types": {
     "OSA": {
@@ -652,7 +652,7 @@
     {
       "name": "section",
       "type": "str",
-      "default": "DEPARTMENT_NAME",
+      "default": "ITEM_HIERARCHY_2",
       "detectors": []
     },
     {

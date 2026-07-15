@@ -39,19 +39,25 @@ The pipeline runs weekly (Snowflake Task or CLI) and produces scored alert cards
 ### Data Flow
 
 ```
-config/loader.py          ← load YAML + client overrides
+config/loader.py          ← load YAML + client overrides (Pydantic models)
        ↓
-pipeline/pipeline.py      ← orchestrate run_pipeline()
+pipeline/pipeline.py      ← orchestrate run_pipeline() + capability validation
        ↓
   ┌────────────────────────────────────────────────────┐
   │ Stage 1  _1_detect/detect.py     → list[signal]    │
-  │ Stage 2  _2_score/score.py       → score + filter  │
-  │ Stage 3  _3_facts/facts.py       → enriched signals│
-  │ Stage 4  _4_investigate/         → narrative fields │
+  │ Stage 2  _3_facts/facts.py       → enriched signals│
+  │ Stage 3  _4_investigate/         → narrative fields │
+  │ Stage 4  _2_score/score.py       → score + filter  │
   └────────────────────────────────────────────────────┘
        ↓
-pipeline/pipeline.py      → write_alerts() → Snowflake
+pipeline/pipeline.py      → write_alerts() → Snowflake (with alert_id/signal_id)
 ```
+
+**Recent Enhancements:**
+- **Deterministic IDs** - Stable `alert_id` and `signal_id` for traceability
+- **Capability Validation** - Pre-run validation of client contracts and adapters
+- **Config Compatibility** - Support for both dict and Pydantic model inputs
+- **Enhanced Testing** - 188 comprehensive tests covering all pipeline stages
 
 A **signal** is a dict representing one (store, department) pair that crossed a threshold. Each stage adds information until it becomes a complete alert card.
 
@@ -120,6 +126,10 @@ Two layers, deep-merged by `config/loader.py`:
 | Client override | `config/clients/<name>/client.yaml` | Only changed keys — everything else inherited |
 
 `DetectorConfig` (in `pipeline/pipeline/config.py`) is a typed dataclass built from the merged config's `thresholds` block — nested alert-type sub-dicts (`OSA`, `COMPLIANCE`, `MARKDOWN_OVERRIDE`, `WASTE`, `MARKDOWN_SELLTHROUGH`, `MARKDOWN_SKU`) are flattened one level before matching. Output table names support `{database}` / `{schema}` interpolation.
+
+### Credentials
+
+Secrets are **never committed to git** (enforced by `.windsurf/rules/no-credentials-in-git.md` and a secret scan in the `/push-to-github` workflow). Real credentials live only in gitignored files: `pipeline/.env` and `.local/credentials/snowflake_credentials.py`; the gitignored root `snowflake_credentials.py` is a compatibility loader only. Programmatic Snowflake access uses the `SVC_STOREINSIGHT` service account with a PAT token, account `UUTQCJV-UKCOOP`, role `STORE_INSIGHT_ROLE`, warehouse `STORE_INSIGHT_WH`, database `STORE_INSIGHT_DB`, schema `PUBLIC`. Only `.env.example` files with placeholders are committed. A Snowflake network policy restricts access by IP — the company VPN is required for all programmatic access.
 
 ---
 

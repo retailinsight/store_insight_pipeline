@@ -14,7 +14,7 @@ class TestConfigModelsExist:
     def test_can_import_models(self):
         from store_insight.pipeline.config.models import (
             ConnectionConfig,
-            DetectorsConfig,
+            DetectorConfig,
             GatherersConfig,
             InvestigationConfig,
             LoggingConfig,
@@ -29,7 +29,7 @@ class TestConfigModelsExist:
         assert TablesConfig is not None
         assert OutputConfig is not None
         assert ThresholdsConfig is not None
-        assert DetectorsConfig is not None
+        assert DetectorConfig is not None
         assert GatherersConfig is not None
         assert InvestigationConfig is not None
         assert ScheduleConfig is not None
@@ -68,8 +68,8 @@ class TestInterpolation:
             markdown_log="{database}.{schema}.MARKDOWN_LOG_V1",
             markdown_sales="{database}.{schema}.MARKDOWN_SALES_V1",
             wastage="{database}.{schema}.WASTAGE_V1",
-            wmd_item_hierarchy="{database}.{schema}.WMD_ITEM_HIERARCHY_V1",
-            wmd_store_hierarchy="{database}.{schema}.WMD_STORE_HIERARCHY_V1",
+            store_hierarchy="{database}.{schema}.STORE_HIERARCHY_V1",
+            wmd_hierarchy="{database}.{schema}.WMD_HIERARCHY_V1",
         )
         # Set interpolation context manually for this test
         tables._database = conn.database
@@ -122,9 +122,9 @@ class TestDetectorNameValidation:
     """Test detector name validation against known modules."""
 
     def test_valid_detector_names(self):
-        from store_insight.pipeline.config.models import DetectorsConfig
+        from store_insight.pipeline.config.models import DetectorConfig
 
-        detectors = DetectorsConfig(
+        detectors = DetectorConfig(
             enabled=[
                 "osa.wow",
                 "osa.vs_chain",
@@ -134,10 +134,10 @@ class TestDetectorNameValidation:
         assert "osa.wow" in detectors.enabled
 
     def test_invalid_detector_name_raises_error(self):
-        from store_insight.pipeline.config.models import DetectorsConfig
+        from store_insight.pipeline.config.models import DetectorConfig
 
         with pytest.raises(ValidationError):
-            DetectorsConfig(
+            DetectorConfig(
                 enabled=[
                     "osa.wow",
                     "nonexistent.detector",  # Invalid: not in registry
@@ -192,8 +192,8 @@ class TestPipelineConfig:
                 "markdown_log": "{database}.{schema}.MARKDOWN_LOG",
                 "markdown_sales": "{database}.{schema}.MARKDOWN_SALES",
                 "wastage": "{database}.{schema}.WASTAGE",
-                "wmd_item_hierarchy": "{database}.{schema}.WMD_ITEM_HIERARCHY",
-                "wmd_store_hierarchy": "{database}.{schema}.WMD_STORE_HIERARCHY",
+                "store_hierarchy": "{database}.{schema}.STORE_HIERARCHY",
+                "wmd_hierarchy": "{database}.{schema}.WMD_HIERARCHY",
             },
             output={"alerts": "{database}.{schema}.ALERTS", "top_n_per_store": 10},
             detectors={"enabled": ["osa.wow"]},

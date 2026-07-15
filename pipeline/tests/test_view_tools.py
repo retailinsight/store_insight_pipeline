@@ -33,7 +33,7 @@ def test_discover_sql_files_returns_all_for_eastofengland():
     # Mirrors the contracts shipped in pipeline/contracts/.
     assert stems == [
         'feedback', 'hierarchy', 'markdown_log', 'markdown_sales',
-        'osa', 'wastage', 'wmd_item_hierarchy', 'wmd_store_hierarchy',
+        'osa', 'store_hierarchy', 'wastage', 'wmd_hierarchy',
     ]
 
 

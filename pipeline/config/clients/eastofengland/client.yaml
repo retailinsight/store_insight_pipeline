@@ -6,9 +6,10 @@
 client_name: eastofengland
 
 connection:
-  database: SNOWFLAKE_LEARNING_DB
-  schema:   STORE_INSIGHT
-  role:     SNOWFLAKE_LEARNING_ROLE
+  database:  STORE_INSIGHT_DB
+  schema:    PUBLIC
+  role:      STORE_INSIGHT_ROLE
+  warehouse: STORE_INSIGHT_WH
 
 output:
   top_n_per_store: 10

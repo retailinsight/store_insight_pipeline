@@ -12,7 +12,7 @@
 -- so all rows are exposed.  The pipeline filters down to a ~10-week
 -- lookback window per analysis date.
 
-CREATE OR REPLACE VIEW SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.OSA_V1 AS
+CREATE OR REPLACE VIEW STORE_INSIGHT_DB.PUBLIC.OSA_V1 AS
 SELECT
     SITE_ID              AS STORE_ID,
     ITEM_ID              AS ITEM_CODE,

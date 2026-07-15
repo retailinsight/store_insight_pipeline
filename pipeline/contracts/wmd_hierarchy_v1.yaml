@@ -1,4 +1,4 @@
-# Contract: wmd_item_hierarchy (v1)
+# Contract: wmd_hierarchy (v1)
 # ==================================
 # WMD-side item master.  Joined into markdown_log, markdown_sales, and
 # wastage to resolve item names and department groupings.
@@ -7,7 +7,7 @@
 # deduplicated to latest snapshot per VME_CODE in pipeline/pipeline/run_batch.py
 # load_wmd().
 
-name: wmd_item_hierarchy
+name: wmd_hierarchy
 version: v1
 
 description: |

@@ -12,7 +12,7 @@
 -- rows in EoE and was dropped from the canonical contract during the
 -- 2026-04-09 review of the WASTE alert metric (see semantic_model.md).
 
-CREATE OR REPLACE VIEW SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.WASTAGE_V1 AS
+CREATE OR REPLACE VIEW STORE_INSIGHT_DB.PUBLIC.WASTAGE_V1 AS
 SELECT
     SITE_ID            AS STORE_ID,
     ITEM_ID            AS UPC,

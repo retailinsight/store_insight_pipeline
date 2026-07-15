@@ -18,7 +18,7 @@
 -- native pre-markdown unit price column exists; the contract does not
 -- declare one (see markdown_sales_v1.yaml notes for the reasoning).
 
-CREATE OR REPLACE VIEW SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.MARKDOWN_SALES_V1 AS
+CREATE OR REPLACE VIEW STORE_INSIGHT_DB.PUBLIC.MARKDOWN_SALES_V1 AS
 SELECT
     SITE_ID                  AS STORE_ID,
     ITEM_ID                  AS UPC,

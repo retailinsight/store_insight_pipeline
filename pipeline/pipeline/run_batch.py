@@ -41,10 +41,15 @@ Arguments
                   with --overwrite.
 --target-table    Override the output table for this run (does not change the
                   config file).  Use for ad-hoc test/comparison runs:
-                      --target-table SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_TEST
+                      --target-table STORE_INSIGHT_DB.PUBLIC.ALERTS_TEST
 --deterministic   Force rule_based narratives for every signal type, ignoring any
-                  cortex overrides in the client config.  Use for byte-identical
-                  comparison runs, local dev without Cortex creds, CI smoke tests.
+                  cortex overrides in the client config.  In this mode the pipeline
+                  also captures a regression snapshot and compares it to the golden file
+                  at --golden-path, or creates that golden file if it does not yet exist.
+--golden-path     Path to the golden regression snapshot JSON.  Defaults to
+                  regression_golden_<client>_<analysis_date>.json in the current directory.
+--regression-tolerance  Allowed absolute difference for float fields in the regression
+                  comparison (default: 0.0).
 --skip-capability-check
                   Skip the startup check that confirms every enabled detector
                   and gatherer has the adapter views it needs.  Use only when
@@ -76,6 +81,14 @@ from store_insight.pipeline.pipeline.pipeline import (
     derive_windows,
     run_pipeline,
     write_alerts,
+)
+from store_insight.pipeline.pipeline.regression import (
+    RegressionMismatch,
+    capture_run_stats,
+    compare_against_golden,
+    format_report,
+    load_golden,
+    save_golden,
 )
 from store_insight.pipeline.pipeline.session import create_session
 
@@ -186,7 +199,7 @@ def _get_existing_run_dates(session, cfg=None):
         output_table = cfg.output.alerts
     else:
         output_table = os.environ.get(
-            'ALERTS_OUTPUT_TABLE', 'SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_PIPELINE'
+            'ALERTS_OUTPUT_TABLE', 'STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE'
         )
     try:
         rows = session.sql(
@@ -209,10 +222,16 @@ def run_single_date(
     session, analysis_date: datetime.date, run_date: str,
     store_id=None, overwrite=False, full_replace=False,
     target_table: str | None = None, cfg=None,
+    deterministic: bool = False,
+    golden_path: str | None = None,
+    regression_tolerance: float = 0.0,
 ):
     """
     Run the full pipeline for one analysis_date and write results.
     OSA and feedback data are loaded fresh for each call.
+
+    When deterministic=True, rule_based narratives are forced and the run is
+    compared against the golden regression snapshot at golden_path.
     """
     w = derive_windows(analysis_date, cfg=cfg)
 
@@ -225,7 +244,7 @@ def run_single_date(
     print(f'[run_batch] lookback      : {w["lookback_start"]} – {w["this_week_end"]}')
     print(f'[run_batch] wmd lookback  : {w["wmd_lookback"]} – {w["this_week_end"]}')
     if store_id:
-        store_label = store_id if isinstance(store_id, (list, tuple)) else [store_id]
+        store_label = store_id if isinstance(store_id, list | tuple) else [store_id]
         print(f'[run_batch] store filter  : {store_label}')
 
     print('[run_batch] Loading OSA data...')
@@ -244,7 +263,7 @@ def run_single_date(
     print(f'[run_batch] Item hierarchy  rows : {wmd["item_hierarchy"].count():,}')
     print(f'[run_batch] Store hierarchy rows : {wmd["store_hierarchy"].count():,}')
 
-    cards = run_pipeline(
+    pipeline_result = run_pipeline(
         osa,
         last_week_start=w['last_week_start'],
         last_week_end=w['last_week_end'],
@@ -253,6 +272,7 @@ def run_single_date(
         lookback_start=w['lookback_start'],
         store_id=store_id,
         session=session,
+        run_date=run_date,
         feedback=feedback,
         markdown_log=wmd['markdown_log'],
         markdown_sales=wmd['markdown_sales'],
@@ -260,13 +280,34 @@ def run_single_date(
         item_hierarchy=wmd['item_hierarchy'],
         store_hierarchy=wmd['store_hierarchy'],
         cfg=cfg,
+        return_intermediates=deterministic,
     )
+
+    if deterministic:
+        cards, raw_signals, enriched_signals = pipeline_result
+    else:
+        cards = pipeline_result
+        raw_signals = enriched_signals = None
 
     write_alerts(
         session, cards, run_date=run_date,
         overwrite=overwrite, full_replace=full_replace,
         target_table=target_table, cfg=cfg,
     )
+
+    if deterministic:
+        stats = capture_run_stats(cards, raw_signals, enriched_signals)
+        if golden_path and os.path.exists(golden_path):
+            golden = load_golden(golden_path)
+            diffs = compare_against_golden(stats, golden, tolerance=regression_tolerance)
+            print(format_report(diffs, golden_path))
+            if diffs:
+                raise RegressionMismatch(
+                    f'Regression mismatch against {golden_path}: {len(diffs)} difference(s)'
+                )
+        else:
+            save_golden(stats, golden_path)
+            print(f'[run_batch] --deterministic: golden snapshot created at {golden_path}')
 
 
 # ---------------------------------------------------------------------------
@@ -310,9 +351,19 @@ def main():
     parser.add_argument('--deterministic', action='store_true',
                         help='Force every signal type to use the rule_based '
                              'narrative engine, ignoring any cortex overrides '
-                             'in the client config.  Use this for byte-identical '
-                             'comparison runs, local dev without Cortex creds, '
-                             'and CI smoke tests.')
+                             'in the client config.  Also captures a regression '
+                             'snapshot and compares it to the golden file at '
+                             '--golden-path, or creates it if missing.')
+    parser.add_argument(
+        '--golden-path', default=None,
+        help='Path to the golden regression snapshot JSON.  Defaults to '
+             'regression_golden_<client>_<analysis_date>.json.',
+    )
+    parser.add_argument(
+        '--regression-tolerance', type=float, default=0.0,
+        help='Allowed absolute difference for float fields in regression '
+             'comparisons (default: 0.0).',
+    )
     parser.add_argument('--skip-capability-check', action='store_true',
                         help='Skip the capability-validation step that confirms '
                              'every enabled detector/gatherer has the adapter '
@@ -355,6 +406,11 @@ def main():
         }) if cfg else None
         print('[run_batch] --deterministic: forcing rule_based narratives '
               'for all signal types.')
+        if args.golden_path is None:
+            client = cfg.client_name if cfg else 'default'
+            args.golden_path = (
+                f'regression_golden_{client}_{str(analysis_date)}.json'
+            )
 
     session = create_session(cfg)
     print('[run_batch] Snowflake session created.')
@@ -383,6 +439,9 @@ def main():
                 session, ad, run_date=str(ad),
                 store_id=args.store_id, overwrite=False, full_replace=False,
                 target_table=args.target_table, cfg=cfg,
+                deterministic=args.deterministic,
+                golden_path=args.golden_path,
+                regression_tolerance=args.regression_tolerance,
             )
 
         print(f'\n[run_batch] Backfill complete — {len(pending)} dates processed, '
@@ -394,6 +453,9 @@ def main():
             store_id=args.store_id,
             overwrite=args.overwrite, full_replace=args.full_replace,
             target_table=args.target_table, cfg=cfg,
+            deterministic=args.deterministic,
+            golden_path=args.golden_path,
+            regression_tolerance=args.regression_tolerance,
         )
 
     print('[run_batch] Done.')

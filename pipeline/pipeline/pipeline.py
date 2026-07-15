@@ -44,19 +44,22 @@ Checkpointing after detection
 
 Output Table
 ------------
-SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_PIPELINE
+STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE
 
-Schema: RUN_DATE, ALERT_TYPE, STORE_ID, SECTION, TYPE, TRIGGER_TYPES,
-        ISSUE, EXPLANATION, COST_IF_NOT_FIXED, RECOMMENDED_ACTION, SORT_VALUE,
-        LLM_PROMPT, SIGNAL_JSON, FACTS_JSON
+Schema: RUN_DATE, SIGNAL_ID, ALERT_ID, ANALYSIS_DATE, ENGINE_USED,
+        ALERT_TYPE, STORE_ID, SECTION, TYPE, TRIGGER_TYPES,
+        SHORT_LONG_TERM_LABEL, ISSUE, EXPLANATION, COST_IF_NOT_FIXED,
+        RECOMMENDED_ACTION, SORT_VALUE, LLM_PROMPT, SIGNAL_JSON, FACTS_JSON
 """
 
 import datetime
+import hashlib
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 
 from store_insight.pipeline.pipeline.config import DetectorConfig
+from store_insight.pipeline.pipeline.data_quality import validate_source_data
 from store_insight.pipeline.stages._1_detect.detect import detect_signals
 from store_insight.pipeline.stages._2_score.score import (
     apply_top_n_filter,
@@ -64,6 +67,7 @@ from store_insight.pipeline.stages._2_score.score import (
     short_long_term_label,
 )
 from store_insight.pipeline.stages._3_facts.facts import enrich_signals
+from store_insight.pipeline.stages._4_investigate.cortex_budget import budget_from_config
 from store_insight.pipeline.stages._4_investigate.investigate import investigate
 
 # ---------------------------------------------------------------------------
@@ -117,9 +121,33 @@ def _resolve_config(config: 'DetectorConfig' = None, cfg=None) -> DetectorConfig
     return DetectorConfig()
 
 
-def _build_card(sig: dict, narrative: dict, sort_value: float, cfg=None, label: str = 'Structural') -> dict:
+def _make_alert_id(cfg, signal: dict, analysis_date: str | None) -> str:
+    """Return a deterministic, stable ID for a signal / alert card.
+
+    The hash is based on the business identity of the issue:
+    client, analysis_date, signal_type, store_id, and (when present)
+    department or item_id.  This keeps the same ID across re-runs and
+    makes it possible to track an alert over time.
+    """
+    client = getattr(cfg, 'client_name', None) or 'default'
+    parts = [
+        client,
+        analysis_date or 'unknown',
+        signal.get('signal_type', ''),
+        str(signal.get('store_id', '')),
+    ]
+    if signal.get('department'):
+        parts.append(str(signal['department']))
+    if signal.get('item_id') is not None:
+        parts.append(str(signal['item_id']))
+    return hashlib.sha256('|'.join(parts).encode('utf-8')).hexdigest()[:16]
+
+
+def _build_card(sig: dict, narrative: dict, sort_value: float, cfg=None, label: str = 'Structural', analysis_date: str | None = None) -> dict:
     """Assemble a single alert-card dict from enriched signal + narrative + score."""
+    alert_id = _make_alert_id(cfg, sig, analysis_date)
     signal_wo_facts = {k: v for k, v in sig.items() if k != 'facts'}
+    signal_wo_facts['signal_id'] = alert_id
 
     # Get signal type bucket from config, use default if not provided
     signal_type_buckets = cfg.output.signal_type_buckets if cfg else None
@@ -131,6 +159,10 @@ def _build_card(sig: dict, narrative: dict, sort_value: float, cfg=None, label: 
         type_value = default_type
 
     return {
+        'signal_id':             alert_id,
+        'alert_id':              alert_id,
+        'analysis_date':         analysis_date,
+        'engine_used':           narrative.get('_engine', 'rule_based'),
         'alert_type':            ','.join(sorted(sig['trigger_types'])),
         'store_id':              sig['store_id'],
         'section':               sig.get('department'),
@@ -160,6 +192,10 @@ def _card_schema():
     )
     return StructType([
         StructField('RUN_DATE',           StringType()),
+        StructField('SIGNAL_ID',          StringType()),
+        StructField('ALERT_ID',           StringType()),
+        StructField('ANALYSIS_DATE',      StringType()),
+        StructField('ENGINE_USED',        StringType()),
         StructField('ALERT_TYPE',         StringType()),
         StructField('STORE_ID',           IntegerType()),
         StructField('SECTION',            StringType()),
@@ -187,10 +223,126 @@ def _json_dump(value) -> str:
         return json.dumps(str(value))
 
 
+def _debug_table_name(alerts_table: str, suffix: str) -> str:
+    """Derive a debug/replay table name from the main alerts table name."""
+    parts = alerts_table.split('.')
+    parts[-1] = f"{parts[-1]}_{suffix}"
+    return '.'.join(parts)
+
+
+def _signals_debug_schema():
+    """Schema for raw-signal and enriched-signal replay tables."""
+    from snowflake.snowpark.types import StringType, StructField, StructType
+    return StructType([
+        StructField('RUN_DATE',    StringType()),
+        StructField('SIGNAL_ID',   StringType()),
+        StructField('SIGNAL_JSON', StringType()),
+    ])
+
+
+def _score_audit_schema():
+    """Schema for the score audit replay table."""
+    from snowflake.snowpark.types import (
+        FloatType,
+        IntegerType,
+        StringType,
+        StructField,
+        StructType,
+    )
+    return StructType([
+        StructField('RUN_DATE',    StringType()),
+        StructField('SIGNAL_ID',   StringType()),
+        StructField('SIGNAL_TYPE', StringType()),
+        StructField('STORE_ID',    IntegerType()),
+        StructField('SECTION',     StringType()),
+        StructField('SCORE',       FloatType()),
+        StructField('SORT_VALUE',  FloatType()),
+    ])
+
+
+def _investigations_debug_schema():
+    """Schema for the narrative/replay investigation table."""
+    from snowflake.snowpark.types import StringType, StructField, StructType
+    return StructType([
+        StructField('RUN_DATE',            StringType()),
+        StructField('SIGNAL_ID',           StringType()),
+        StructField('ENGINE',              StringType()),
+        StructField('ISSUE',               StringType()),
+        StructField('EXPLANATION',         StringType()),
+        StructField('COST_IF_NOT_FIXED',   StringType()),
+        StructField('RECOMMENDED_ACTION',  StringType()),
+        StructField('LLM_PROMPT',          StringType()),
+    ])
+
+
+def _write_signals_debug_table(session, table_name, signals, run_date, cfg, analysis_date):
+    """Write a list of signals (raw or enriched) to a replay table."""
+    if not signals or session is None:
+        return
+    rows = [
+        (
+            run_date,
+            _make_alert_id(cfg, sig, analysis_date),
+            _json_dump(sig),
+        )
+        for sig in signals
+    ]
+    df = session.create_dataframe(rows, schema=_signals_debug_schema())
+    df.write.mode('append').save_as_table(table_name)
+    print(f'[pipeline] {len(rows)} signals written → {table_name}')
+
+
+def _write_score_audit_table(session, table_name, signals, run_date, cfg, analysis_date):
+    """Write score audit rows after scoring."""
+    if not signals or session is None:
+        return
+    rows = []
+    for sig in signals:
+        sid = _make_alert_id(cfg, sig, analysis_date)
+        rows.append((
+            run_date,
+            sid,
+            sig.get('signal_type', ''),
+            sig.get('store_id'),
+            sig.get('department'),
+            sig.get('score'),
+            sig.get('score'),
+        ))
+    df = session.create_dataframe(rows, schema=_score_audit_schema())
+    df.write.mode('append').save_as_table(table_name)
+    print(f'[pipeline] {len(rows)} score-audit rows written → {table_name}')
+
+
+def _write_investigations_debug_table(session, table_name, results, run_date, cfg, analysis_date):
+    """Write narrative investigation results to a replay table."""
+    if not results or session is None:
+        return
+    rows = []
+    for sig, narrative in results:
+        sid = _make_alert_id(cfg, sig, analysis_date)
+        rows.append((
+            run_date,
+            sid,
+            narrative.get('_engine', 'rule_based'),
+            narrative.get('issue'),
+            narrative.get('explanation'),
+            narrative.get('cost_if_not_fixed'),
+            narrative.get('recommended_action'),
+            narrative.get('_prompt'),
+        ))
+    df = session.create_dataframe(rows, schema=_investigations_debug_schema())
+    df.write.mode('append').save_as_table(table_name)
+    print(f'[pipeline] {len(rows)} investigations written → {table_name}')
+
+
 def _card_to_row(card: dict, run_date: str) -> tuple:
     """Serialise one card dict to a row tuple matching ``_card_schema``."""
     return (
         run_date,
+        card.get('signal_id'),
+        card.get('alert_id'),
+        card.get('analysis_date'),
+        card.get('engine_used'),
         card['alert_type'],
         card['store_id'],
         card['section'],
@@ -211,8 +363,12 @@ def _card_to_row(card: dict, run_date: str) -> tuple:
 def _output_table(cfg=None) -> str:
     """Resolve the output table name from config or env var fallback."""
     if cfg:
-        return cfg.output.alerts
-    return os.environ.get('ALERTS_OUTPUT_TABLE', 'SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_PIPELINE')
+        if isinstance(cfg, dict):
+            return cfg['output']['alerts']
+        else:
+            # Pydantic model
+            return cfg.output.alerts
+    return os.environ.get('ALERTS_OUTPUT_TABLE', 'STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE')
 
 
 def run_pipeline(
@@ -227,6 +383,7 @@ def run_pipeline(
     top_n_per_store=None,
     store_id=None,
     session=None,
+    run_date: str | None = None,
     feedback=None,
     markdown_log=None,
     markdown_sales=None,
@@ -235,6 +392,7 @@ def run_pipeline(
     store_hierarchy=None,
     config: DetectorConfig = None,
     cfg=None,
+    return_intermediates: bool = False,
 ):
     """
     Run the full alerts pipeline and return a list of alert card dicts.
@@ -252,6 +410,8 @@ def run_pipeline(
                        by SORT_VALUE; None = no limit (default)
     store_id         : optional int — restrict to a single store
     session          : Snowpark Session — required only for Cortex narratives
+                       and for writing debug/replay tables
+    run_date         : optional str — YYYY-MM-DD; required for debug tables
     feedback         : optional cached Snowpark DataFrame from LSM_ALERT_FEEDBACK;
                        required to produce TICK_AND_FLICK compliance alerts
     markdown_log     : optional cached Snowpark DataFrame — SOURCE_WMD_MARKDOWN_LOG_CONVERTED;
@@ -264,19 +424,36 @@ def run_pipeline(
                        required for MARKDOWN_SKU detectors and WMD dept-breakdown gatherers
     store_hierarchy  : optional cached Snowpark DataFrame — SOURCE_WMD_STORE_HIERARCHY;
                        required for MARKDOWN_SKU detectors (site_name lookup)
-    config           : optional DetectorConfig — threshold overrides
-    cfg              : optional PipelineConfig — merged config from config.loader.load_config;
-                       used for output table names, detector/gatherer selection, and lookback windows
+    config               : optional DetectorConfig — threshold overrides
+    cfg                  : optional PipelineConfig — merged config from config.loader.load_config;
+                           used for output table names, detector/gatherer selection, and lookback windows
+    return_intermediates : optional bool — when True, return (cards, signals, enriched)
+                           instead of just cards; used for regression snapshots
 
     Returns
     -------
     list of alert card dicts, sorted by SORT_VALUE descending
+    (or tuple (cards, signals, enriched) if return_intermediates=True)
     """
     if lookback_start is None:
         end = datetime.date.fromisoformat(this_week_end)
         lookback_start = str(end - datetime.timedelta(weeks=10))
 
     det_cfg = _resolve_config(config, cfg)
+
+    windows = derive_windows(this_week_end, cfg)
+    validate_source_data(
+        osa=osa,
+        feedback=feedback,
+        wmd={
+            'markdown_log': markdown_log,
+            'markdown_sales': markdown_sales,
+            'wastage': wastage,
+        },
+        windows=windows,
+        cfg=cfg,
+        store_hierarchy=store_hierarchy,
+    )
 
     signals = detect_signals(
         osa,
@@ -308,6 +485,7 @@ def run_pipeline(
         drilldown_top_n=drilldown_top_n,
         top_n_per_store=top_n_per_store,
         session=session,
+        run_date=run_date,
         feedback=feedback,
         markdown_log=markdown_log,
         markdown_sales=markdown_sales,
@@ -315,6 +493,7 @@ def run_pipeline(
         item_hierarchy=item_hierarchy,
         config=det_cfg,
         cfg=cfg,
+        return_intermediates=return_intermediates,
     )
 
 
@@ -370,6 +549,7 @@ def run_pipeline_from_signals(
     drilldown_top_n=3,
     top_n_per_store=None,
     session=None,
+    run_date: str | None = None,
     feedback=None,
     markdown_log=None,
     markdown_sales=None,
@@ -377,6 +557,7 @@ def run_pipeline_from_signals(
     item_hierarchy=None,
     config: DetectorConfig = None,
     cfg=None,
+    return_intermediates: bool = False,
 ):
     """
     Run Stages 2–4 (facts → investigate → score) from a pre-computed signals list,
@@ -398,6 +579,8 @@ def run_pipeline_from_signals(
     top_n_per_store  : optional int — keep only the top N cards per store_id
                        by SORT_VALUE; None = no limit (default)
     session          : Snowpark Session — required only for Cortex narratives
+                       and for writing debug/replay tables
+    run_date         : optional str — YYYY-MM-DD; required for debug tables
     feedback         : optional cached Snowpark DataFrame from LSM_ALERT_FEEDBACK
     markdown_log     : optional cached Snowpark DataFrame — SOURCE_WMD_MARKDOWN_LOG_CONVERTED;
                        required for MARKDOWN_OVERRIDE and MARKDOWN_SKU gatherers
@@ -407,12 +590,15 @@ def run_pipeline_from_signals(
                        required for WASTE gatherer
     item_hierarchy   : optional cached Snowpark DataFrame — SOURCE_WMD_ITEM_HIERARCHY;
                        required for WMD dept breakdown gatherers
-    config           : optional DetectorConfig — threshold overrides
-    cfg              : optional PipelineConfig — merged config from config.loader.load_config
+    config               : optional DetectorConfig — threshold overrides
+    cfg                  : optional PipelineConfig — merged config from config.loader.load_config
+    return_intermediates : optional bool — when True, return (cards, signals, enriched)
+                           instead of just cards; used for regression snapshots
 
     Returns
     -------
     list of alert card dicts, sorted by SORT_VALUE descending
+    (or tuple (cards, signals, enriched) if return_intermediates=True)
     """
     if not signals:
         print('[pipeline] No signals provided — no alert cards produced.')
@@ -422,7 +608,31 @@ def run_pipeline_from_signals(
         end = datetime.date.fromisoformat(this_week_end)
         lookback_start = str(end - datetime.timedelta(weeks=10))
 
+    logging_cfg = cfg.logging if cfg else None
+    debug_tables = (
+        logging_cfg is not None and
+        session is not None and
+        run_date is not None and
+        (
+            getattr(logging_cfg, 'write_signals', False) or
+            getattr(logging_cfg, 'write_enriched', False) or
+            getattr(logging_cfg, 'write_run_log', False)
+        )
+    )
+    if debug_tables:
+        alerts_table = _output_table(cfg)
+
     det_cfg = _resolve_config(config, cfg)
+
+    if debug_tables and getattr(logging_cfg, 'write_signals', False):
+        _write_signals_debug_table(
+            session,
+            _debug_table_name(alerts_table, 'SIGNALS_RAW'),
+            signals,
+            run_date,
+            cfg,
+            this_week_end,
+        )
 
     score_all(
         signals,
@@ -435,6 +645,16 @@ def run_pipeline_from_signals(
         score_weights=cfg.scoring.score_weights if cfg and cfg.scoring else None,
         scoring_cfg=cfg.scoring if cfg and cfg.scoring else None,
     )
+
+    if debug_tables and getattr(logging_cfg, 'write_run_log', False):
+        _write_score_audit_table(
+            session,
+            _debug_table_name(alerts_table, 'SCORE_AUDIT'),
+            signals,
+            run_date,
+            cfg,
+            this_week_end,
+        )
 
     top_n = top_n_per_store if top_n_per_store is not None else int((cfg.output.top_n_per_store if cfg else 0) or 0) or None
     max_per_type = int((cfg.output.max_per_type_per_store if cfg else 0) or 0) or None
@@ -462,10 +682,21 @@ def run_pipeline_from_signals(
         cfg=cfg,
     )
 
+    if debug_tables and getattr(logging_cfg, 'write_enriched', False):
+        _write_signals_debug_table(
+            session,
+            _debug_table_name(alerts_table, 'SIGNALS_ENRICHED'),
+            enriched,
+            run_date,
+            cfg,
+            this_week_end,
+        )
+
     max_workers = int(cfg.investigation.max_workers if cfg and cfg.investigation else 8)
+    cortex_budget = budget_from_config(cfg)
 
     def _investigate_one(sig):
-        return sig, investigate(sig, session=session, cfg=cfg)
+        return sig, investigate(sig, session=session, cfg=cfg, cortex_budget=cortex_budget)
 
     cards = []
     if max_workers and max_workers > 1 and len(enriched) > 1:
@@ -475,13 +706,26 @@ def run_pipeline_from_signals(
     else:
         results = [_investigate_one(sig) for sig in enriched]
 
+    if debug_tables and getattr(logging_cfg, 'write_run_log', False):
+        _write_investigations_debug_table(
+            session,
+            _debug_table_name(alerts_table, 'INVESTIGATIONS'),
+            results,
+            run_date,
+            cfg,
+            this_week_end,
+        )
+
     for sig, narrative in results:
         cards.append(_build_card(sig, narrative, sig['score'], cfg=cfg,
-                                   label=short_long_term_label(sig)))
+                                   label=short_long_term_label(sig),
+                                   analysis_date=this_week_end))
 
     cards.sort(key=lambda x: x['sort_value'], reverse=True)
 
     print(f'[pipeline] {len(cards)} alert cards produced')
+    if return_intermediates:
+        return cards, signals, enriched
     return cards
 
 

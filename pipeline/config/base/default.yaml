@@ -11,9 +11,9 @@
 connection:
   # Role intentionally omitted so SNOWFLAKE_ROLE env var wins for local runs.
   # Client-specific YAMLs can still pin a role if a service account is in use.
-  warehouse: SNOWFLAKE_LEARNING_WH
-  database:  SNOWFLAKE_LEARNING_DB
-  schema:    STORE_INSIGHT
+  warehouse: STORE_INSIGHT_WH
+  database:  STORE_INSIGHT_DB
+  schema:    PUBLIC
 
 # ── Source tables ─────────────────────────────────────────────────────────────
 # Each entry points at a per-customer adapter view that produces the canonical
@@ -209,8 +209,32 @@ scoring:
     MARKDOWN_OVERRIDE:    15.0
     MARKDOWN_SELLTHROUGH: 15.0
 
+# ── Data quality / source-data completeness checks ───────────────────────────
+# Run before detection.  Warnings are printed by default; strict=true turns
+# them into hard errors that stop the pipeline.
+# Checks cover: required columns, row counts, date ranges, negative values,
+# and expected store coverage (if store_hierarchy is provided).
+data_quality:
+  strict: false
+
+# ── Cortex LLM controls ──────────────────────────────────────────────────────
+# Budget and quality gates for the Cortex narrative engine.  When the budget is
+# exceeded or a response fails quality checks, the pipeline falls back to the
+# rule-based engine and records the reason in _fallback_reason.
+cortex:
+  max_calls_per_run: 100
+  max_tokens_per_run: 500000
+  max_retries: 2
+  quality_max_action_length: 800
+  quality_reject_generic: true
+
 # ── Logging / intermediate writes ────────────────────────────────────────────
-# Only the final alerts table is written. Intermediate tables are not saved.
+# Optional debug/replay tables written alongside the main alerts table.
+# Table names are derived from output.alerts by appending the suffix below.
+# Example: ALERTS_PIPELINE → ALERTS_PIPELINE_SIGNALS_RAW
+#   write_signals  : raw detected signals (before enrichment)
+#   write_enriched : signals after fact gathering
+#   write_run_log  : score audit + investigation/narrative results
 logging:
   write_signals:  false
   write_enriched: false

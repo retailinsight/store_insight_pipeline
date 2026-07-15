@@ -105,7 +105,7 @@ def _parse_alert_id(alert_id: str) -> tuple[str, int, str, str | None, str]:
 def _safe_json_loads(value: Any) -> Any:
     if value is None:
         return None
-    if isinstance(value, (dict, list)):
+    if isinstance(value, dict | list):
         return value
     try:
         return json.loads(value)

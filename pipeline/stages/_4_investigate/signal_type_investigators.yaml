@@ -7,7 +7,7 @@
 # -------
 # rule_based : Deterministic string templates. No external dependencies.
 #              Always produces output, never fails. Default.
-# cortex     : Snowflake Cortex LLM (mistral-large). Requires a Snowpark
+# cortex     : Snowflake Cortex LLM (mistral-large2). Requires a Snowpark
 #              session. Falls back to rule_based on any failure.
 #
 # skill_file : Path (relative to this file's directory) to the investigation

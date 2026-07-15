@@ -212,6 +212,23 @@ from dataclasses import replace
 strict_cfg = replace(cfg, min_chain_gap=0.08)
 ```
 
+### Configuration Compatibility
+
+The `detect_signals()` function supports both dictionary and Pydantic model configurations:
+
+```python
+# Dictionary configuration (used in tests)
+cfg_dict = {'detectors': {'enabled': ['osa.wow']}}
+signals = detect_signals(osa, ..., cfg=cfg_dict)
+
+# Pydantic model configuration (production)
+from store_insight.pipeline.pipeline.config import DetectorConfig
+cfg_model = DetectorConfig(min_wow_drop=0.05)
+signals = detect_signals(osa, ..., config=cfg_model)
+```
+
+The function automatically detects the input type and handles detector filtering appropriately.
+
 ### Full field reference
 
 | Field | Default | Detector(s) |

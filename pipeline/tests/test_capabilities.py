@@ -41,7 +41,7 @@ def test_required_contracts_picks_up_multiple_wmd_sources():
         pass
 
     assert caps.required_contracts(gather) == {
-        'wastage', 'markdown_log', 'wmd_item_hierarchy',
+        'wastage', 'markdown_log', 'wmd_hierarchy',
     }
 
 
@@ -70,7 +70,7 @@ def test_required_contracts_handles_real_waste_dept_breakdown_gatherer():
     from store_insight.pipeline.stages._3_facts.gatherers import waste_dept_breakdown
 
     assert caps.required_contracts(waste_dept_breakdown.gather) == {
-        'wastage', 'markdown_log', 'wmd_item_hierarchy',
+        'wastage', 'markdown_log', 'wmd_hierarchy',
     }
 
 
@@ -84,7 +84,7 @@ def test_discover_capabilities_for_eastofengland_returns_all_eight():
     assert found == {
         'osa', 'hierarchy', 'feedback',
         'markdown_log', 'markdown_sales', 'wastage',
-        'wmd_item_hierarchy', 'wmd_store_hierarchy',
+        'store_hierarchy', 'wmd_hierarchy',
     }
 
 
@@ -101,7 +101,7 @@ def _eoe_capabilities() -> list[str]:
     return [
         'osa', 'hierarchy', 'feedback',
         'markdown_log', 'markdown_sales', 'wastage',
-        'wmd_item_hierarchy', 'wmd_store_hierarchy',
+        'store_hierarchy', 'wmd_hierarchy',
     ]
 
 
@@ -111,6 +111,8 @@ def test_validate_full_eoe_config_yields_no_issues():
     cfg = {
         'client_name': 'eastofengland',
         'capabilities': _eoe_capabilities(),
+        'detectors': {'enabled': []},  # No detectors enabled = no validation needed
+        'gatherers': {},  # No gatherers configured = no validation needed
     }
     assert caps.validate(cfg) == []
 
@@ -138,6 +140,7 @@ def test_validate_missing_capability_for_disabled_detector_is_not_flagged():
         'detectors': {
             'enabled': ['osa.wow', 'osa.vs_chain', 'osa.repeat'],
         },
+        'gatherers': {},  # No gatherers to avoid validation errors
     }
     issues = caps.validate(cfg)
     assert all('tick_and_flick' not in i for i in issues), (
@@ -159,6 +162,7 @@ def test_validate_disabled_signal_type_skips_its_gatherers():
                 'compliance.tick_and_flick',
             ],
         },
+        'gatherers': {},  # No gatherers to avoid validation errors
     }
     issues = caps.validate(cfg)
     # WMD detectors are disabled, so their missing capabilities shouldn't
@@ -197,6 +201,8 @@ def test_validate_falls_back_to_filesystem_when_capabilities_not_set():
     cfg = {
         'client_name': 'eastofengland',
         # No 'capabilities' key — should fall back to disk discovery.
+        'detectors': {'enabled': []},  # No detectors enabled = no validation needed
+        'gatherers': {},  # No gatherers configured = no validation needed
     }
     assert caps.validate(cfg) == []
 

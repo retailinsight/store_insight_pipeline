@@ -1,6 +1,5 @@
 [tool.pytest.ini_options]
 testpaths = ["pipeline/tests"]
-pythonpath = [".."]
 
 [tool.ruff]
 line-length = 100
@@ -10,6 +9,8 @@ extend-exclude = [
     "api2",
     "ui",
     "kpi",
+    ".venv-store-insight",
+    "venv_store_insight",
     "pipeline/qc",
     "pipeline/monitoring",
     "**/*.ipynb",

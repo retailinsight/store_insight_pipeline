@@ -2,7 +2,7 @@
 Narrative Generator: Snowflake Cortex LLM
 ==========================================
 Produces the four alert card narrative fields by calling Snowflake Cortex
-(mistral-large).  The content rules are composed from two skill files:
+(mistral-large2).  The content rules are composed from two skill files:
 
 1. ``smart_action_card_content_skill.md`` — overall card anatomy and tone rules
 2. ``skills/<signal_type>_investigation_skill.md`` — per-alert-type investigation
@@ -32,14 +32,21 @@ Public API
 
 import json
 import re
+import threading
+import time
 from pathlib import Path
 
+from store_insight.pipeline.stages._4_investigate.cortex_budget import (
+    CortexBudget,
+    estimate_tokens,
+)
 from store_insight.pipeline.stages._4_investigate.rule_based import generate as rule_based_generate
 
 _HERE             = Path(__file__).parent
 _CARD_SKILL_PATH  = _HERE / 'smart_action_card_content_skill.md'
 _card_skill_cache: str | None = None
 _type_skill_cache: dict       = {}
+_CORTEX_CALL_LOCK = threading.Lock()  # serialise Snowpark session access
 
 
 def _load_card_skill() -> str:
@@ -271,6 +278,57 @@ def _build_markdown_sku_context(signal):
     return '\n'.join(lines)
 
 
+def _contains_nan_or_none_leakage(text: str) -> bool:
+    """Return True if the text contains literal 'None' or 'nan'/'NaN'."""
+    if text is None:
+        return True
+    return bool(re.search(r'\bNone\b|\bnan\b|\bNaN\b', text))
+
+
+def _is_generic_recommendation(text: str) -> bool:
+    """Flag vague, non-actionable recommendations."""
+    if not text:
+        return True
+    generic_phrases = [
+        'review the data',
+        'monitor the situation',
+        'take appropriate action',
+        'investigate further',
+        'look into this',
+        'consider taking action',
+    ]
+    lowered = text.lower()
+    return any(phrase in lowered for phrase in generic_phrases)
+
+
+def _validate_quality(
+    narrative: dict,
+    max_action_length: int = 800,
+    reject_generic: bool = True,
+) -> tuple[bool, str]:
+    """
+    Validate Cortex narrative quality.
+
+    Returns (is_valid, reason).  reason is empty when valid.
+    """
+    required = ['issue', 'explanation', 'cost_if_not_fixed', 'recommended_action']
+    for key in required:
+        value = narrative.get(key)
+        if value is None or str(value).strip() == '':
+            return False, f'missing or empty {key}'
+        if _contains_nan_or_none_leakage(str(value)):
+            return False, f'{key} contains None/nan leakage'
+
+    action = str(narrative['recommended_action'])
+    if len(action) > max_action_length:
+        return False, f'recommended_action exceeds {max_action_length} chars'
+
+    if reject_generic and _is_generic_recommendation(action):
+        return False, 'recommended_action is too generic'
+
+    return True, ''
+
+
 # Dispatch map used by _build_context. Declared after builders so all names
 # resolve. Signal types not listed here fall through to _build_osa_context.
 _CONTEXT_BUILDERS = {
@@ -283,19 +341,30 @@ _CONTEXT_BUILDERS = {
 }
 
 
-def generate(signal: dict, session) -> dict:
+def generate(
+    signal: dict,
+    session,
+    budget: CortexBudget | None = None,
+    max_retries: int = 2,
+    quality_max_action_length: int = 800,
+    quality_reject_generic: bool = True,
+) -> dict:
     """
-    Generate narrative fields using Snowflake Cortex (mistral-large).
+    Generate narrative fields using Snowflake Cortex (mistral-large2).
 
     Parameters
     ----------
-    signal  : dict — output of enrich_signals (Stage 2), contains 'facts' key
-    session : Snowpark Session
+    signal                    : dict — output of enrich_signals (Stage 2), contains 'facts' key
+    session                   : Snowpark Session
+    budget                    : optional CortexBudget — aborts and falls back if exceeded
+    max_retries               : number of retries on transient failures (default 2)
+    quality_max_action_length : max length of recommended_action (default 800)
+    quality_reject_generic    : flag generic/vague recommendations (default True)
 
     Returns
     -------
     dict with keys: issue, explanation, cost_if_not_fixed, recommended_action
-    Falls back to rule_based.generate on any failure.
+    Falls back to rule_based.generate on budget, quality, or call failures.
     """
     card_skill = _load_card_skill()
     type_skill = _load_type_skill(signal.get('signal_type', ''))
@@ -325,41 +394,102 @@ def generate(signal: dict, session) -> dict:
     )
 
     prompt_escaped = prompt.replace("'", "''")
+    estimated_tokens = estimate_tokens(prompt)
 
-    try:
-        result = session.sql(
-            f"SELECT SNOWFLAKE.CORTEX.COMPLETE('mistral-large', '{prompt_escaped}') AS RESPONSE"
-        ).collect()
-        raw = result[0]['RESPONSE'].strip()
-
-        cleaned = _extract_json(raw)
-        narrative = json.loads(cleaned)
-
-        required = ['issue', 'explanation', 'cost_if_not_fixed', 'recommended_action']
-        if all(k in narrative for k in required):
-            narrative['_prompt'] = prompt
-            return narrative
-
+    # Budget gate: abort before spending a call if budget is exhausted.
+    if budget is not None and not budget.record(estimated_tokens):
         _label = signal.get('department') or signal.get('signal_type', '?')
         print(
-            f"[3_investigate/cortex] Missing fields for store {signal['store_id']} "
-            f"{_label} — falling back to rule-based. "
-            f"Keys received: {list(narrative.keys())}"
+            f"[3_investigate/cortex] Budget exceeded for store {signal['store_id']} "
+            f"{_label} — falling back to rule-based."
         )
+        fallback = rule_based_generate(signal)
+        fallback['_prompt'] = prompt
+        fallback['_raw_response'] = ''
+        fallback['_fallback_reason'] = 'budget_exceeded'
+        return fallback
 
+    # Call Cortex with exponential-backoff retries.
+    raw_response = ''
+    last_error = None
+    for attempt in range(max_retries + 1):
+        try:
+            with _CORTEX_CALL_LOCK:
+                result = session.sql(
+                    f"SELECT SNOWFLAKE.CORTEX.COMPLETE('mistral-large2', '{prompt_escaped}') AS RESPONSE"
+                ).collect()
+            raw_response = result[0]['RESPONSE'].strip()
+            break
+        except Exception as e:
+            last_error = e
+            _label = signal.get('department') or signal.get('signal_type', '?')
+            print(
+                f"[3_investigate/cortex] Cortex call attempt {attempt + 1} failed for store "
+                f"{signal['store_id']} {_label}: {e}"
+            )
+            if attempt < max_retries:
+                time.sleep(2 ** attempt)
+            else:
+                print(
+                    f"[3_investigate/cortex] All retries exhausted for store {signal['store_id']} "
+                    f"{_label} — falling back to rule-based."
+                )
+                fallback = rule_based_generate(signal)
+                fallback['_prompt'] = prompt
+                fallback['_raw_response'] = raw_response
+                fallback['_fallback_reason'] = f'cortex_error: {last_error}'
+                return fallback
+
+    # Parse and validate the response.
+    try:
+        cleaned = _extract_json(raw_response)
+        narrative = json.loads(cleaned)
     except json.JSONDecodeError as e:
         _label = signal.get('department') or signal.get('signal_type', '?')
         print(
             f"[3_investigate/cortex] Invalid JSON for store {signal['store_id']} "
             f"{_label}: {e} — falling back to rule-based."
         )
-    except Exception as e:
+        fallback = rule_based_generate(signal)
+        fallback['_prompt'] = prompt
+        fallback['_raw_response'] = raw_response
+        fallback['_fallback_reason'] = f'invalid_json: {e}'
+        return fallback
+
+    # JSON-level required keys check (kept alongside quality check for clarity).
+    required = ['issue', 'explanation', 'cost_if_not_fixed', 'recommended_action']
+    if not all(k in narrative for k in required):
         _label = signal.get('department') or signal.get('signal_type', '?')
         print(
-            f"[3_investigate/cortex] Cortex error for store {signal['store_id']} "
-            f"{_label}: {e} — falling back to rule-based."
+            f"[3_investigate/cortex] Missing fields for store {signal['store_id']} "
+            f"{_label} — falling back to rule-based. "
+            f"Keys received: {list(narrative.keys())}"
         )
+        fallback = rule_based_generate(signal)
+        fallback['_prompt'] = prompt
+        fallback['_raw_response'] = raw_response
+        fallback['_fallback_reason'] = 'missing_fields'
+        return fallback
 
+    # Quality gate: generic/None/nan/too-long checks.
+    is_valid, reason = _validate_quality(
+        narrative,
+        max_action_length=quality_max_action_length,
+        reject_generic=quality_reject_generic,
+    )
+    if is_valid:
+        narrative['_prompt'] = prompt
+        narrative['_raw_response'] = raw_response
+        narrative['_fallback_reason'] = ''
+        return narrative
+
+    _label = signal.get('department') or signal.get('signal_type', '?')
+    print(
+        f"[3_investigate/cortex] Quality check failed for store {signal['store_id']} "
+        f"{_label}: {reason} — falling back to rule-based."
+    )
     fallback = rule_based_generate(signal)
     fallback['_prompt'] = prompt
+    fallback['_raw_response'] = raw_response
+    fallback['_fallback_reason'] = f'quality_check: {reason}'
     return fallback

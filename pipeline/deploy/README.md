@@ -84,7 +84,7 @@ ALTER TASK RUN_ALERTS_PIPELINE_TASK RESUME;
 
 Results are written to:
 ```
-SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_PIPELINE
+STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE
 ```
 
 Schema: `RUN_DATE, ALERT_TYPE, STORE_ID, SECTION, TYPE, TRIGGER_TYPES, ISSUE, EXPLANATION, COST_IF_NOT_FIXED, RECOMMENDED_ACTION, SORT_VALUE`
@@ -107,6 +107,42 @@ To move to Azure DevOps, GitHub Actions, Airflow, etc.:
 
 ---
 
+## CI/CD and Testing
+
+### Pre-deployment Validation
+Always run the full test suite before deploying:
+
+```bash
+# Run comprehensive test suite
+python -m pytest store_insight/pipeline/tests/ -v
+
+# Verify specific critical areas
+python -m pytest store_insight/pipeline/tests/test_capabilities.py -v
+python -m pytest store_insight/pipeline/tests/test_write_alerts.py -v
+```
+
+### Deployment Checklist
+- [ ] All 188 tests pass
+- [ ] Configuration validation succeeds for target client
+- [ ] Contract files are up-to-date (`store_hierarchy`, `wmd_hierarchy`)
+- [ ] Cortex permissions granted to SP owner role
+- [ ] Source tables accessible and have expected schema
+
+### Troubleshooting Deployment
+
+**Capability Validation Failures**
+```bash
+# Check contract validation
+python -c "from store_insight.pipeline.pipeline.capabilities import validate; print(validate({'client': 'your_client'}))"
+```
+
+**Stored Procedure Issues**
+- Check SP owner role has `SNOWFLAKE.CORTEX_USER`
+- Verify stage contains latest code zip
+- Review Task History for error details
+
+---
+
 ## Architecture
 
 ```
@@ -120,4 +156,11 @@ Snowflake objects (created by deploy.py):
   STAGE  <DB>.<SCHEMA>.ALERTS_PIPELINE_STAGE
   SPROC  <DB>.<SCHEMA>.RUN_ALERTS_PIPELINE(client STRING, analysis_date STRING, overwrite BOOLEAN)
   TASK   <DB>.<SCHEMA>.RUN_ALERTS_PIPELINE_TASK  → daily cron (0 6 * * * Europe/London) → CALL RUN_ALERTS_PIPELINE
+
+Output tables:
+  ALERTS_PIPELINE                    ← Final scored alert cards
+  (Future) ALERT_SIGNALS_RAW         ← Raw detector signals
+  (Future) ALERT_SIGNALS_ENRICHED    ← Enriched signals with facts
+  (Future) ALERT_INVESTIGATIONS      ← Investigation results
+  (Future) ALERT_SCORE_AUDIT         ← Scoring component breakdown
 ```

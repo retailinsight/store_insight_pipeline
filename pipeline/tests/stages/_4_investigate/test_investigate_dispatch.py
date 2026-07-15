@@ -76,7 +76,7 @@ def test_cortex_engine_with_session_calls_cortex(monkeypatch):
     cortex_called = {}
     import store_insight.pipeline.stages._4_investigate.cortex as cortex
 
-    def cortex_gen(s, sess):
+    def cortex_gen(s, sess, **kwargs):
         cortex_called['hit'] = True
         return {k: 'c' for k in REQUIRED_KEYS}
 

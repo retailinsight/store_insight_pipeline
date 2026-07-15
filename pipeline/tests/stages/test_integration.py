@@ -111,7 +111,7 @@ def test_happy_path_produces_sorted_alert_cards(synthetic_pipeline, fake_osa_df)
     for card in cards:
         assert {'issue', 'explanation', 'cost_if_not_fixed',
                 'recommended_action', 'score'}.issubset(card.keys())
-        assert isinstance(card['score'], (int, float))
+        assert isinstance(card['score'], int | float)
     # Sorted descending by score.
     scores = [c['score'] for c in cards]
     assert scores == sorted(scores, reverse=True)
@@ -130,7 +130,7 @@ def test_compliance_scored_by_projected_cost(synthetic_pipeline, fake_osa_df):
     # No real osa DataFrame available — compliance scorer returns 0 without store LSV.
     cards = _run(fake_osa_df)
     comp = next(c for c in cards if c['signal_type'] == 'COMPLIANCE')
-    assert isinstance(comp['score'], (int, float))
+    assert isinstance(comp['score'], int | float)
 
 
 def test_determinism_same_inputs_produce_same_outputs(synthetic_pipeline, fake_osa_df):

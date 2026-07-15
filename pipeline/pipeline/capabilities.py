@@ -57,8 +57,8 @@ PARAM_TO_CONTRACTS: dict[str, list[str]] = {
     'markdown_log':    ['markdown_log'],
     'markdown_sales':  ['markdown_sales'],
     'wastage':         ['wastage'],
-    'item_hierarchy':  ['wmd_item_hierarchy'],
-    'store_hierarchy': ['wmd_store_hierarchy'],
+    'item_hierarchy':  ['wmd_hierarchy'],
+    'store_hierarchy': ['store_hierarchy'],
 }
 
 
@@ -174,10 +174,21 @@ def validate(cfg: dict) -> list[str]:
     from store_insight.pipeline.stages._3_facts import registry as gth_reg
 
     issues: list[str] = []
-    client = getattr(cfg, 'client_name', 'default')
+
+    # Support both dict and Pydantic model inputs
+    if isinstance(cfg, dict):
+        client = cfg.get('client_name', 'default')
+        capabilities_attr = cfg.get('capabilities')
+        detectors_cfg = cfg.get('detectors')
+        gatherers_cfg = cfg.get('gatherers', {})
+    else:
+        # Pydantic model - use getattr
+        client = getattr(cfg, 'client_name', 'default')
+        capabilities_attr = getattr(cfg, 'capabilities', None)
+        detectors_cfg = getattr(cfg, 'detectors', None)
+        gatherers_cfg = getattr(cfg, 'gatherers', {})
 
     # ── Resolve capabilities ────────────────────────────────
-    capabilities_attr = getattr(cfg, 'capabilities', None)
     if capabilities_attr is not None:
         capabilities = set(capabilities_attr)
     else:
@@ -185,9 +196,14 @@ def validate(cfg: dict) -> list[str]:
 
     # ── Which detectors are enabled? ────────────────────────
     enabled_detectors: set[str] | None = None
-    detectors_cfg = getattr(cfg, 'detectors', None)
-    if detectors_cfg is not None and getattr(detectors_cfg, 'enabled', None) is not None:
-        enabled_detectors = set(detectors_cfg.enabled)
+    if detectors_cfg is not None:
+        if isinstance(detectors_cfg, dict):
+            enabled_list = detectors_cfg.get('enabled')
+        else:
+            # Pydantic model
+            enabled_list = getattr(detectors_cfg, 'enabled', None)
+        if enabled_list is not None:
+            enabled_detectors = set(enabled_list)
 
     # Track which signal types still have any enabled detector — gatherers
     # for fully-disabled signal types are dead code and don't need
@@ -229,7 +245,7 @@ def validate(cfg: dict) -> list[str]:
                 pass
 
     # ── Validate gatherers ──────────────────────────────────
-    cfg_gatherers = getattr(cfg, 'gatherers', None)
+    cfg_gatherers = gatherers_cfg
 
     for signal_type, gatherers in gth_reg.SIGNAL_TYPE_GATHERERS.items():
         # If detector filtering is active and *no* detector for this signal
@@ -239,7 +255,11 @@ def validate(cfg: dict) -> list[str]:
 
         # Per-signal-type gatherer filter.
         if cfg_gatherers is not None:
-            signal_gatherers = getattr(cfg_gatherers, signal_type, None)
+            if isinstance(cfg_gatherers, dict):
+                signal_gatherers = cfg_gatherers.get(signal_type)
+            else:
+                # Pydantic model
+                signal_gatherers = getattr(cfg_gatherers, signal_type, None)
             if signal_gatherers is not None:
                 allowed   = set(signal_gatherers)
                 gatherers = [g for g in gatherers if _gatherer_module_name(g) in allowed]

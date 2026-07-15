@@ -22,9 +22,78 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
+          pip install -e .
 
       - name: Lint
         run: ruff check .
 
+      # Format gate is advisory until the repo is bulk-formatted with
+      # `ruff format .` (currently ~112 files would change).  Flip
+      # continue-on-error to false after that one-time formatting commit.
+      - name: Format check (advisory)
+        continue-on-error: true
+        run: ruff format --check .
+
       - name: Run tests
         run: pytest pipeline/tests/ -v
+
+      # Offline capability validation: every enabled detector/gatherer must
+      # have an adapter SQL file for the client.  Advisory until the missing
+      # wmd_store_hierarchy / wmd_item_hierarchy adapters for eastofengland
+      # are deployed or the offending detectors are disabled in config.
+      - name: Capability validation (advisory)
+        continue-on-error: true
+        run: |
+          python -c "
+          import sys
+          from store_insight.pipeline.config.loader import load_config
+          from store_insight.pipeline.pipeline.capabilities import validate
+          cfg = load_config('eastofengland')
+          issues = validate(cfg)
+          [print(f'- {i}') for i in issues]
+          sys.exit(2 if issues else 0)
+          "
+
+  # Contract validation and golden-run regression comparison both require a
+  # live Snowflake connection.  This job only runs when the repository has
+  # the RUN_SNOWFLAKE_GATES Actions variable set to 'true' and Snowflake
+  # credentials configured as secrets.
+  snowflake-gates:
+    runs-on: ubuntu-latest
+    if: ${{ vars.RUN_SNOWFLAKE_GATES == 'true' }}
+    needs: test
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.10"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+          pip install -e .
+
+      - name: Contract validation (adapter views vs contracts)
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+        run: python pipeline/tools/validate_views.py --client eastofengland
+
+      - name: Golden-run regression comparison
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+        run: |
+          python pipeline/pipeline/run_batch.py \
+            --client eastofengland \
+            --analysis-date 2025-06-14 \
+            --deterministic \
+            --golden-path pipeline/tests/golden/regression_golden_eastofengland_2025-06-14.json \
+            --target-table CI_SMOKE_ALERTS

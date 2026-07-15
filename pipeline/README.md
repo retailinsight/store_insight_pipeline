@@ -137,6 +137,18 @@ cfg.detector_config.lookback_windows.osa
 cfg.output.signal_type_buckets['OSA']
 ```
 
+### Credentials & secrets
+
+**Credentials must NEVER be committed to git** (see `.windsurf/rules/no-credentials-in-git.md`).
+
+- Real Snowflake credentials live only in gitignored files: `pipeline/.env` and `.local/credentials/snowflake_credentials.py`. The gitignored root `snowflake_credentials.py` is a compatibility loader only. Only `.env.example` with placeholder values is committed.
+- Programmatic access uses the `SVC_STOREINSIGHT` service account with a PAT token (used as the `password` connection parameter), account identifier `UUTQCJV-UKCOOP` (org-account format) and role `STORE_INSIGHT_ROLE`.
+- Production environment: database `STORE_INSIGHT_DB`, schema `PUBLIC`, warehouse `STORE_INSIGHT_WH`. Source data is read from `ANALYSIS.FINAL` views via the adapter views deployed by `pipeline/tools/deploy_views.py`.
+- A Snowflake network policy restricts access by IP — connect to the company VPN before running the pipeline or any Snowflake scripts.
+- Scripts should load credentials via `from snowflake_credentials import get_credentials` or from environment variables — never hardcode tokens inline.
+- The `/push-to-github` workflow runs a mandatory secret scan before every commit.
+- If a secret is ever committed, rotate it with the Snowflake admin immediately — deleting the file in a follow-up commit is not enough.
+
 ---
 
 ## Running locally
@@ -167,6 +179,52 @@ The registry auto-discovers any module placed in `stages/_1_detect/detectors/` �
 
 ## Tests
 
+The pipeline has a comprehensive test suite (188 tests) covering all stages and configuration scenarios.
+
 ```bash
+# Run all tests
 python -m pytest store_insight/pipeline/tests/ -v
+
+# Run specific test groups
+python -m pytest store_insight/pipeline/tests/test_capabilities.py -v
+python -m pytest store_insight/pipeline/tests/test_config_loader.py -v
+python -m pytest store_insight/pipeline/tests/stages/ -v
 ```
+
+### Test Coverage
+- Configuration loading and validation
+- Contract validation and capability checking  
+- Signal detection, enrichment, and scoring
+- Alert writing and output validation
+- All detector and gatherer modules
+
+### Configuration Compatibility
+The pipeline supports both dictionary and Pydantic model configurations:
+- **Dict inputs** - Used in tests and manual configurations
+- **Pydantic models** - Used by the config loader and production runs
+- **Auto-detection** - Functions automatically handle both input types
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+**Test Failures**
+```bash
+# If tests fail due to missing contracts:
+python -m pytest store_insight/pipeline/tests/test_table_contracts.py -v
+
+# If config validation fails:
+python -m pytest store_insight/pipeline/tests/test_capabilities.py -v
+```
+
+**Configuration Issues**
+- Ensure `store_hierarchy` and `wmd_hierarchy` are in table configurations
+- Check contract names match: `store_hierarchy`, `wmd_hierarchy` (not legacy names)
+- Verify detector/gatherer filtering is properly configured
+
+**Deployment Issues**
+- Verify Snowflake role has `SNOWFLAKE.CORTEX_USER` for LLM features
+- Check `.env` file matches Snowflake connection details
+- Ensure all required tables exist in source databases

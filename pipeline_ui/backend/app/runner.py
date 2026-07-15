@@ -52,11 +52,11 @@ def _to_json_safe(value: Any) -> Any:
     """
     if isinstance(value, dict):
         return {str(k): _to_json_safe(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple, set)):
+    if isinstance(value, list | tuple | set):
         return [_to_json_safe(v) for v in value]
-    if isinstance(value, (datetime.date, datetime.datetime)):
+    if isinstance(value, datetime.date | datetime.datetime):
         return value.isoformat()
-    if isinstance(value, (str, int, float, bool)) or value is None:
+    if isinstance(value, str | int | float | bool) or value is None:
         return value
     # Fallback — best-effort string repr
     try:
