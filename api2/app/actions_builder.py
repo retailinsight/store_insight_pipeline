@@ -14,10 +14,15 @@ Response shape:
     }
 """
 
+import os
+
 from snowflake.snowpark import Session
 from snowflake.snowpark import functions as F
 
-ALERTS_TABLE = "SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_PIPELINE"
+ALERTS_TABLE = os.getenv(
+    "ALERTS_OUTPUT_TABLE",
+    "STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE",
+)
 
 _COLUMNS = [
     "RUN_DATE",

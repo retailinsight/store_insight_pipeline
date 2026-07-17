@@ -51,17 +51,23 @@ python store_insight/pipeline/deploy/deploy.py --task-off
 
 ## Run manually
 
-Trigger the pipeline for a specific week:
+Trigger the rule-based pipeline for a specific rolling-window end date:
 ```sql
-CALL RUN_ALERTS_PIPELINE(NULL, '2025-06-14', FALSE);
+CALL RUN_ALERTS_PIPELINE('eastofengland', '2025-06-14', FALSE, FALSE);
 -- client        = client config name (subfolder under config/clients/); NULL = base defaults
--- analysis_date = last day of the week (YYYY-MM-DD)
--- overwrite     = FALSE to append, TRUE to replace all rows for this run_date
+-- analysis_date = end of the rolling seven-day window (YYYY-MM-DD)
+-- overwrite     = FALSE to append, TRUE to replace rows for this run_date
+-- use_cortex    = FALSE for rule-based narratives; TRUE for optional Cortex
 ```
 
-Use `NULL` for `analysis_date` to default to today:
+Use `NULL` for `analysis_date` to default to today. This is the scheduled daily behavior:
 ```sql
-CALL RUN_ALERTS_PIPELINE(NULL, NULL, FALSE);
+CALL RUN_ALERTS_PIPELINE('eastofengland', NULL, FALSE, FALSE);
+```
+
+Cortex remains available for intentional manual comparisons:
+```sql
+CALL RUN_ALERTS_PIPELINE('eastofengland', '2025-06-14', TRUE, TRUE);
 ```
 
 Check recent Task run history:
@@ -154,8 +160,8 @@ deploy/
 
 Snowflake objects (created by deploy.py):
   STAGE  <DB>.<SCHEMA>.ALERTS_PIPELINE_STAGE
-  SPROC  <DB>.<SCHEMA>.RUN_ALERTS_PIPELINE(client STRING, analysis_date STRING, overwrite BOOLEAN)
-  TASK   <DB>.<SCHEMA>.RUN_ALERTS_PIPELINE_TASK  → daily cron (0 6 * * * Europe/London) → CALL RUN_ALERTS_PIPELINE
+  SPROC  <DB>.<SCHEMA>.RUN_ALERTS_PIPELINE(client STRING, analysis_date STRING, overwrite BOOLEAN, use_cortex BOOLEAN)
+  TASK   <DB>.<SCHEMA>.RUN_ALERTS_PIPELINE_TASK  → daily cron (0 6 * * * Europe/London) → rule-based CALL
 
 Output tables:
   ALERTS_PIPELINE                    ← Final scored alert cards

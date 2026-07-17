@@ -1,5 +1,49 @@
 # Store Insight Pipeline — Changes Log
 
+## 2026-07-17
+
+### Daily rule-based deployment live in Snowflake
+- Stored Procedure `STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE` and scheduled
+  Task `STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE_TASK` registered.
+- First scheduled run succeeded 2026-07-17 14:47 BST: 1,165 rule-based cards
+  written to `STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE`.
+- Manual SP test for `2026-07-17` also completed successfully with the same
+  rule-based output.
+- Task schedule: daily at 06:00 Europe/London, timeout 2 hours, calls SP with
+  `USE_CORTEX=FALSE`.
+- `EXECUTE TASK` privilege granted to `STORE_INSIGHT_ROLE` by Dimitar to allow
+  the Task to run.
+- Fixed Task DDL `COMMENT` to avoid embedded single quotes that broke SQL
+  compilation.
+
+### Rule-based narrative quality
+- Filtered invalid department labels (`Unknown`, `None`, `NaN`, empty) from
+  `MARKDOWN_OVERRIDE`, `WASTE`, and `MARKDOWN_SELLTHROUGH` department breakdowns
+  before user-facing narrative generation.
+- Added regression test for `MARKDOWN_SELLTHROUGH` invalid-department filtering.
+
+### Documentation
+- Updated `DEPLOYMENT_PLAN.md`, `RISK_VALIDATION.md`, and `TODO.md` to mark
+  deployment complete and record the successful first scheduled run.
+
+## 2026-07-16
+
+### Daily rule-based deployment confirmed
+- Dan confirmed that actions must be generated and sent daily, with repeated-action
+  handling to follow separately, and that scheduled production must not use Cortex.
+- Stored Procedure signature now includes `USE_CORTEX BOOLEAN`; the daily Task
+  explicitly passes `FALSE`, while intentional manual runs can pass `TRUE`.
+- Scheduled runs now default `analysis_date` to today, producing a rolling
+  seven-day window ending each day.
+- East of England investigation engines now default to `rule_based`.
+- The daily rule-based Task timeout is 2 hours.
+- The actions API now defaults to `STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE` and
+  the production role/warehouse/database/schema, so generated actions are read
+  from the deployed environment.
+- Added four deployment behavior tests; all pass. Ruff passes for deployment code.
+- Updated `DEPLOYMENT_PLAN.md`, `TODO.md`, `RISK_VALIDATION.md`, and deploy docs.
+- Changes remain local; no push performed.
+
 ## 2026-07-15
 
 ### P0: Migrate pipeline to the production Store Insight Snowflake environment
@@ -39,6 +83,45 @@
   log rows, 50K wastage rows, 200K item hierarchy rows, 173 stores.
 - 12,026 raw signals → 1,226 signals after top-N filtering.
 - Output table: `STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE` (created by this run).
+- Cortex narrative stage running sequentially (~2.3 calls/min); 516/1,226 done
+  as of 18:40, ETA ~23:40.
+
+### Docs, tests and stale references updated
+- Added 2026-07-15 changelog entry; updated `pipeline/README.md`,
+  `pipeline/docs/architecture.md`, `pipeline/docs/semantic_model.md`,
+  `pipeline/deploy/README.md`, `pipeline/.env.example` with the new environment
+  (`STORE_INSIGHT_DB.PUBLIC`, `STORE_INSIGHT_WH`) and VPN requirement.
+- Updated `pipeline/config/base/default.yaml` base connection to the new env.
+- Replaced remaining `SNOWFLAKE_LEARNING_DB` fallbacks in `pipeline.py` and
+  `run_batch.py`.
+- Added regression tests: `TestToDate` (datetime/date fix, 4 tests) and
+  `TestBuildStoreDeptFilter` (recursion fix incl. 2,000-signal case, 3 tests).
+  Test count 418 → 425, all passing.
+
+### Repository restructure
+- Created root `README.md` with full repo structure, quick start, and
+  Snowflake environment documentation.
+- New `scripts/` folder (tracked, with README): `test_pat_connection.py`,
+  `check_run_progress.py`, `check_cortex_count.py`, `check_cortex_models.py`.
+- New `archive/` folder (gitignored): 18 one-off connection-debug scripts and
+  message drafts moved out of the repo root.
+- New `docs/` folder: `snowflake_connection_status.md`,
+  `store_insight_claude_context.md`.
+- Credentials moved to `.local/credentials/snowflake_credentials.py`
+  (gitignored); root `snowflake_credentials.py` is now a compatibility loader.
+- `.gitignore`: added `.local/`, `archive/`, `run_log.txt`, `venv_store_insight/`.
+
+### Lint cleanup and first push
+- Fixed all 48 ruff errors (36 auto-fixed; 11 manual: `isinstance` tuple →
+  union syntax across 7 files, import order in `scripts/test_pat_connection.py`).
+- Committed and pushed to `origin/feat/store-insight-ukcoop-env` (`95b8c61`,
+  65 files, +5,080/−189). Secret scan clean; `main` untouched.
+
+### Engineering review scorecard (vs system-map recommendations)
+- 11 of 15 recommendations fully addressed, 2 partial, 2 not started.
+- Remaining gaps: run lineage columns (`run_id`, `config_hash`, `prompt_hash`,
+  `pipeline_version`, `source_data_watermark`); card validation for the
+  rule-based path; threshold backtesting tool; lifecycle/KPI post-action loop.
 
 ## 2026-07-14
 

@@ -1,0 +1,253 @@
+# Store Insight UK Coop — Deployment Summary
+
+Generated: 2026-07-17  
+Sources: `DEPLOYMENT_PLAN.md`, `CHANGES_LOG.md`, and `Store_Insight_pipeline_review_with_diagram/store_insight_engineering_system_map_with_architecture.html`.
+
+---
+
+## 1. Current deployment status
+
+**Daily deployment is live.**
+
+- **Stored Procedure**: `STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE`
+- **Scheduled Task**: `STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE_TASK`
+- **Schedule**: Daily at 06:00 Europe/London
+- **Warehouse**: `STORE_INSIGHT_WH` (auto-suspend between runs)
+- **Output table**: `STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE`
+- **First scheduled run**: Succeeded 2026-07-17 14:47 BST
+  - 1,165 rule-based cards
+  - All `ALERT_ID`s distinct
+  - 0 empty issue / explanation / action rows
+  - 0 Cortex usage (scheduled production uses rule-based narratives)
+- **Next scheduled run**: 2026-07-18 06:00 Europe/London
+
+---
+
+## 2. What was built and deployed
+
+### Pipeline architecture
+
+The Store Insight pipeline converts raw Co-op retail data into daily action cards:
+
+`source data / adapters` → `detectors` → `enriched/merged signals` → `investigation (rule-based or Cortex)` → `score audit` → `final cards` → `write to ALERTS_PIPELINE`
+
+- **Rule-based narratives** are now the default for scheduled production.
+- **Cortex** is available for manual runs but is gated behind budget, quality, retry, and fallback controls.
+- **Analysis date** defaults to `today`, producing a rolling seven-day window every day.
+- **Duplicate protection**: same `analysis_date` is skipped unless `overwrite=TRUE`.
+
+### Key fixes and hardening
+
+| Area | What changed |
+|---|---|
+| Production environment | Migrated from learning environment to `STORE_INSIGHT_DB.PUBLIC`, `STORE_INSIGHT_WH`, `STORE_INSIGHT_ROLE`, `SVC_STOREINSIGHT` service account. |
+| Snowflake packaging | Stored Procedure is deployed as a zip with `pyyaml` and `pydantic` packages; runtime extraction handles Snowpark import quirks. |
+| Windows + Snowflake PUT | Fixed file-URI handling in `deploy.py`. |
+| Task DDL | Fixed `COMMENT` to avoid embedded single quotes. |
+| `EXECUTE TASK` privilege | Dimitar granted it to `STORE_INSIGHT_ROLE`; task now resumes and runs. |
+| Date handling | Fixed `datetime` vs `date` comparison in `data_quality.py`. |
+| Production scale | Replaced recursive OR filter with `(STORE_ID, dept) IN (...)` predicate for 1,000+ signals. |
+| Signal identity | Deterministic `alert_id` and `signal_id` across reruns. |
+| Signal merging | Per-signal-type merge rules; fixed OSA `this_week_lsv` handling. |
+| Cortex model | Replaced deprecated `mistral-large` with `mistral-large2`. |
+| Rule-based narrative quality | Filter out `Unknown`, `None`, `NaN`, empty department labels from `MARKDOWN_OVERRIDE`, `WASTE`, and `MARKDOWN_SELLTHROUGH` narratives. |
+| Regression testing | Added `--deterministic` golden-run comparison mode. |
+| CI/CD | `ruff` and `pytest` gates; offline capability validation; optional Snowflake gates. |
+
+---
+
+## 3. Engineering system map recommendations
+
+The engineering review identified **15 recommendations**, prioritised as **P0** (production safety/traceability) first, then **P1** (cost/tuning) and **P2** (product feedback/debuggability).
+
+| Status | Count | Items |
+|---|---|---|
+| ✅ Fully addressed | 11 | Stable IDs, partial lineage, source-data checks, deterministic regression, signal merging, Cortex budget/quality/fallback, shared-session safety, package setup, CI gates, debug/replay tables, rule-based validation. |
+| ⚠️ Partial | 2 | Run lineage (only `ANALYSIS_DATE`, `ENGINE_USED` present; missing `RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`, `SOURCE_DATA_WATERMARK`); card validation for rule-based path. |
+| ❌ Not started | 2 | Threshold backtesting tool; lifecycle/post-action measurement loop. |
+
+### P0 recommendations addressed
+
+1. **Stable `alert_id` / `signal_id`** — deterministic IDs from client, analysis date, signal type, store, department, and business key.
+2. **Run lineage (partial)** — `ANALYSIS_DATE` and `ENGINE_USED` added; full lineage columns still pending.
+3. **Source-data completeness checks** — new `data_quality.py` module validates columns, row counts, date ranges, store coverage, hierarchy join rates, non-negative commercial values, and WMD freshness.
+4. **Deterministic regression mode** — `run_batch --deterministic` compares current run against a golden snapshot.
+5. **Signal merging** — per-signal-type merge rules; fixed OSA lost-sales handling.
+6. **Cortex controls** — budget, retry/backoff, JSON validation, quality gate, rule-based fallback, concurrency guardrails.
+
+### P1 recommendations addressed
+
+- **CI/CD gates**: `ruff`, `pytest`, target-client validation, contract validation, deterministic golden-run comparison.
+- **Cortex budget and quality gate**: `CortexBudget` module with retry, raw response capture, and fallback metadata.
+- **Shared-session safety**: module-level lock serialises Cortex SQL calls.
+
+### P2 recommendations addressed
+
+- **Stage-level debug tables**: helpers to write `SIGNALS_RAW`, `SIGNALS_ENRICHED`, `SCORE_AUDIT`, `INVESTIGATIONS`.
+- **Card-level validation**: quality checks for missing fields, `None`/`nan` leakage, generic recommendations, invalid JSON, and excessive text length.
+- **Explainable score components**: commercial impact, severity, trigger weight, confidence, final sort value, and score reason.
+- **Package/import cleanup**: `setup.py` enables `pip install -e .`; `.venv-store-insight` created; CI updated.
+
+### Remaining engineering gaps
+
+1. **P0 — Full run lineage columns**
+   - `RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`, `SOURCE_DATA_WATERMARK`
+   - Highest-value remaining item; easier to add before weeks of history accumulate.
+
+2. **P2 — Card validation for rule-based path**
+   - Extend Cortex quality gate to validate rule-based cards before write.
+
+3. **P1 — Threshold backtesting tool**
+   - Compare current vs proposed YAML thresholds for alert count, store churn, type mix, top-10 changes, and noise.
+
+4. **P2 — Lifecycle / post-action measurement**
+   - Track generated → seen → assigned → worked → closed/resolved/ignored and measure KPI movement.
+
+---
+
+## 4. How to monitor the live Task
+
+### Check the Task succeeded
+
+```sql
+USE ROLE STORE_INSIGHT_ROLE;
+USE WAREHOUSE STORE_INSIGHT_WH;
+
+SELECT
+  NAME,
+  STATE,
+  SCHEDULED_TIME,
+  COMPLETED_TIME,
+  DATEDIFF('second', SCHEDULED_TIME, COMPLETED_TIME) AS RUN_SECONDS,
+  ERROR_MESSAGE
+FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY(
+  TASK_NAME => 'RUN_ALERTS_PIPELINE_TASK',
+  SCHEDULED_TIME_RANGE_START => DATEADD('day', -2, CURRENT_TIMESTAMP)
+))
+ORDER BY SCHEDULED_TIME DESC;
+```
+
+Healthy run: `STATE = 'SUCCEEDED'`, `ERROR_MESSAGE` is `NULL`.
+
+### Check the output table
+
+```sql
+USE DATABASE STORE_INSIGHT_DB;
+USE SCHEMA PUBLIC;
+
+SELECT
+  RUN_DATE,
+  ANALYSIS_DATE,
+  COUNT(*) AS CARDS,
+  COUNT(DISTINCT ALERT_ID) AS DISTINCT_ALERTS,
+  ENGINE_USED,
+  COUNT(*) AS CARDS_BY_ENGINE
+FROM ALERTS_PIPELINE
+GROUP BY RUN_DATE, ANALYSIS_DATE, ENGINE_USED
+ORDER BY RUN_DATE DESC;
+```
+
+### Run the local validation script (VPN required)
+
+```powershell
+python scripts/validate_daily_run.py
+```
+
+### Suspend or resume the Task
+
+```sql
+ALTER TASK STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE_TASK SUSPEND;
+ALTER TASK STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE_TASK RESUME;
+```
+
+---
+
+## 5. Deployment commands
+
+```powershell
+# Deploy SP only (dry-run)
+python pipeline/deploy/deploy.py --client eastofengland --task-off
+
+# Deploy SP + daily Task
+python pipeline/deploy/deploy.py --client eastofengland
+
+# Validate the latest run locally
+python scripts/validate_daily_run.py
+```
+
+---
+
+## 6. Tests and quality
+
+- **31 tests** passed for deployment and narrative fixes.
+- **Full suite**: 425+ tests passing; remaining failures are pre-existing dict-vs-Pydantic config drift issues unrelated to this deployment.
+- **Ruff**: check and format clean on modified files.
+
+---
+
+## 7. Definition of done (from engineering review)
+
+- [x] Every generated card has a deterministic business identity and can be deduplicated across reruns.
+- [x] Detection does not proceed silently when inputs are incomplete.
+- [x] Deterministic golden-run tests can catch accidental changes.
+- [x] Signal merge rules preserve facts and handle OSA lost-sales intentionally.
+- [x] Cortex execution has budget, retry, quality, fallback, and concurrency controls.
+- [ ] Every output row explains exact data watermark, configuration, prompt, engine, and pipeline version. *(partial — missing lineage columns)*
+- [ ] Final cards are validated before write. *(partial — Cortex only)*
+- [ ] Score components are fully explainable. *(partial — score audit helpers exist)*
+- [ ] User-action and KPI follow-up closes the loop. *(not started)*
+
+---
+
+## 8. Cortex comparison run (manual only)
+
+Scheduled production must stay **rule-based** per Dan’s 2026-07-16 confirmation. Cortex remains available as a **manual, opt-in comparison** and is already protected by budget, retry, quality, and fallback controls.
+
+### How to run a Cortex comparison
+
+```sql
+-- Run for a specific date with use_cortex = TRUE
+CALL STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE('eastofengland', '2026-07-17', FALSE, TRUE);
+```
+
+The fourth argument is `USE_CORTEX BOOLEAN`:
+- `FALSE` → rule-based (default for scheduled Task)
+- `TRUE` → Cortex with automatic fallback to rule-based on budget/quality/retry failure
+
+### What to compare
+
+| Dimension | Rule-based | Cortex |
+|---|---|---|
+| Latency | Fast (seconds per card) | ~15.6 s average per call; one prior outlier at 17 min |
+| Cost | Low | Higher; charged per Cortex COMPLETE call on `STORE_INSIGHT_WH` |
+| Narrative quality | Templated, consistent | More natural; requires quality-gate validation |
+| Fallback rate | 0% | Depends on budget/quality/retry success |
+| Determinism | Fully deterministic | Model-dependent; may vary slightly between runs |
+
+### Validation steps
+
+1. Run rule-based and Cortex for the same `analysis_date` into separate runs.
+2. Compare row count, `ALERT_ID` stability, and `ENGINE_USED` mix.
+3. Spot-check 10–20 cards for issue / explanation / action quality.
+4. Check `QUERY_HISTORY` for total Cortex calls, duration, and any failures.
+5. Review `cortex_budget` and `_fallback_reason` fields for fallback causes.
+
+### Current Cortex model
+
+- Active model: `mistral-large2`
+- Also available on this account: `llama3.3-70b`, `llama3.1-70b`, `llama3.1-8b`, `mixtral-8x7b`
+- Deprecated and removed: `mistral-large`
+
+### Recommendation
+
+Use Cortex for **ad-hoc benchmarking or special requests only**. Before proposing Cortex for scheduled production, gather evidence on latency, cost, and fallback rate for a full daily run and get Dan’s explicit approval.
+
+---
+
+## 9. Next steps
+
+1. Confirm tomorrow’s 06:00 scheduled run succeeds and produces ~1,100–1,200 rule-based cards.
+2. Decide with Dan whether to keep the Task running (incurring daily warehouse credits), suspend it, or resize `STORE_INSIGHT_WH`.
+3. Open / update PR for `feat/store-insight-ukcoop-env` when ready.
+4. Prioritise the highest-value remaining gap: **add full run lineage columns** to `ALERTS_PIPELINE`.
+5. Schedule follow-up work for threshold backtesting and lifecycle/post-action measurement.

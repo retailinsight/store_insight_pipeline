@@ -50,28 +50,29 @@ from pathlib import Path
 # Paths
 # ---------------------------------------------------------------------------
 
-_HERE       = Path(__file__).parent                          # store_insight/pipeline/deploy/
-_PKG_DIR    = _HERE.parent                                   # store_insight/pipeline/
-_SI_PKG     = _PKG_DIR.parent                                # store_insight/
-_ZIP_ROOT   = _SI_PKG.parent                                 # workspace parent (zip arcname root)
+_HERE = Path(__file__).parent  # store_insight/pipeline/deploy/
+_PKG_DIR = _HERE.parent  # store_insight/pipeline/
+_SI_PKG = _PKG_DIR.parent  # store_insight/
+_ZIP_ROOT = _SI_PKG.parent  # workspace parent (zip arcname root)
 
-_ENV_PATH   = _PKG_DIR / '.env'
-_ZIP_NAME   = 'store_insight.zip'
+_ENV_PATH = _PKG_DIR / ".env"
+_ZIP_NAME = "store_insight.zip"
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _load_env():
     """Load .env into os.environ (same logic as session.py)."""
     if not _ENV_PATH.exists():
-        raise FileNotFoundError(f'.env not found: {_ENV_PATH}')
+        raise FileNotFoundError(f".env not found: {_ENV_PATH}")
     with open(_ENV_PATH) as f:
         for line in f:
             line = line.strip()
-            if line and not line.startswith('#') and '=' in line:
-                key, _, val = line.partition('=')
+            if line and not line.startswith("#") and "=" in line:
+                key, _, val = line.partition("=")
                 os.environ.setdefault(key.strip(), val.strip())
 
 
@@ -82,33 +83,36 @@ def _zip_package(dest_path: str) -> None:
     ``store_insight/pipeline/...`` — matching the import path
     ``store_insight.pipeline.*`` used at runtime in the SP.
     """
-    excludes = {'__pycache__', '.pyc', '.ipynb_checkpoints', '.env'}
-    with zipfile.ZipFile(dest_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for path in _PKG_DIR.rglob('*'):
+    excludes = {"__pycache__", ".pyc", ".ipynb_checkpoints", ".env"}
+    with zipfile.ZipFile(dest_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("store_insight/__init__.py", "")
+        zf.writestr("store_insight/pipeline/deploy/__init__.py", "")
+        for path in _PKG_DIR.rglob("*"):
             if any(ex in str(path) for ex in excludes):
                 continue
             if path.is_file():
                 arcname = path.relative_to(_ZIP_ROOT)
                 zf.write(path, arcname)
-    print(f'[deploy] Zipped store_insight/pipeline/ → {dest_path}')
+    print(f"[deploy] Zipped store_insight/pipeline/ → {dest_path}")
 
 
 def _create_session():
     """Create a Snowpark session from env vars."""
     from snowflake.snowpark import Session
-    password = os.environ.get('SNOWFLAKE_PASSWORD')
+
+    password = os.environ.get("SNOWFLAKE_PASSWORD")
     params = {
-        'account':   os.environ['SNOWFLAKE_ACCOUNT'],
-        'user':      os.environ['SNOWFLAKE_USER'],
-        'role':      os.environ['SNOWFLAKE_ROLE'],
-        'warehouse': os.environ['SNOWFLAKE_WAREHOUSE'],
-        'database':  os.environ['SNOWFLAKE_DATABASE'],
-        'schema':    os.environ['SNOWFLAKE_SCHEMA'],
+        "account": os.environ["SNOWFLAKE_ACCOUNT"],
+        "user": os.environ["SNOWFLAKE_USER"],
+        "role": os.environ["SNOWFLAKE_ROLE"],
+        "warehouse": os.environ["SNOWFLAKE_WAREHOUSE"],
+        "database": os.environ["SNOWFLAKE_DATABASE"],
+        "schema": os.environ["SNOWFLAKE_SCHEMA"],
     }
     if password:
-        params['password'] = password
+        params["password"] = password
     else:
-        params['authenticator'] = 'externalbrowser'
+        params["authenticator"] = "externalbrowser"
     return Session.builder.configs(params).create()
 
 
@@ -116,125 +120,142 @@ def _create_session():
 # Deploy steps
 # ---------------------------------------------------------------------------
 
+
 def _ensure_stage(session, stage: str) -> None:
     session.sql(f"CREATE STAGE IF NOT EXISTS {stage}").collect()
-    print(f'[deploy] Stage ready: {stage}')
+    print(f"[deploy] Stage ready: {stage}")
 
 
 def _upload_zip(session, zip_path: str, stage: str) -> None:
-    session.sql(
-        f"PUT 'file://{zip_path}' @{stage}/{_ZIP_NAME} OVERWRITE = TRUE AUTO_COMPRESS = FALSE"
-    ).collect()
-    print(f'[deploy] Uploaded {_ZIP_NAME} → @{stage}')
+    file_uri = Path(zip_path).resolve().as_uri()
+    session.sql(f"PUT '{file_uri}' @{stage} OVERWRITE = TRUE AUTO_COMPRESS = FALSE").collect()
+    print(f"[deploy] Uploaded {_ZIP_NAME} → @{stage}")
 
 
 def _register_sp(session, stage: str, warehouse: str) -> None:
-    db     = os.environ['SNOWFLAKE_DATABASE']
-    schema = os.environ['SNOWFLAKE_SCHEMA']
-    sp_fqn = f'{db}.{schema}.RUN_ALERTS_PIPELINE'
+    db = os.environ["SNOWFLAKE_DATABASE"]
+    schema = os.environ["SNOWFLAKE_SCHEMA"]
+    sp_fqn = f"{db}.{schema}.RUN_ALERTS_PIPELINE"
 
     ddl = f"""
 CREATE OR REPLACE PROCEDURE {sp_fqn}(
     CLIENT        STRING,
     ANALYSIS_DATE STRING,
-    OVERWRITE     BOOLEAN
+    OVERWRITE     BOOLEAN,
+    USE_CORTEX    BOOLEAN
 )
 RETURNS STRING
 LANGUAGE PYTHON
 RUNTIME_VERSION = '3.11'
-PACKAGES = ('snowflake-snowpark-python', 'snowflake-ml-python')
+PACKAGES = ('snowflake-snowpark-python', 'snowflake-ml-python', 'pyyaml', 'pydantic')
 IMPORTS   = ('@{stage}/{_ZIP_NAME}')
 HANDLER   = 'store_insight.pipeline.deploy.handler.run'
+COMMENT = 'Runs the full Alerts Pipeline (detect → facts → investigate → score → write).'
 EXECUTE AS CALLER
-COMMENT   = 'Runs the full Alerts Pipeline (detect → facts → investigate → score → write).'
 """
     session.sql(ddl).collect()
-    print(f'[deploy] Stored Procedure registered: {sp_fqn}')
+    print(f"[deploy] Stored Procedure registered: {sp_fqn}")
 
 
-def _register_task(session, stage: str, warehouse: str, cron: str, tz: str,
-                   client: str = None) -> None:
-    db     = os.environ['SNOWFLAKE_DATABASE']
-    schema = os.environ['SNOWFLAKE_SCHEMA']
-    task_fqn = f'{db}.{schema}.RUN_ALERTS_PIPELINE_TASK'
-    sp_fqn   = f'{db}.{schema}.RUN_ALERTS_PIPELINE'
+def _register_task(
+    session, stage: str, warehouse: str, cron: str, tz: str, client: str = None
+) -> None:
+    db = os.environ["SNOWFLAKE_DATABASE"]
+    schema = os.environ["SNOWFLAKE_SCHEMA"]
+    task_fqn = f"{db}.{schema}.RUN_ALERTS_PIPELINE_TASK"
+    sp_fqn = f"{db}.{schema}.RUN_ALERTS_PIPELINE"
 
-    client_arg = f"'{client}'" if client else 'NULL'
+    client_arg = f"'{client}'" if client else "NULL"
+    comment_client = client or "default"
     ddl = f"""
 CREATE OR REPLACE TASK {task_fqn}
   WAREHOUSE = {warehouse}
   SCHEDULE  = 'USING CRON {cron} {tz}'
-  COMMENT   = 'Daily Alerts Pipeline run. Calls {sp_fqn}({client_arg}, NULL, FALSE).'
+  USER_TASK_TIMEOUT_MS = 7200000
+  COMMENT   = 'Daily rule-based Alerts Pipeline run (client: {comment_client}).'
 AS
-  CALL {sp_fqn}({client_arg}, NULL, FALSE)
+  CALL {sp_fqn}({client_arg}, NULL, FALSE, FALSE)
 """
     session.sql(ddl).collect()
 
     # Tasks are created in suspended state by default — resume it.
-    session.sql(f'ALTER TASK {task_fqn} RESUME').collect()
-    print(f'[deploy] Task registered and resumed: {task_fqn}')
-    print(f'         Schedule: CRON {cron} {tz}')
-    print(f'         Client:   {client or "default"}')
+    session.sql(f"ALTER TASK {task_fqn} RESUME").collect()
+    print(f"[deploy] Task registered and resumed: {task_fqn}")
+    print(f"         Schedule: CRON {cron} {tz}")
+    print(f"         Client:   {client or 'default'}")
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
-    parser = argparse.ArgumentParser(description='Deploy Alerts Pipeline to Snowflake')
-    parser.add_argument('--client',    default=None,
-                        help='Client config name (subfolder under config/clients/). '
-                             'Omit for base defaults.')
-    parser.add_argument('--cron',      default=None,
-                        help='Cron expression (overrides config; default from config or 0 6 * * *)')
-    parser.add_argument('--tz',        default=None,
-                        help='Timezone for cron schedule (overrides config; default from config or Europe/London)')
-    parser.add_argument('--warehouse', default=None,
-                        help='Warehouse for the Task (overrides config; default from config or SNOWFLAKE_WAREHOUSE)')
-    parser.add_argument('--stage',     default=None,
-                        help='Fully-qualified stage name (default: <DB>.<SCHEMA>.ALERTS_PIPELINE_STAGE)')
-    parser.add_argument('--task-off',  action='store_true',
-                        help='Register SP only — do not create/replace the Task')
+    parser = argparse.ArgumentParser(description="Deploy Alerts Pipeline to Snowflake")
+    parser.add_argument(
+        "--client",
+        default=None,
+        help="Client config name (subfolder under config/clients/). Omit for base defaults.",
+    )
+    parser.add_argument(
+        "--cron",
+        default=None,
+        help="Cron expression (overrides config; default from config or 0 6 * * *)",
+    )
+    parser.add_argument(
+        "--tz",
+        default=None,
+        help="Timezone for cron schedule (overrides config; default from config or Europe/London)",
+    )
+    parser.add_argument(
+        "--warehouse",
+        default=None,
+        help="Warehouse for the Task (overrides config; default from config or SNOWFLAKE_WAREHOUSE)",
+    )
+    parser.add_argument(
+        "--stage",
+        default=None,
+        help="Fully-qualified stage name (default: <DB>.<SCHEMA>.ALERTS_PIPELINE_STAGE)",
+    )
+    parser.add_argument(
+        "--task-off", action="store_true", help="Register SP only — do not create/replace the Task"
+    )
     args = parser.parse_args()
+    _load_env()
 
     # ── Load config ─────────────────────────────────────────────────────
     from store_insight.pipeline.config.loader import load_config
+
     cfg = load_config(args.client)
-    print(f'[deploy] Config loaded: client={cfg["client_name"]}')
+    print(f"[deploy] Config loaded: client={cfg.client_name}")
 
-    conn      = cfg.get('connection', {})
-    schedule  = cfg.get('schedule', {})
-    warehouse = args.warehouse or conn.get('warehouse') or os.environ['SNOWFLAKE_WAREHOUSE']
-    db        = conn.get('database')  or os.environ['SNOWFLAKE_DATABASE']
-    schema    = conn.get('schema')    or os.environ['SNOWFLAKE_SCHEMA']
-    cron      = args.cron or schedule.get('cron', '0 6 * * *')
-    tz        = args.tz   or schedule.get('timezone', 'Europe/London')
-    stage     = args.stage or f'{db}.{schema}.ALERTS_PIPELINE_STAGE'
+    conn = cfg.connection
+    schedule = cfg.schedule
+    warehouse = args.warehouse or conn.warehouse or os.environ["SNOWFLAKE_WAREHOUSE"]
+    db = conn.database or os.environ["SNOWFLAKE_DATABASE"]
+    schema = conn.schema_name or os.environ["SNOWFLAKE_SCHEMA"]
+    cron = args.cron or schedule.cron or "0 6 * * *"
+    tz = args.tz or schedule.timezone or "Europe/London"
+    stage = args.stage or f"{db}.{schema}.ALERTS_PIPELINE_STAGE"
 
-    print('[deploy] Connecting to Snowflake...')
+    print("[deploy] Connecting to Snowflake...")
     session = _create_session()
-    print('[deploy] Connected.')
+    print("[deploy] Connected.")
 
-    with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp:
-        zip_path = tmp.name
-
-    try:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        zip_path = str(Path(tmp_dir) / _ZIP_NAME)
         _zip_package(zip_path)
         _ensure_stage(session, stage)
         _upload_zip(session, zip_path, stage)
         _register_sp(session, stage, warehouse)
 
         if args.task_off:
-            print('[deploy] --task-off set: skipping Task registration.')
+            print("[deploy] --task-off set: skipping Task registration.")
         else:
             _register_task(session, stage, warehouse, cron, tz, client=args.client)
 
-        print('[deploy] Done.')
-
-    finally:
-        os.unlink(zip_path)
+        print("[deploy] Done.")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

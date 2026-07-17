@@ -8,8 +8,11 @@ import os
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.serialization import (
-    Encoding, NoEncryption, PrivateFormat,
-    load_der_private_key, load_pem_private_key,
+    Encoding,
+    NoEncryption,
+    PrivateFormat,
+    load_der_private_key,
+    load_pem_private_key,
 )
 from dotenv import load_dotenv
 from snowflake.snowpark import Session
@@ -106,10 +109,10 @@ def _create_session() -> Session:
     params = {
         "account":   _require("SNOWFLAKE_ACCOUNT"),
         "user":      _require("SNOWFLAKE_USER"),
-        "role":      os.getenv("SNOWFLAKE_ROLE",      "ACL_SNOWFLAKE_RI_EOE_PRD_DP_USER"),
-        "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE", "SNOWFLAKE_LEARNING_WH"),
-        "database":  os.getenv("SNOWFLAKE_DATABASE",  "SNOWFLAKE_LEARNING_DB"),
-        "schema":    os.getenv("SNOWFLAKE_SCHEMA",    "STORE_INSIGHT"),
+        "role":      os.getenv("SNOWFLAKE_ROLE",      "STORE_INSIGHT_ROLE"),
+        "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE", "STORE_INSIGHT_WH"),
+        "database":  os.getenv("SNOWFLAKE_DATABASE",  "STORE_INSIGHT_DB"),
+        "schema":    os.getenv("SNOWFLAKE_SCHEMA",    "PUBLIC"),
     }
 
     private_key_bytes = _load_private_key_bytes()
@@ -126,5 +129,5 @@ def _create_session() -> Session:
 def _require(key: str) -> str:
     value = os.getenv(key)
     if not value:
-        raise EnvironmentError(f"Required environment variable '{key}' is not set.")
+        raise OSError(f"Required environment variable '{key}' is not set.")
     return value
