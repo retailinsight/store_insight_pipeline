@@ -1,8 +1,8 @@
 # Store Insight — TODO
 
-Last updated: 2026-07-17 14:50
+Last updated: 2026-07-20 17:20
 
-## Done today
+## Done 2026-07-17
 - [x] **Daily deployment LIVE** — Stored Procedure and scheduled Task
       registered in Snowflake. First scheduled run succeeded 2026-07-17
       14:47 BST, writing 1,165 rule-based cards to
@@ -16,23 +16,27 @@ Last updated: 2026-07-17 14:50
 - [x] **EXECUTE TASK privilege** — Dimitar granted it to `STORE_INSIGHT_ROLE`;
       task resumed and runs successfully.
 
+## Done 2026-07-20
+- [x] **Threshold backtesting CLI** — added `pipeline/tools/backtest_thresholds.py`
+      wrapping `pipeline_ui/backend/app/runner.py` `run_experiment`.
+- [x] **Store filtering** — `--store-ids` and `--store-ids-file` options avoid running
+      the full pipeline for every experiment.
+- [x] **Baseline vs proposed comparison** — CLI loads a `--proposed-config` YAML
+      with partial `detector_config.thresholds` overrides and writes a JSON report.
+
 ## Next
-- [x] **Minor output check** — RESOLVED: word-boundary regex found 0 genuine
-      None/nan leaks (the 19 were substring false positives); stores 471/475
-      cards all healthy despite the VPN/IP retry errors. See RISK_VALIDATION.md.
-- [x] **Deployment behaviour confirmed by Dan** — generate/send actions daily;
-      scheduled Task at 06:00 Europe/London; rule-based narratives by default;
-      repeated-action logic will be added separately later.
-- [x] **Daily deployment code updated locally** — rolling window ends today;
-      Task passes `USE_CORTEX=FALSE`; manual SP calls can pass `TRUE`; actions
-      API now reads `STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE` by default.
-- [x] **Deploy and validate** — SP and Task registered; manual and first
-      scheduled runs succeeded. No blockers.
+- [x] **Minor output check** — RESOLVED.
+- [x] **Deployment behaviour confirmed by Dan** — generate/send actions daily.
+- [x] **Daily deployment code updated locally** — rolling window ends today.
+- [x] **Deploy and validate** — SP and Task registered; runs succeeded.
+- [x] **Threshold backtesting CLI** — initial version added with store filtering.
+- [ ] **Run lineage columns** — highest-value remaining item: add `RUN_ID`,
+      `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`, `SOURCE_DATA_WATERMARK`.
+      Dan offered to finish this; coordinate ownership.
 - [ ] **Monitor daily runs** — confirm 06:00 Europe/London run produces cards
       and check `TASK_HISTORY` for any failures.
-- [ ] **Open PR** — branch pushed:
-      https://github.com/dantretailinsight/store_insight/pull/new/feat/store-insight-ukcoop-env
-      (only when you explicitly ask to push).
+- [ ] **Open PR** — branch already pushed; create PR when Dan is happy with the
+      current state.
 - [ ] **Flag mistral-large deprecation to Dan** — deprecated by Snowflake
       2026-07-08; other pipelines using it will be failing too.
 
@@ -42,8 +46,9 @@ Last updated: 2026-07-17 14:50
       ~Half day. Highest-value remaining item.
 - [ ] **P2 — Card validation for rule-based path** (partial): extend the Cortex
       quality gate to validate rule-based cards before write. Small.
-- [ ] **P1 — Threshold backtesting tool**: compare current vs proposed YAML
-      thresholds (alert volume, store mix, top-10 impact). New work.
+- [x] **P1 — Threshold backtesting tool** *(initial CLI done)*: compare
+      current vs proposed YAML thresholds with store filtering. See
+      `pipeline/tools/backtest_thresholds.py`.
 - [ ] **P2 — Lifecycle/KPI post-action loop**: track seen/worked/closed and
       measure KPI movement after action. Needs UI/analytics integration.
 

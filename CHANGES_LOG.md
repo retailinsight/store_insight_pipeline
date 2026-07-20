@@ -1,5 +1,25 @@
 # Store Insight Pipeline — Changes Log
 
+## 2026-07-20
+
+### Threshold backtesting CLI (initial version)
+- Added `pipeline/tools/backtest_thresholds.py` — a CLI wrapper around the
+  existing `run_experiment` logic in `pipeline_ui/backend/app/runner.py`.
+- Supports `--store-ids` (comma-separated) and `--store-ids-file` so only a
+  subset of stores is run, avoiding the full pipeline cost for every experiment.
+- Supports `--signal-types` to limit the detector set.
+- Compares baseline config against a `--proposed-config` YAML with partial
+  `detector_config.thresholds` overrides and writes a JSON report with counts,
+  alert-type mix, store coverage, and deltas.
+- Refactored `run_experiment` to accept an optional `session` parameter so the
+  CLI can inject a production Snowpark session using the same env vars as
+  `deploy.py`.
+
+### Next engineering items
+- Run lineage columns (`RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`,
+  `SOURCE_DATA_WATERMARK`) — highest-value remaining gap.
+- Lifecycle / post-action measurement loop.
+
 ## 2026-07-17
 
 ### Daily rule-based deployment live in Snowflake

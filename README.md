@@ -67,6 +67,14 @@ python pipeline/deploy/deploy.py --client eastofengland
 
 # 4. Validate the latest scheduled run (VPN required)
 python scripts/validate_daily_run.py
+
+# 5. Backtest a threshold change on a subset of stores (VPN required)
+python pipeline/tools/backtest_thresholds.py \
+  --client eastofengland \
+  --analysis-date 2026-07-17 \
+  --store-ids 508,492,641 \
+  --proposed-config proposed_thresholds.yaml \
+  --output report.json
 ```
 
 Output is written to `STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE`.

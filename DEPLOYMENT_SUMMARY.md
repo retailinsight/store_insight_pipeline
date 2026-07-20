@@ -52,6 +52,7 @@ The Store Insight pipeline converts raw Co-op retail data into daily action card
 | Cortex model | Replaced deprecated `mistral-large` with `mistral-large2`. |
 | Rule-based narrative quality | Filter out `Unknown`, `None`, `NaN`, empty department labels from `MARKDOWN_OVERRIDE`, `WASTE`, and `MARKDOWN_SELLTHROUGH` narratives. |
 | Regression testing | Added `--deterministic` golden-run comparison mode. |
+| Threshold backtesting CLI | Added `pipeline/tools/backtest_thresholds.py` with store filtering (`--store-ids`, `--store-ids-file`) and baseline vs proposed comparison. |
 | CI/CD | `ruff` and `pytest` gates; offline capability validation; optional Snowflake gates. |
 
 ---
@@ -63,8 +64,8 @@ The engineering review identified **15 recommendations**, prioritised as **P0** 
 | Status | Count | Items |
 |---|---|---|
 | ✅ Fully addressed | 11 | Stable IDs, partial lineage, source-data checks, deterministic regression, signal merging, Cortex budget/quality/fallback, shared-session safety, package setup, CI gates, debug/replay tables, rule-based validation. |
-| ⚠️ Partial | 2 | Run lineage (only `ANALYSIS_DATE`, `ENGINE_USED` present; missing `RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`, `SOURCE_DATA_WATERMARK`); card validation for rule-based path. |
-| ❌ Not started | 2 | Threshold backtesting tool; lifecycle/post-action measurement loop. |
+| ⚠️ Partial | 3 | Run lineage (only `ANALYSIS_DATE`, `ENGINE_USED` present; missing full columns); card validation for rule-based path; threshold backtesting CLI (initial version added, may need refinement). |
+| ❌ Not started | 1 | Lifecycle/post-action measurement loop. |
 
 ### P0 recommendations addressed
 
@@ -97,8 +98,9 @@ The engineering review identified **15 recommendations**, prioritised as **P0** 
 2. **P2 — Card validation for rule-based path**
    - Extend Cortex quality gate to validate rule-based cards before write.
 
-3. **P1 — Threshold backtesting tool**
-   - Compare current vs proposed YAML thresholds for alert count, store churn, type mix, top-10 changes, and noise.
+3. **P1 — Threshold backtesting tool** *(CLI added)*
+   - Added `pipeline/tools/backtest_thresholds.py` with store filtering and baseline vs proposed comparison.
+   - Compares alert count, store coverage, alert-type mix, and top-store changes between threshold variants.
 
 4. **P2 — Lifecycle / post-action measurement**
    - Track generated → seen → assigned → worked → closed/resolved/ignored and measure KPI movement.
