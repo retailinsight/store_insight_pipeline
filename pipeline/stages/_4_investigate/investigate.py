@@ -91,6 +91,11 @@ def investigate(
         if isinstance(type_config, dict)
         else getattr(type_config, "engine", "rule_based")
     )
+    skill_file = (
+        type_config.get("skill_file", "")
+        if isinstance(type_config, dict)
+        else getattr(type_config, "skill_file", "")
+    )
     engine = _ENGINES.get(engine_name, rule_based)
 
     # Read per-run Cortex settings from config.
@@ -129,11 +134,13 @@ def investigate(
         )
         if isinstance(result, dict):
             result["_engine"] = "cortex"
+            result["_skill_file"] = skill_file
         return result
 
     result = rule_based.generate(signal)
     if isinstance(result, dict):
         result["_engine"] = "rule_based"
+        result["_skill_file"] = skill_file
         valid, reason = quality.validate_quality(
             result,
             max_action_length=quality_max_action_length,

@@ -13,13 +13,13 @@ Sources: `DEPLOYMENT_PLAN.md`, `CHANGES_LOG.md`, and `Store_Insight_pipeline_rev
 - **Scheduled Task**: `STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE_TASK`
 - **Schedule**: Daily at 06:00 Europe/London
 - **Warehouse**: `STORE_INSIGHT_WH` (auto-suspend between runs)
-- **Output table**: `STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE` (25 columns incl. run lineage + quality reason)
+- **Output table**: `STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE` (27 columns incl. run lineage, quality reason, skill file, fallback flag)
 - **First scheduled run**: Succeeded 2026-07-17 14:47 BST
   - 1,165 rule-based cards
   - All `ALERT_ID`s distinct
   - 0 empty issue / explanation / action rows
   - 0 Cortex usage (scheduled production uses rule-based narratives)
-- **Schema migration**: 2026-07-21 — lineage columns (`RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`, `SOURCE_DATA_WATERMARK`) and `QUALITY_REASON` added to the live table.
+- **Schema migration**: 2026-07-21 — lineage columns (`RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`, `SOURCE_DATA_WATERMARK`), `QUALITY_REASON`, `SKILL_FILE_USED`, and `FALLBACK_USED` added to the live table.
 - **Next scheduled run**: Daily at 06:00 Europe/London
 
 ---
@@ -54,7 +54,7 @@ The Store Insight pipeline converts raw Co-op retail data into daily action card
 | Rule-based narrative quality | Filter out `Unknown`, `None`, `NaN`, empty department labels from `MARKDOWN_OVERRIDE`, `WASTE`, and `MARKDOWN_SELLTHROUGH` narratives. |
 | Regression testing | Added `--deterministic` golden-run comparison mode. |
 | Threshold backtesting CLI | Added `pipeline/tools/backtest_thresholds.py` with store filtering (`--store-ids`, `--store-ids-file`) and baseline vs proposed comparison. |
-| Run lineage | Added `RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`, `SOURCE_DATA_WATERMARK` to every card and the output schema. |
+| Run lineage | Added `RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`, `SOURCE_DATA_WATERMARK`, `SKILL_FILE_USED`, and `FALLBACK_USED` to every card and the output schema. |
 | Card validation | Shared `quality.py` validates all narratives; rule-based cards are flagged with `QUALITY_REASON` in the output table. |
 | Lifecycle foundation | Added `pipeline/lifecycle` module with event table schema, `record_event()` helper, funnel/per-store KPI SQL builders, and integration README. |
 | CI/CD | `ruff` and `pytest` gates; offline capability validation; optional Snowflake gates. |
@@ -194,7 +194,7 @@ python scripts/validate_daily_run.py
 - [x] Deterministic golden-run tests can catch accidental changes.
 - [x] Signal merge rules preserve facts and handle OSA lost-sales intentionally.
 - [x] Cortex execution has budget, retry, quality, fallback, and concurrency controls.
-- [x] Every output row explains exact data watermark, configuration, prompt, engine, and pipeline version.
+- [x] Every output row explains exact data watermark, configuration, prompt, engine, pipeline version, skill file used, and fallback flag.
 - [x] Final cards are validated before write (Cortex + rule-based; `QUALITY_REASON` persisted).
 - [x] Score components are fully explainable (score audit helpers exist).
 - [x] User-action and KPI follow-up backend is in place (`pipeline/lifecycle`, FastAPI endpoints); front-end wiring remains.

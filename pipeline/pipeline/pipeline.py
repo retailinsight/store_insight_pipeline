@@ -305,6 +305,8 @@ def _build_card(
         "prompt_hash": _hash_prompt(narrative.get("_prompt")),
         "source_data_watermark": lineage.get("source_data_watermark"),
         "quality_reason": narrative.get("_quality_reason", ""),
+        "skill_file_used": narrative.get("_skill_file", ""),
+        "fallback_used": bool(narrative.get("_fallback_reason")),
     }
 
 
@@ -346,6 +348,8 @@ def _card_schema():
             StructField("PROMPT_HASH", StringType()),
             StructField("SOURCE_DATA_WATERMARK", StringType()),
             StructField("QUALITY_REASON", StringType()),
+            StructField("SKILL_FILE_USED", StringType()),
+            StructField("FALLBACK_USED", StringType()),
         ]
     )
 
@@ -513,6 +517,8 @@ def _card_to_row(card: dict, run_date: str) -> tuple:
         card.get("prompt_hash"),
         card.get("source_data_watermark"),
         card.get("quality_reason", ""),
+        card.get("skill_file_used", ""),
+        "TRUE" if card.get("fallback_used") else "FALSE",
     )
 
 

@@ -73,6 +73,29 @@ def test_build_card_includes_lineage_fields():
     assert card["prompt_hash"] == _hash_prompt("p")
     assert card["source_data_watermark"] == "w1"
     assert card["quality_reason"] == ""
+    assert card["skill_file_used"] == ""
+    assert card["fallback_used"] is False
+
+
+def test_build_card_with_skill_and_fallback():
+    sig = {
+        "store_id": 1,
+        "trigger_types": ["WOW"],
+        "department": "Bakery",
+    }
+    narrative = {
+        "issue": "i",
+        "explanation": "e",
+        "cost_if_not_fixed": "c",
+        "recommended_action": "r",
+        "_engine": "cortex",
+        "_skill_file": "skills/waste_investigation_skill.md",
+        "_fallback_reason": "budget_exceeded",
+    }
+    card = _build_card(sig, narrative, 1.0, cfg=DummyConfig(), analysis_date="2026-07-17")
+    assert card["engine_used"] == "cortex"
+    assert card["skill_file_used"] == "skills/waste_investigation_skill.md"
+    assert card["fallback_used"] is True
 
 
 def test_card_to_row_matches_schema():

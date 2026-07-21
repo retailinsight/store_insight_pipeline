@@ -3,7 +3,7 @@
 **Objective:** Deploy the Store Insight pipeline to Snowflake so it generates rule-based actions daily at 06:00 Europe/London.
 
 **Target branch:** `feat/store-insight-ukcoop-env`  
-**Status:** ✅ Daily deployment LIVE (2026-07-17). SP and Task registered; first scheduled run succeeded (1,165 rule-based cards).
+**Status:** ✅ Daily deployment LIVE (2026-07-17). SP and Task registered; first scheduled run succeeded (1,165 rule-based cards). Engineering-gap close-out completed 2026-07-21: full run lineage columns migrated (`RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`, `SOURCE_DATA_WATERMARK`, `SKILL_FILE_USED`, `FALLBACK_USED`), `QUALITY_REASON`, card validation extended, threshold backtesting CLI, lifecycle backend, and all docs updated/pushed.
 
 ---
 
@@ -15,7 +15,7 @@
 | Manual run produces good output | ✅ Done 2026-07-15 | 1,226 cards written, all IDs distinct, 100% cortex, 0 fallbacks |
 | Stored Procedure + Task registered in Snowflake | ✅ Done 2026-07-17 | `RUN_ALERTS_PIPELINE` + `RUN_ALERTS_PIPELINE_TASK` live |
 | First scheduled run executed successfully | ✅ Done 2026-07-17 14:47 BST | 1,165 rule-based cards, state=SUCCEEDED |
-| Daily runs operate without manual intervention | ✅ Live | Next scheduled: 2026-07-18 06:00 Europe/London |
+| Daily runs operate without manual intervention | ✅ Live | Daily at 06:00 Europe/London; continue monitoring |
 
 ---
 
@@ -44,11 +44,11 @@ GROUP BY engine_used;
 ```
 
 ### 3. Confirm the SP entrypoint imports cleanly
-- [ ] Activate the project virtualenv and install the package in editable mode (if not already done):  
+- [x] Activate the project virtualenv and install the package in editable mode (if not already done):  
   `.venv-store-insight\Scripts\python -m pip install -e .`
-- [ ] Run locally with the venv Python:  
+- [x] Run locally with the venv Python:  
   `.venv-store-insight\Scripts\python -c "from store_insight.pipeline.deploy.handler import run"`
-- [ ] Fix any packaging/import errors if it fails.
+- [x] No packaging/import errors (`handler import OK`).
 
 Note: the handler defaults `analysis_date` to **today**, producing a rolling seven-day window for each daily run. The Task uses rule-based narratives; manual calls can opt into Cortex.
 
@@ -85,9 +85,9 @@ This will:
 - [x] Output table populated with 1,165 cards for `run_date=2026-07-17`, `analysis_date=2026-07-17`.
 
 ### 8. Handover
-- [ ] Document the production schedule and task names in this repo.
-- [ ] Add monitoring to the TODO list if the task fails or runs slow.
-- [ ] Confirm Dan can suspend/resume the task as needed:  
+- [x] Document the production schedule and task names in this repo (`README.md`, `DEPLOYMENT_SUMMARY.md`, `DEPLOYMENT_PLAN.md`).
+- [x] Add monitoring to the TODO list and docs (`TODO.md`, `DEPLOYMENT_SUMMARY.md` Next steps, `README.md` Daily Task monitoring).
+- [x] Confirm Dan can suspend/resume the task as needed:  
   `ALTER TASK STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE_TASK SUSPEND;`  
   `ALTER TASK STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE_TASK RESUME;`
 
@@ -139,6 +139,7 @@ After the first scheduled run:
 - [x] `TASK_HISTORY` shows `SUCCEEDED` with no `ERROR_MESSAGE`.
 - [x] SP returned `[handler] Done — 1165 alert cards written for 2026-07-17`.
 - [x] `api2` actions endpoint defaults to `STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE`; ready for UI consumption.
+- [x] Lineage/quality columns present and populated: `RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`, `SOURCE_DATA_WATERMARK`, `QUALITY_REASON`, `SKILL_FILE_USED`, `FALLBACK_USED`.
 
 ---
 

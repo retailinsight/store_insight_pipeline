@@ -135,7 +135,8 @@ python scripts/migrate_alerts_table_schema.py --client eastofengland
 ```
 
 This adds `RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`,
-`SOURCE_DATA_WATERMARK`, and `QUALITY_REASON` if they do not already exist.
+`SOURCE_DATA_WATERMARK`, `QUALITY_REASON`, `SKILL_FILE_USED`, and
+`FALLBACK_USED` if they do not already exist.
 
 ## Action lifecycle
 

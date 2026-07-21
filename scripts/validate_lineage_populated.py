@@ -21,6 +21,8 @@ cols = [
     "PROMPT_HASH",
     "SOURCE_DATA_WATERMARK",
     "QUALITY_REASON",
+    "SKILL_FILE_USED",
+    "FALLBACK_USED",
 ]
 
 print(f"Lineage/quality population check for {TABLE}")
@@ -40,7 +42,8 @@ print("\nSample rows:")
 cur.execute(
     f"""
     SELECT RUN_ID, PIPELINE_VERSION, CONFIG_HASH, PROMPT_HASH,
-           SOURCE_DATA_WATERMARK, QUALITY_REASON, ENGINE_USED, ALERT_ID
+           SOURCE_DATA_WATERMARK, QUALITY_REASON, SKILL_FILE_USED,
+           FALLBACK_USED, ENGINE_USED, ALERT_ID
     FROM {TABLE}
     LIMIT 3
 """

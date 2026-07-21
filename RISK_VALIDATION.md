@@ -56,10 +56,10 @@ scheduled runs must not use Cortex. The daily Task explicitly passes
 
 **Status: MITIGATED.**
 
-Migration completed 2026-07-21 10:05. `DESCRIBE TABLE` now shows 25 columns;
+Migration completed 2026-07-21. `DESCRIBE TABLE` now shows 27 columns;
 all lineage columns are present. A test run for store 634 on
-`2026-07-21` populated `RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, and
-`SOURCE_DATA_WATERMARK` on every card.
+`2026-07-21` populated `RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`,
+`SOURCE_DATA_WATERMARK`, `SKILL_FILE_USED`, and `FALLBACK_USED` on every card.
 
 | Lineage column | Present? (live table) | Populated on test run |
 |---|---|---|
@@ -72,6 +72,8 @@ all lineage columns are present. A test run for store 634 on
 | `PROMPT_HASH` | ✅ | ❌ 0/10 (rule-based run; expected) |
 | `SOURCE_DATA_WATERMARK` | ✅ | ✅ 10/10 |
 | `QUALITY_REASON` | ✅ | ✅ 1/10 flagged |
+| `SKILL_FILE_USED` | ✅ | ✅ 10/10 |
+| `FALLBACK_USED` | ✅ | ✅ 10/10 (all FALSE) |
 
 - `PROMPT_HASH` is only populated for Cortex-engineered cards (rule-based runs
   have no prompt). This is expected.

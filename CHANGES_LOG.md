@@ -5,17 +5,17 @@
 ### Summary
 - Completed, migrated, validated, and pushed all remaining engineering-gap work:
   - Full run lineage columns (`RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`,
-    `PROMPT_HASH`, `SOURCE_DATA_WATERMARK`) on every card and in the live
-    `ALERTS_PIPELINE` table.
+    `PROMPT_HASH`, `SOURCE_DATA_WATERMARK`, `SKILL_FILE_USED`, `FALLBACK_USED`)
+    on every card and in the live `ALERTS_PIPELINE` table.
   - Card validation extended to the rule-based path via shared `quality.py`;
     `QUALITY_REASON` column persisted.
   - Threshold backtesting CLI with store filtering and baseline vs proposed
     comparison.
   - Lifecycle/post-action measurement backend: event table, `record_event()`
     helper, KPI SQL builders, FastAPI endpoints, and live table creation.
-- Live Snowflake validation 2026-07-21 confirmed 25 columns in
+- Live Snowflake validation 2026-07-21 confirmed 27 columns in
   `ALERTS_PIPELINE` and lineage population on a test run.
-- Unit tests: **444 passed**.
+- Unit tests: **445 passed**.
 - Branch pushed: `feat/store-insight-ukcoop-env`.
 
 ### Remaining
@@ -33,6 +33,15 @@
 - `handler.py` and `run_batch.py` pass `run_id` and `pipeline_version` through.
 - Added `scripts/migrate_alerts_table_schema.py` to idempotently add the new
   columns to the live `ALERTS_PIPELINE` table.
+
+### Skill file and fallback lineage columns
+- Added `SKILL_FILE_USED` and `FALLBACK_USED` to every card and the Snowflake
+  output schema.
+- `investigate.py` records the per-signal-type skill file path and propagates it
+  to the final card.
+- `FALLBACK_USED` is `TRUE` when a Cortex call ultimately falls back to the
+  rule-based generator; `FALSE` otherwise.
+- Migration script updated; live table now has 27 columns.
 
 ### Card validation for rule-based path
 - Extracted quality validation into `pipeline/stages/_4_investigate/quality.py`
