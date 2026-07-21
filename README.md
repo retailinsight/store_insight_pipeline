@@ -79,6 +79,30 @@ python pipeline/tools/backtest_thresholds.py \
 
 Output is written to `STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE`.
 
+## Schema migration
+
+If the output table was created before the lineage/quality columns were added,
+run the migration script once (VPN required):
+
+```powershell
+python scripts/migrate_alerts_table_schema.py --client eastofengland
+```
+
+This adds `RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`,
+`SOURCE_DATA_WATERMARK`, and `QUALITY_REASON` if they do not already exist.
+
+## Action lifecycle (foundation)
+
+`pipeline/lifecycle/` provides the building blocks for tracking generated → seen →
+assigned → worked → closed/ignored events:
+
+- `__init__.py` — `ACTION_LIFECYCLE_EVENTS` table schema and `record_event()` helper.
+- `measurement.py` — SQL builders for funnel summary per run and per-store action
+  rates, plus `create_kpi_summary_view()`.
+
+UI/API integration is still needed to emit the actual events from the user-facing
+action workflow.
+
 ## Snowflake environment
 
 - Account `UUTQCJV-UKCOOP`, service account `SVC_STOREINSIGHT` (PAT), role

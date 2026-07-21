@@ -2,7 +2,26 @@
 
 ## 2026-07-20
 
-### Threshold backtesting CLI (initial version)
+### Run lineage columns
+- Added `RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`, and
+  `SOURCE_DATA_WATERMARK` to every card and the Snowflake output schema.
+- `run_pipeline` and `run_pipeline_from_signals` now generate a unique
+  `RUN_ID` per invocation; `PIPELINE_VERSION` is read from the `PIPELINE_VERSION`
+  env var, a `pipeline/VERSION` file, or the git commit hash.
+- `handler.py` and `run_batch.py` pass `run_id` and `pipeline_version` through.
+- Added `scripts/migrate_alerts_table_schema.py` to idempotently add the new
+  columns to the live `ALERTS_PIPELINE` table.
+
+### Card validation for rule-based path
+- Extracted quality validation into `pipeline/stages/_4_investigate/quality.py`
+  and refactored `cortex.py` to use it.
+- `investigate.py` now validates every rule-based narrative and flags failures
+  with `_quality_reason`.
+- Added `QUALITY_REASON` column to the output schema; empty for valid cards,
+  populated for cards with missing fields, None/nan leakage, excessive length,
+  or generic recommendations.
+
+### Threshold backtesting CLI
 - Added `pipeline/tools/backtest_thresholds.py` — a CLI wrapper around the
   existing `run_experiment` logic in `pipeline_ui/backend/app/runner.py`.
 - Supports `--store-ids` (comma-separated) and `--store-ids-file` so only a
@@ -15,10 +34,14 @@
   CLI can inject a production Snowpark session using the same env vars as
   `deploy.py`.
 
-### Next engineering items
-- Run lineage columns (`RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`,
-  `SOURCE_DATA_WATERMARK`) — highest-value remaining gap.
-- Lifecycle / post-action measurement loop.
+### Lifecycle / post-action measurement foundation
+- Added `pipeline/lifecycle/__init__.py` with `ACTION_LIFECYCLE_EVENTS` table
+  schema, `ensure_events_table()`, and `record_event()` helpers.
+- Added `pipeline/lifecycle/measurement.py` with SQL builders for funnel summary
+  per run, per-store action rates, and a convenience view.
+- Added `pipeline/lifecycle/README.md` with integration checklist.
+- Still needs UI/API integration to emit `seen`, `assigned`, `worked`, `closed`,
+  and `ignored` events.
 
 ## 2026-07-17
 

@@ -1,6 +1,6 @@
 # Store Insight — TODO
 
-Last updated: 2026-07-20 17:20
+Last updated: 2026-07-20 17:55
 
 ## Done 2026-07-17
 - [x] **Daily deployment LIVE** — Stored Procedure and scheduled Task
@@ -23,16 +23,19 @@ Last updated: 2026-07-20 17:20
       the full pipeline for every experiment.
 - [x] **Baseline vs proposed comparison** — CLI loads a `--proposed-config` YAML
       with partial `detector_config.thresholds` overrides and writes a JSON report.
+- [x] **Run lineage columns** — added `RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`,
+      `PROMPT_HASH`, `SOURCE_DATA_WATERMARK` to every card and the output schema.
+      `handler.py` and `run_batch.py` pass them through; migration script added.
+- [x] **Card validation for rule-based path** — shared `quality.py` validates all
+      narratives; rule-based cards are flagged with `QUALITY_REASON` in the output table.
+- [x] **Lifecycle foundation** — added `pipeline/lifecycle/__init__.py` with event table
+      schema and `record_event()` helper, plus `measurement.py` KPI SQL builders and
+      `README.md` integration checklist.
 
 ## Next
-- [x] **Minor output check** — RESOLVED.
-- [x] **Deployment behaviour confirmed by Dan** — generate/send actions daily.
-- [x] **Daily deployment code updated locally** — rolling window ends today.
-- [x] **Deploy and validate** — SP and Task registered; runs succeeded.
-- [x] **Threshold backtesting CLI** — initial version added with store filtering.
-- [ ] **Run lineage columns** — highest-value remaining item: add `RUN_ID`,
-      `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`, `SOURCE_DATA_WATERMARK`.
-      Dan offered to finish this; coordinate ownership.
+- [x] **Migrate live table schema** — completed 2026-07-21; `ALERTS_PIPELINE` now has 25 columns.
+- [ ] **Lifecycle UI/API integration** — emit `seen`, `assigned`, `worked`, `closed`,
+      and `ignored` events from the UI and build KPI measurement queries.
 - [ ] **Monitor daily runs** — confirm 06:00 Europe/London run produces cards
       and check `TASK_HISTORY` for any failures.
 - [ ] **Open PR** — branch already pushed; create PR when Dan is happy with the
@@ -40,17 +43,18 @@ Last updated: 2026-07-20 17:20
 - [ ] **Flag mistral-large deprecation to Dan** — deprecated by Snowflake
       2026-07-08; other pipelines using it will be failing too.
 
-## Review gaps (from engineering system map — 11/15 done)
-- [ ] **P0 — Run lineage columns** (partial): add `run_id`, `pipeline_version`,
-      `config_hash`, `prompt_hash`, `source_data_watermark` to output schema.
-      ~Half day. Highest-value remaining item.
-- [ ] **P2 — Card validation for rule-based path** (partial): extend the Cortex
-      quality gate to validate rule-based cards before write. Small.
-- [x] **P1 — Threshold backtesting tool** *(initial CLI done)*: compare
-      current vs proposed YAML thresholds with store filtering. See
-      `pipeline/tools/backtest_thresholds.py`.
-- [ ] **P2 — Lifecycle/KPI post-action loop**: track seen/worked/closed and
-      measure KPI movement after action. Needs UI/analytics integration.
+## Review gaps (from engineering system map — 14/15 done, 1 partial)
+- [x] **P0 — Run lineage columns** *(complete)*: `RUN_ID`, `PIPELINE_VERSION`,
+      `CONFIG_HASH`, `PROMPT_HASH`, `SOURCE_DATA_WATERMARK` added to output schema
+      and cards; migration script provided.
+- [x] **P2 — Card validation for rule-based path** *(complete)*: shared `quality.py`
+      validates every narrative; `QUALITY_REASON` column persisted in output table.
+- [x] **P1 — Threshold backtesting tool** *(complete)*: compare current vs proposed
+      YAML thresholds with store filtering. See `pipeline/tools/backtest_thresholds.py`.
+- [ ] **P2 — Lifecycle/KPI post-action loop** *(foundation added, KPI SQL added)*:
+      `pipeline/lifecycle` module with event table schema, `record_event()` helper,
+      funnel summary/per-store action-rate SQL builders, and integration README.
+      Needs UI/analytics integration to emit events and measure KPI movement.
 
 ## Housekeeping / follow-ups
 - [ ] **Learning-env references in other services** — actions in `api2` now use

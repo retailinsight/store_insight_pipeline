@@ -53,6 +53,9 @@ The Store Insight pipeline converts raw Co-op retail data into daily action card
 | Rule-based narrative quality | Filter out `Unknown`, `None`, `NaN`, empty department labels from `MARKDOWN_OVERRIDE`, `WASTE`, and `MARKDOWN_SELLTHROUGH` narratives. |
 | Regression testing | Added `--deterministic` golden-run comparison mode. |
 | Threshold backtesting CLI | Added `pipeline/tools/backtest_thresholds.py` with store filtering (`--store-ids`, `--store-ids-file`) and baseline vs proposed comparison. |
+| Run lineage | Added `RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`, `SOURCE_DATA_WATERMARK` to every card and the output schema. |
+| Card validation | Shared `quality.py` validates all narratives; rule-based cards are flagged with `QUALITY_REASON` in the output table. |
+| Lifecycle foundation | Added `pipeline/lifecycle` module with event table schema, `record_event()` helper, funnel/per-store KPI SQL builders, and integration README. |
 | CI/CD | `ruff` and `pytest` gates; offline capability validation; optional Snowflake gates. |
 
 ---
@@ -63,14 +66,14 @@ The engineering review identified **15 recommendations**, prioritised as **P0** 
 
 | Status | Count | Items |
 |---|---|---|
-| ✅ Fully addressed | 11 | Stable IDs, partial lineage, source-data checks, deterministic regression, signal merging, Cortex budget/quality/fallback, shared-session safety, package setup, CI gates, debug/replay tables, rule-based validation. |
-| ⚠️ Partial | 3 | Run lineage (only `ANALYSIS_DATE`, `ENGINE_USED` present; missing full columns); card validation for rule-based path; threshold backtesting CLI (initial version added, may need refinement). |
-| ❌ Not started | 1 | Lifecycle/post-action measurement loop. |
+| ✅ Fully addressed | 13 | Stable IDs, full run lineage, source-data checks, deterministic regression, signal merging, Cortex budget/quality/fallback, shared-session safety, package setup, CI gates, debug/replay tables, rule-based validation, card validation for rule-based path, threshold backtesting CLI. |
+| ⚠️ Partial | 1 | Lifecycle/post-action measurement loop (foundation + KPI SQL added; needs UI/API integration to emit events). |
+| ❌ Not started | 0 | — |
 
 ### P0 recommendations addressed
 
 1. **Stable `alert_id` / `signal_id`** — deterministic IDs from client, analysis date, signal type, store, department, and business key.
-2. **Run lineage (partial)** — `ANALYSIS_DATE` and `ENGINE_USED` added; full lineage columns still pending.
+2. **Run lineage** — `RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`, and `SOURCE_DATA_WATERMARK` added to every card and the output schema. Migration script provided to alter the live table.
 3. **Source-data completeness checks** — new `data_quality.py` module validates columns, row counts, date ranges, store coverage, hierarchy join rates, non-negative commercial values, and WMD freshness.
 4. **Deterministic regression mode** — `run_batch --deterministic` compares current run against a golden snapshot.
 5. **Signal merging** — per-signal-type merge rules; fixed OSA lost-sales handling.
@@ -85,25 +88,16 @@ The engineering review identified **15 recommendations**, prioritised as **P0** 
 ### P2 recommendations addressed
 
 - **Stage-level debug tables**: helpers to write `SIGNALS_RAW`, `SIGNALS_ENRICHED`, `SCORE_AUDIT`, `INVESTIGATIONS`.
-- **Card-level validation**: quality checks for missing fields, `None`/`nan` leakage, generic recommendations, invalid JSON, and excessive text length.
+- **Card-level validation**: quality checks for missing fields, `None`/`nan` leakage, generic recommendations, invalid JSON, and excessive text length — now shared across Cortex and rule-based engines with `QUALITY_REASON` persisted in the output table.
 - **Explainable score components**: commercial impact, severity, trigger weight, confidence, final sort value, and score reason.
 - **Package/import cleanup**: `setup.py` enables `pip install -e .`; `.venv-store-insight` created; CI updated.
 
 ### Remaining engineering gaps
 
-1. **P0 — Full run lineage columns**
-   - `RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`, `SOURCE_DATA_WATERMARK`
-   - Highest-value remaining item; easier to add before weeks of history accumulate.
-
-2. **P2 — Card validation for rule-based path**
-   - Extend Cortex quality gate to validate rule-based cards before write.
-
-3. **P1 — Threshold backtesting tool** *(CLI added)*
-   - Added `pipeline/tools/backtest_thresholds.py` with store filtering and baseline vs proposed comparison.
-   - Compares alert count, store coverage, alert-type mix, and top-store changes between threshold variants.
-
-4. **P2 — Lifecycle / post-action measurement**
-   - Track generated → seen → assigned → worked → closed/resolved/ignored and measure KPI movement.
+1. **P2 — Lifecycle / post-action measurement** *(foundation + KPI SQL added)*
+   - Added `pipeline/lifecycle/__init__.py` with event table schema and `record_event()` helper.
+   - Added `pipeline/lifecycle/measurement.py` with funnel summary and per-store action-rate SQL builders.
+   - Still needs UI/API integration to emit `seen`, `assigned`, `worked`, `closed`, and `ignored` events.
 
 ---
 

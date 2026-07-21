@@ -40,12 +40,13 @@ from store_insight.pipeline.stages._4_investigate.cortex_budget import (
     CortexBudget,
     estimate_tokens,
 )
+from store_insight.pipeline.stages._4_investigate.quality import validate_quality
 from store_insight.pipeline.stages._4_investigate.rule_based import generate as rule_based_generate
 
-_HERE             = Path(__file__).parent
-_CARD_SKILL_PATH  = _HERE / 'smart_action_card_content_skill.md'
+_HERE = Path(__file__).parent
+_CARD_SKILL_PATH = _HERE / "smart_action_card_content_skill.md"
 _card_skill_cache: str | None = None
-_type_skill_cache: dict       = {}
+_type_skill_cache: dict = {}
 _CORTEX_CALL_LOCK = threading.Lock()  # serialise Snowpark session access
 
 
@@ -53,7 +54,7 @@ def _load_card_skill() -> str:
     """Load the overall card anatomy + tone skill (cached)."""
     global _card_skill_cache
     if _card_skill_cache is None:
-        _card_skill_cache = _CARD_SKILL_PATH.read_text(encoding='utf-8')
+        _card_skill_cache = _CARD_SKILL_PATH.read_text(encoding="utf-8")
     return _card_skill_cache
 
 
@@ -63,22 +64,25 @@ def _load_type_skill(signal_type: str) -> str:
         # Resolve skill_file path from the YAML mapping at runtime to avoid a
         # circular import (investigate.py imports this module).
         import yaml
-        yaml_path = _HERE / 'signal_type_investigators.yaml'
-        config    = (yaml.safe_load(yaml_path.read_text(encoding='utf-8')) or {})
-        rel_path  = config.get(signal_type, {}).get('skill_file', '')
+
+        yaml_path = _HERE / "signal_type_investigators.yaml"
+        config = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+        rel_path = config.get(signal_type, {}).get("skill_file", "")
         if rel_path:
             full_path = _HERE / rel_path
-            _type_skill_cache[signal_type] = full_path.read_text(encoding='utf-8') if full_path.exists() else ''
+            _type_skill_cache[signal_type] = (
+                full_path.read_text(encoding="utf-8") if full_path.exists() else ""
+            )
         else:
-            _type_skill_cache[signal_type] = ''
+            _type_skill_cache[signal_type] = ""
     return _type_skill_cache[signal_type]
 
 
 def _extract_json(text):
     """Strip markdown fences and extract first JSON object from LLM response."""
-    text = re.sub(r'^```(?:json)?\s*', '', text.strip(), flags=re.MULTILINE)
-    text = re.sub(r'\s*```\s*$', '', text.strip(), flags=re.MULTILINE)
-    match = re.search(r'\{.*\}', text, re.DOTALL)
+    text = re.sub(r"^```(?:json)?\s*", "", text.strip(), flags=re.MULTILINE)
+    text = re.sub(r"\s*```\s*$", "", text.strip(), flags=re.MULTILINE)
+    match = re.search(r"\{.*\}", text, re.DOTALL)
     if match:
         return match.group(0)
     return text.strip()
@@ -90,14 +94,14 @@ def _build_context(signal):
     Dispatches on ``signal_type``; falls back to the OSA context builder
     for unknown types (which behave like OSA-shaped signals).
     """
-    builder = _CONTEXT_BUILDERS.get(signal.get('signal_type'), _build_osa_context)
+    builder = _CONTEXT_BUILDERS.get(signal.get("signal_type"), _build_osa_context)
     return builder(signal)
 
 
 def _build_compliance_context(signal):
     """Build context block for a TICK_AND_FLICK compliance signal."""
-    facts = signal.get('facts', {})
-    store_label = signal.get('site_name') or f"Store {signal['store_id']}"
+    facts = signal.get("facts", {})
+    store_label = signal.get("site_name") or f"Store {signal['store_id']}"
     lines = [
         "Alert Type: Tick-and-Flick Compliance",
         f"Store: {store_label}",
@@ -109,48 +113,48 @@ def _build_compliance_context(signal):
         f"Chain Average Tick-and-Flick Rate: {signal.get('chain_tf_rate', 0.0):.1f}%",
         f"Above Chain Average By: {signal.get('above_chain_by', 0.0):+.1f}pp",
     ]
-    tf_by_type = facts.get('tf_by_alert_type', [])
+    tf_by_type = facts.get("tf_by_alert_type", [])
     if tf_by_type:
-        lines.append('Worst Alert Types by Tick-and-Flick Rate:')
+        lines.append("Worst Alert Types by Tick-and-Flick Rate:")
         for item in tf_by_type[:3]:
             lines.append(
                 f"  {item['alert_type']}: {item['tf_count']} of {item['worked']} ({item['tf_rate']:.1f}%)"
             )
-    return '\n'.join(lines)
+    return "\n".join(lines)
 
 
 def _build_osa_context(signal):
     """Build context block for an OSA availability signal."""
-    facts = signal['facts']
+    facts = signal["facts"]
     lines = [
         f"Department: {signal['department']}",
         f"This Week Lost Sales: \u00a3{signal['this_week_lsv']:.2f}",
     ]
-    if signal.get('this_week_osa'):
+    if signal.get("this_week_osa"):
         lines.append(f"Store OSA: {signal['this_week_osa']:.1f}%")
-    if signal.get('last_week_osa'):
+    if signal.get("last_week_osa"):
         lines.append(f"Last Week OSA: {signal['last_week_osa']:.1f}%")
-    if facts.get('chain_this_week_osa'):
-        gap = facts['chain_this_week_osa'] - (signal.get('this_week_osa') or 0)
+    if facts.get("chain_this_week_osa"):
+        gap = facts["chain_this_week_osa"] - (signal.get("this_week_osa") or 0)
         lines.append(f"Chain Average OSA: {facts['chain_this_week_osa']:.1f}%")
         lines.append(f"Gap vs Chain: {gap:.1f}pp")
-    if 'WOW' in signal['trigger_types'] and signal.get('wow_drift_pp'):
+    if "WOW" in signal["trigger_types"] and signal.get("wow_drift_pp"):
         lines.append(f"Week-on-Week OSA Change: {signal['wow_drift_pp']:+.1f}pp")
-    if 'REPEAT' in signal['trigger_types'] and signal.get('repeat_item_count'):
+    if "REPEAT" in signal["trigger_types"] and signal.get("repeat_item_count"):
         lines.append(f"Repeat Alert Items: {signal['repeat_item_count']}")
-    if facts.get('worst_day'):
+    if facts.get("worst_day"):
         lines.append(
             f"Worst Day: {facts['worst_day']['day']} (\u00a3{facts['worst_day']['lsv']:.2f})"
         )
     lines.append(f"4-Week Projection: \u00a3{facts['cost_projection']:.2f}")
-    return '\n'.join(lines)
+    return "\n".join(lines)
 
 
 def _build_markdown_override_context(signal):
     """Build context block for a MARKDOWN_OVERRIDE signal."""
-    facts       = signal.get('facts', {})
-    store_label = signal.get('site_name') or f"Store {signal['store_id']}"
-    this_rate   = signal.get('this_week_override_rate', 0.0)
+    facts = signal.get("facts", {})
+    store_label = signal.get("site_name") or f"Store {signal['store_id']}"
+    this_rate = signal.get("this_week_override_rate", 0.0)
     lines = [
         "Alert Type: Markdown Override",
         f"Store: {store_label}",
@@ -159,30 +163,30 @@ def _build_markdown_override_context(signal):
         f"This Week Markdowns: {signal.get('this_week_total_markdowns', 0)}",
         f"This Week Overrides: {signal.get('this_week_overrides', 0)}",
     ]
-    if signal.get('last_week_override_rate') is not None:
+    if signal.get("last_week_override_rate") is not None:
         lines.append(f"Last Week Override Rate: {signal['last_week_override_rate']:.1f}%")
-    if signal.get('wow_change_pp') is not None:
+    if signal.get("wow_change_pp") is not None:
         lines.append(f"Week-on-Week Change: {signal['wow_change_pp']:+.1f}pp")
-    if signal.get('chain_override_rate') is not None:
+    if signal.get("chain_override_rate") is not None:
         lines.append(f"Chain Average Override Rate: {signal['chain_override_rate']:.1f}%")
-    if signal.get('above_chain_pp') is not None:
+    if signal.get("above_chain_pp") is not None:
         lines.append(f"Above Chain Average By: {signal['above_chain_pp']:+.1f}pp")
-    dept_bdwn = facts.get('override_dept_breakdown', [])
+    dept_bdwn = facts.get("override_dept_breakdown", [])
     if dept_bdwn:
-        lines.append('Top Departments by Overrides:')
+        lines.append("Top Departments by Overrides:")
         for item in dept_bdwn[:3]:
             lines.append(
                 f"  {item.get('dept', '?')}: {item.get('overrides', 0)} overrides "
                 f"({item.get('override_rate_pct', 0.0):.1f}%)"
             )
-    return '\n'.join(lines)
+    return "\n".join(lines)
 
 
 def _build_waste_context(signal):
     """Build context block for a WASTE (straight-to-bin) signal."""
-    facts       = signal.get('facts', {})
-    store_label = signal.get('site_name') or f"Store {signal['store_id']}"
-    this_rate   = signal.get('this_week_stb_rate', 0.0)
+    facts = signal.get("facts", {})
+    store_label = signal.get("site_name") or f"Store {signal['store_id']}"
+    this_rate = signal.get("this_week_stb_rate", 0.0)
     lines = [
         "Alert Type: Waste (Straight-to-Bin)",
         f"Store: {store_label}",
@@ -192,31 +196,31 @@ def _build_waste_context(signal):
         f"This Week STB Quantity: {signal.get('this_week_stb_qty', 0)}",
         f"This Week Waste Value: \u00a3{signal.get('this_week_waste_value', 0.0):,.2f}",
     ]
-    if signal.get('last_week_stb_rate') is not None:
+    if signal.get("last_week_stb_rate") is not None:
         lines.append(f"Last Week STB Rate: {signal['last_week_stb_rate']:.1f}%")
-    if signal.get('wow_change_pp') is not None:
+    if signal.get("wow_change_pp") is not None:
         lines.append(f"Week-on-Week Change: {signal['wow_change_pp']:+.1f}pp")
-    if signal.get('chain_stb_rate') is not None:
+    if signal.get("chain_stb_rate") is not None:
         lines.append(f"Chain Average STB Rate: {signal['chain_stb_rate']:.1f}%")
-    if signal.get('above_chain_pp') is not None:
+    if signal.get("above_chain_pp") is not None:
         lines.append(f"Above Chain Average By: {signal['above_chain_pp']:+.1f}pp")
-    dept_bdwn = facts.get('waste_dept_breakdown', [])
+    dept_bdwn = facts.get("waste_dept_breakdown", [])
     if dept_bdwn:
-        lines.append('Top Departments by Waste:')
+        lines.append("Top Departments by Waste:")
         for item in dept_bdwn[:3]:
             lines.append(
                 f"  {item.get('dept', '?')}: {item.get('waste_qty', 0)} wasted units, "
                 f"\u00a3{item.get('waste_value', 0.0):,.2f} "
                 f"(waste rate {item.get('waste_rate_pct', 0.0):.1f}%)"
             )
-    return '\n'.join(lines)
+    return "\n".join(lines)
 
 
 def _build_markdown_sellthrough_context(signal):
     """Build context block for a MARKDOWN_SELLTHROUGH signal."""
-    facts       = signal.get('facts', {})
-    store_label = signal.get('site_name') or f"Store {signal['store_id']}"
-    this_rate   = signal.get('this_week_sellthrough_rate', 0.0)
+    facts = signal.get("facts", {})
+    store_label = signal.get("site_name") or f"Store {signal['store_id']}"
+    this_rate = signal.get("this_week_sellthrough_rate", 0.0)
     lines = [
         "Alert Type: Markdown Sell-Through",
         f"Store: {store_label}",
@@ -225,33 +229,33 @@ def _build_markdown_sellthrough_context(signal):
         f"This Week Markdown Quantity: {signal.get('this_week_markdown_qty', 0)}",
         f"This Week Markdown Value: \u00a3{signal.get('this_week_markdown_value', 0.0):,.2f}",
     ]
-    if signal.get('last_week_sellthrough_rate') is not None:
+    if signal.get("last_week_sellthrough_rate") is not None:
         lines.append(f"Last Week Sell-Through Rate: {signal['last_week_sellthrough_rate']:.1f}%")
-    if signal.get('wow_change_pp') is not None:
+    if signal.get("wow_change_pp") is not None:
         lines.append(f"Week-on-Week Change: {signal['wow_change_pp']:+.1f}pp")
-    if signal.get('chain_sellthrough_rate') is not None:
+    if signal.get("chain_sellthrough_rate") is not None:
         lines.append(f"Chain Average Sell-Through Rate: {signal['chain_sellthrough_rate']:.1f}%")
-    if signal.get('below_chain_pp') is not None:
+    if signal.get("below_chain_pp") is not None:
         lines.append(f"Below Chain Average By: {signal['below_chain_pp']:.1f}pp")
-    dept_bdwn = facts.get('sellthrough_dept_breakdown', [])
+    dept_bdwn = facts.get("sellthrough_dept_breakdown", [])
     if dept_bdwn:
-        lines.append('Worst Departments by Sell-Through:')
+        lines.append("Worst Departments by Sell-Through:")
         for item in dept_bdwn[:3]:
             lines.append(
                 f"  {item.get('dept', '?')}: {item.get('sellthrough_rate_pct', 0.0):.1f}% "
                 f"on {item.get('requested_qty', 0)} units"
             )
-    return '\n'.join(lines)
+    return "\n".join(lines)
 
 
 def _build_markdown_sku_context(signal):
     """Build context block for a MARKDOWN_SKU (SKU-level markdown) signal."""
-    facts       = signal.get('facts', {})
-    store_label = signal.get('site_name') or f"Store {signal['store_id']}"
-    item_desc   = signal.get('item_description') or f"Item {signal.get('item_id', '')}"
-    req_count   = signal.get('markdown_request_count') or 0
-    override    = signal.get('override_count')
-    lbk_weeks   = signal.get('lookback_weeks', 4)
+    facts = signal.get("facts", {})
+    store_label = signal.get("site_name") or f"Store {signal['store_id']}"
+    item_desc = signal.get("item_description") or f"Item {signal.get('item_id', '')}"
+    req_count = signal.get("markdown_request_count") or 0
+    override = signal.get("override_count")
+    lbk_weeks = signal.get("lookback_weeks", 4)
     lines = [
         "Alert Type: SKU-Level Markdown",
         f"Store: {store_label}",
@@ -264,80 +268,29 @@ def _build_markdown_sku_context(signal):
     if override is not None:
         override_rate = round(override / req_count * 100) if req_count else 0
         lines.append(f"Overrides In Window: {override} ({override_rate}% override rate)")
-    if signal.get('avg_markdown_pct') is not None:
+    if signal.get("avg_markdown_pct") is not None:
         lines.append(f"Avg Markdown Depth: {signal['avg_markdown_pct']:.1f}%")
-    history = facts.get('sku_markdown_history', [])
+    history = facts.get("sku_markdown_history", [])
     if history:
         lines.append(f"Weekly History (last {len(history)} weeks):")
         for week in history:
-            ov_str = f", {week['override_count']} overridden" if week.get('override_count') else ''
+            ov_str = f", {week['override_count']} overridden" if week.get("override_count") else ""
             lines.append(
                 f"  w/c {week.get('week_start', '?')}: "
                 f"{week.get('request_count', 0)} requests{ov_str}"
             )
-    return '\n'.join(lines)
-
-
-def _contains_nan_or_none_leakage(text: str) -> bool:
-    """Return True if the text contains literal 'None' or 'nan'/'NaN'."""
-    if text is None:
-        return True
-    return bool(re.search(r'\bNone\b|\bnan\b|\bNaN\b', text))
-
-
-def _is_generic_recommendation(text: str) -> bool:
-    """Flag vague, non-actionable recommendations."""
-    if not text:
-        return True
-    generic_phrases = [
-        'review the data',
-        'monitor the situation',
-        'take appropriate action',
-        'investigate further',
-        'look into this',
-        'consider taking action',
-    ]
-    lowered = text.lower()
-    return any(phrase in lowered for phrase in generic_phrases)
-
-
-def _validate_quality(
-    narrative: dict,
-    max_action_length: int = 800,
-    reject_generic: bool = True,
-) -> tuple[bool, str]:
-    """
-    Validate Cortex narrative quality.
-
-    Returns (is_valid, reason).  reason is empty when valid.
-    """
-    required = ['issue', 'explanation', 'cost_if_not_fixed', 'recommended_action']
-    for key in required:
-        value = narrative.get(key)
-        if value is None or str(value).strip() == '':
-            return False, f'missing or empty {key}'
-        if _contains_nan_or_none_leakage(str(value)):
-            return False, f'{key} contains None/nan leakage'
-
-    action = str(narrative['recommended_action'])
-    if len(action) > max_action_length:
-        return False, f'recommended_action exceeds {max_action_length} chars'
-
-    if reject_generic and _is_generic_recommendation(action):
-        return False, 'recommended_action is too generic'
-
-    return True, ''
+    return "\n".join(lines)
 
 
 # Dispatch map used by _build_context. Declared after builders so all names
 # resolve. Signal types not listed here fall through to _build_osa_context.
 _CONTEXT_BUILDERS = {
-    'COMPLIANCE':           _build_compliance_context,
-    'OSA':                  _build_osa_context,
-    'MARKDOWN_OVERRIDE':    _build_markdown_override_context,
-    'WASTE':                _build_waste_context,
-    'MARKDOWN_SELLTHROUGH': _build_markdown_sellthrough_context,
-    'MARKDOWN_SKU':         _build_markdown_sku_context,
+    "COMPLIANCE": _build_compliance_context,
+    "OSA": _build_osa_context,
+    "MARKDOWN_OVERRIDE": _build_markdown_override_context,
+    "WASTE": _build_waste_context,
+    "MARKDOWN_SELLTHROUGH": _build_markdown_sellthrough_context,
+    "MARKDOWN_SKU": _build_markdown_sku_context,
 }
 
 
@@ -367,30 +320,32 @@ def generate(
     Falls back to rule_based.generate on budget, quality, or call failures.
     """
     card_skill = _load_card_skill()
-    type_skill = _load_type_skill(signal.get('signal_type', ''))
-    context    = _build_context(signal)
+    type_skill = _load_type_skill(signal.get("signal_type", ""))
+    context = _build_context(signal)
 
     skill_block = card_skill
     if type_skill:
-        skill_block += f'\n\n--- INVESTIGATION SKILL ---\n{type_skill}\n--- END INVESTIGATION SKILL ---'
+        skill_block += (
+            f"\n\n--- INVESTIGATION SKILL ---\n{type_skill}\n--- END INVESTIGATION SKILL ---"
+        )
 
     prompt = (
-        'You are a retail analyst writing content for a Smart Action Card for a store manager.\n'
-        'Follow the Content Skill rules below exactly.\n\n'
-        '--- CONTENT SKILL ---\n'
-        f'{skill_block}\n'
-        '--- END CONTENT SKILL ---\n\n'
-        '--- SIGNAL DATA ---\n'
-        f'{context}\n'
-        '--- END SIGNAL DATA ---\n\n'
-        'Using the Content Skill rules and the signal data above, return ONLY a JSON object '
-        'with these four keys:\n'
+        "You are a retail analyst writing content for a Smart Action Card for a store manager.\n"
+        "Follow the Content Skill rules below exactly.\n\n"
+        "--- CONTENT SKILL ---\n"
+        f"{skill_block}\n"
+        "--- END CONTENT SKILL ---\n\n"
+        "--- SIGNAL DATA ---\n"
+        f"{context}\n"
+        "--- END SIGNAL DATA ---\n\n"
+        "Using the Content Skill rules and the signal data above, return ONLY a JSON object "
+        "with these four keys:\n"
         '  "issue"               \u2014 title slot\n'
         '  "explanation"         \u2014 summary sentence + worst day callout\n'
         '  "cost_if_not_fixed"   \u2014 cost panel sentence\n'
         '  "recommended_action"  \u2014 action panel (2\u20134 sentences)\n\n'
-        'Do not include subclass contributor lists \u2014 those are rendered from structured data.\n'
-        'Output raw JSON only. Do not wrap in markdown fences.'
+        "Do not include subclass contributor lists \u2014 those are rendered from structured data.\n"
+        "Output raw JSON only. Do not wrap in markdown fences."
     )
 
     prompt_escaped = prompt.replace("'", "''")
@@ -398,19 +353,19 @@ def generate(
 
     # Budget gate: abort before spending a call if budget is exhausted.
     if budget is not None and not budget.record(estimated_tokens):
-        _label = signal.get('department') or signal.get('signal_type', '?')
+        _label = signal.get("department") or signal.get("signal_type", "?")
         print(
             f"[3_investigate/cortex] Budget exceeded for store {signal['store_id']} "
             f"{_label} — falling back to rule-based."
         )
         fallback = rule_based_generate(signal)
-        fallback['_prompt'] = prompt
-        fallback['_raw_response'] = ''
-        fallback['_fallback_reason'] = 'budget_exceeded'
+        fallback["_prompt"] = prompt
+        fallback["_raw_response"] = ""
+        fallback["_fallback_reason"] = "budget_exceeded"
         return fallback
 
     # Call Cortex with exponential-backoff retries.
-    raw_response = ''
+    raw_response = ""
     last_error = None
     for attempt in range(max_retries + 1):
         try:
@@ -418,26 +373,26 @@ def generate(
                 result = session.sql(
                     f"SELECT SNOWFLAKE.CORTEX.COMPLETE('mistral-large2', '{prompt_escaped}') AS RESPONSE"
                 ).collect()
-            raw_response = result[0]['RESPONSE'].strip()
+            raw_response = result[0]["RESPONSE"].strip()
             break
         except Exception as e:
             last_error = e
-            _label = signal.get('department') or signal.get('signal_type', '?')
+            _label = signal.get("department") or signal.get("signal_type", "?")
             print(
                 f"[3_investigate/cortex] Cortex call attempt {attempt + 1} failed for store "
                 f"{signal['store_id']} {_label}: {e}"
             )
             if attempt < max_retries:
-                time.sleep(2 ** attempt)
+                time.sleep(2**attempt)
             else:
                 print(
                     f"[3_investigate/cortex] All retries exhausted for store {signal['store_id']} "
                     f"{_label} — falling back to rule-based."
                 )
                 fallback = rule_based_generate(signal)
-                fallback['_prompt'] = prompt
-                fallback['_raw_response'] = raw_response
-                fallback['_fallback_reason'] = f'cortex_error: {last_error}'
+                fallback["_prompt"] = prompt
+                fallback["_raw_response"] = raw_response
+                fallback["_fallback_reason"] = f"cortex_error: {last_error}"
                 return fallback
 
     # Parse and validate the response.
@@ -445,51 +400,51 @@ def generate(
         cleaned = _extract_json(raw_response)
         narrative = json.loads(cleaned)
     except json.JSONDecodeError as e:
-        _label = signal.get('department') or signal.get('signal_type', '?')
+        _label = signal.get("department") or signal.get("signal_type", "?")
         print(
             f"[3_investigate/cortex] Invalid JSON for store {signal['store_id']} "
             f"{_label}: {e} — falling back to rule-based."
         )
         fallback = rule_based_generate(signal)
-        fallback['_prompt'] = prompt
-        fallback['_raw_response'] = raw_response
-        fallback['_fallback_reason'] = f'invalid_json: {e}'
+        fallback["_prompt"] = prompt
+        fallback["_raw_response"] = raw_response
+        fallback["_fallback_reason"] = f"invalid_json: {e}"
         return fallback
 
     # JSON-level required keys check (kept alongside quality check for clarity).
-    required = ['issue', 'explanation', 'cost_if_not_fixed', 'recommended_action']
+    required = ["issue", "explanation", "cost_if_not_fixed", "recommended_action"]
     if not all(k in narrative for k in required):
-        _label = signal.get('department') or signal.get('signal_type', '?')
+        _label = signal.get("department") or signal.get("signal_type", "?")
         print(
             f"[3_investigate/cortex] Missing fields for store {signal['store_id']} "
             f"{_label} — falling back to rule-based. "
             f"Keys received: {list(narrative.keys())}"
         )
         fallback = rule_based_generate(signal)
-        fallback['_prompt'] = prompt
-        fallback['_raw_response'] = raw_response
-        fallback['_fallback_reason'] = 'missing_fields'
+        fallback["_prompt"] = prompt
+        fallback["_raw_response"] = raw_response
+        fallback["_fallback_reason"] = "missing_fields"
         return fallback
 
     # Quality gate: generic/None/nan/too-long checks.
-    is_valid, reason = _validate_quality(
+    is_valid, reason = validate_quality(
         narrative,
         max_action_length=quality_max_action_length,
         reject_generic=quality_reject_generic,
     )
     if is_valid:
-        narrative['_prompt'] = prompt
-        narrative['_raw_response'] = raw_response
-        narrative['_fallback_reason'] = ''
+        narrative["_prompt"] = prompt
+        narrative["_raw_response"] = raw_response
+        narrative["_fallback_reason"] = ""
         return narrative
 
-    _label = signal.get('department') or signal.get('signal_type', '?')
+    _label = signal.get("department") or signal.get("signal_type", "?")
     print(
         f"[3_investigate/cortex] Quality check failed for store {signal['store_id']} "
         f"{_label}: {reason} — falling back to rule-based."
     )
     fallback = rule_based_generate(signal)
-    fallback['_prompt'] = prompt
-    fallback['_raw_response'] = raw_response
-    fallback['_fallback_reason'] = f'quality_check: {reason}'
+    fallback["_prompt"] = prompt
+    fallback["_raw_response"] = raw_response
+    fallback["_fallback_reason"] = f"quality_check: {reason}"
     return fallback

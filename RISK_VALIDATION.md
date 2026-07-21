@@ -1,10 +1,10 @@
 # Risk Validation Against Live Snowflake
 
 Living document: re-validate before each deployment step and after each production run.
-Validation helpers: `scripts/validate_deploy_risks.py`, `scripts/check_run_output.py`, `scripts/spot_check_cards.py` (read-only, VPN required).
+Validation helpers: `scripts/validate_deploy_risks.py`, `scripts/check_run_output.py`, `scripts/spot_check_cards.py`, `scripts/migrate_alerts_table_schema.py`, `scripts/validate_lineage_populated.py` (read-only except migration; VPN required).
 
-Last live-Snowflake validation: **2026-07-17 14:47** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
-Requirements/code review updated: **2026-07-17 14:50**
+Last live-Snowflake validation: **2026-07-21 10:05** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
+Requirements/code review updated: **2026-07-21 10:10**
 
 ---
 
@@ -54,23 +54,43 @@ scheduled runs must not use Cortex. The daily Task explicitly passes
 
 ## Risk 3 — Run lineage columns
 
-**Status: VALID — confirmed missing in live table.**
+**Status: MITIGATED.**
 
-`DESCRIBE TABLE STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE` (19 columns):
+Migration completed 2026-07-21 10:05. `DESCRIBE TABLE` now shows 25 columns;
+all lineage columns are present. A test run for store 634 on
+`2026-07-21` populated `RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, and
+`SOURCE_DATA_WATERMARK` on every card.
 
-| Lineage column | Present? |
-|---|---|
-| `RUN_DATE` | ✅ |
-| `ANALYSIS_DATE` | ✅ |
-| `ENGINE_USED` | ✅ |
-| `RUN_ID` | ❌ |
-| `PIPELINE_VERSION` | ❌ |
-| `CONFIG_HASH` | ❌ |
-| `PROMPT_HASH` | ❌ |
-| `SOURCE_DATA_WATERMARK` | ❌ |
+| Lineage column | Present? (live table) | Populated on test run |
+|---|---|---|
+| `RUN_DATE` | ✅ | ✅ |
+| `ANALYSIS_DATE` | ✅ | ✅ |
+| `ENGINE_USED` | ✅ | ✅ |
+| `RUN_ID` | ✅ | ✅ 10/10 |
+| `PIPELINE_VERSION` | ✅ | ✅ 10/10 |
+| `CONFIG_HASH` | ✅ | ✅ 10/10 |
+| `PROMPT_HASH` | ✅ | ❌ 0/10 (rule-based run; expected) |
+| `SOURCE_DATA_WATERMARK` | ✅ | ✅ 10/10 |
+| `QUALITY_REASON` | ✅ | ✅ 1/10 flagged |
 
-- Best added **before** the table accumulates weeks of history (schema change is
-  cheaper now). Highest-value remaining engineering item.
+- `PROMPT_HASH` is only populated for Cortex-engineered cards (rule-based runs
+  have no prompt). This is expected.
+- Migration script: `scripts/migrate_alerts_table_schema.py`.
+
+## Risk 4 — Card validation for rule-based path
+
+**Status: IMPLEMENTED.**
+
+`pipeline/stages/_4_investigate/quality.py` now provides a shared
+`validate_quality()` helper used by both Cortex and rule-based engines.
+Rule-based cards that fail validation are flagged with `QUALITY_REASON` and
+still written (rule-based is the deterministic fallback; rejecting it would
+leave a store without an alert). The `QUALITY_REASON` column is added by the
+same migration script as the lineage columns.
+
+Test run (store 634, 2026-07-21): 10 cards produced, 1 flagged with
+`QUALITY_REASON = 'explanation contains None/nan leakage'`. The remaining 9 had
+empty `QUALITY_REASON`.
 
 ---
 

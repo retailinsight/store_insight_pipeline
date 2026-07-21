@@ -32,17 +32,17 @@ Public API
 from pathlib import Path
 
 import yaml
-from store_insight.pipeline.stages._4_investigate import cortex, rule_based
+from store_insight.pipeline.stages._4_investigate import cortex, quality, rule_based
 
-_HERE     = Path(__file__).parent
-_YAML_PATH = _HERE / 'signal_type_investigators.yaml'
+_HERE = Path(__file__).parent
+_YAML_PATH = _HERE / "signal_type_investigators.yaml"
 
 _ENGINES = {
-    'rule_based': rule_based,
-    'cortex':     cortex,
+    "rule_based": rule_based,
+    "cortex": cortex,
 }
 
-with open(_YAML_PATH, encoding='utf-8') as _f:
+with open(_YAML_PATH, encoding="utf-8") as _f:
     SIGNAL_TYPE_MAP: dict = yaml.safe_load(_f) or {}
 
 
@@ -71,13 +71,13 @@ def investigate(
     -------
     dict with keys: issue, explanation, cost_if_not_fixed, recommended_action
     """
-    signal_type = signal.get('signal_type', '')
+    signal_type = signal.get("signal_type", "")
     if cfg is None:
         inv_cfg = None
     elif isinstance(cfg, dict):
-        inv_cfg = cfg.get('investigation')
+        inv_cfg = cfg.get("investigation")
     else:
-        inv_cfg = getattr(cfg, 'investigation', None)
+        inv_cfg = getattr(cfg, "investigation", None)
     type_config = None
     if inv_cfg is not None:
         if isinstance(inv_cfg, dict):
@@ -86,39 +86,59 @@ def investigate(
             type_config = getattr(inv_cfg, signal_type, None)
     if type_config is None:
         type_config = SIGNAL_TYPE_MAP.get(signal_type, {})
-    engine_name = type_config.get('engine', 'rule_based') if isinstance(type_config, dict) else getattr(type_config, 'engine', 'rule_based')
-    engine      = _ENGINES.get(engine_name, rule_based)
+    engine_name = (
+        type_config.get("engine", "rule_based")
+        if isinstance(type_config, dict)
+        else getattr(type_config, "engine", "rule_based")
+    )
+    engine = _ENGINES.get(engine_name, rule_based)
 
     # Read per-run Cortex settings from config.
     cortex_cfg = None
     if cfg is not None:
-        cortex_cfg = cfg.get('cortex') if isinstance(cfg, dict) else getattr(cfg, 'cortex', None)
+        cortex_cfg = cfg.get("cortex") if isinstance(cfg, dict) else getattr(cfg, "cortex", None)
     max_retries = 2
     quality_max_action_length = 800
     quality_reject_generic = True
     if cortex_cfg is not None:
         if isinstance(cortex_cfg, dict):
-            max_retries = cortex_cfg.get('max_retries', max_retries)
-            quality_max_action_length = cortex_cfg.get('quality_max_action_length', quality_max_action_length)
-            quality_reject_generic = cortex_cfg.get('quality_reject_generic', quality_reject_generic)
+            max_retries = cortex_cfg.get("max_retries", max_retries)
+            quality_max_action_length = cortex_cfg.get(
+                "quality_max_action_length", quality_max_action_length
+            )
+            quality_reject_generic = cortex_cfg.get(
+                "quality_reject_generic", quality_reject_generic
+            )
         else:
-            max_retries = getattr(cortex_cfg, 'max_retries', max_retries)
-            quality_max_action_length = getattr(cortex_cfg, 'quality_max_action_length', quality_max_action_length)
-            quality_reject_generic = getattr(cortex_cfg, 'quality_reject_generic', quality_reject_generic)
+            max_retries = getattr(cortex_cfg, "max_retries", max_retries)
+            quality_max_action_length = getattr(
+                cortex_cfg, "quality_max_action_length", quality_max_action_length
+            )
+            quality_reject_generic = getattr(
+                cortex_cfg, "quality_reject_generic", quality_reject_generic
+            )
 
     if engine is cortex and session is not None:
         result = cortex.generate(
-            signal, session,
+            signal,
+            session,
             budget=cortex_budget,
             max_retries=max_retries,
             quality_max_action_length=quality_max_action_length,
             quality_reject_generic=quality_reject_generic,
         )
         if isinstance(result, dict):
-            result['_engine'] = 'cortex'
+            result["_engine"] = "cortex"
         return result
 
     result = rule_based.generate(signal)
     if isinstance(result, dict):
-        result['_engine'] = 'rule_based'
+        result["_engine"] = "rule_based"
+        valid, reason = quality.validate_quality(
+            result,
+            max_action_length=quality_max_action_length,
+            reject_generic=quality_reject_generic,
+        )
+        if not valid:
+            result["_quality_reason"] = reason
     return result
