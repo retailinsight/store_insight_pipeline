@@ -112,8 +112,9 @@ Create the events table once:
 python scripts/ensure_lifecycle_events_table.py --client eastofengland
 ```
 
-Front-end wiring remains: call the event endpoint when users see/assign/work/close/ignore
-an alert.
+Only the front-end needs to call `POST /customers/{client}/alerts/{alert_id}/events`
+when users actually interact with alerts. Everything else is implemented, tested,
+migrated, and pushed.
 
 ## Snowflake environment
 

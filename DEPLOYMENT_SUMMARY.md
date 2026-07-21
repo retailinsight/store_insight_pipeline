@@ -100,7 +100,9 @@ The engineering review identified **15 recommendations**, prioritised as **P0** 
      - `POST /customers/{client}/alerts/{alert_id}/events` — record lifecycle event.
      - `GET /customers/{client}/lifecycle/kpis` — funnel summary per run.
      - `GET /customers/{client}/lifecycle/stores` — per-store action rates.
-   - Still needs the front-end to call the event endpoint when users see/assign/work/close/ignore alerts.
+   - Only the front-end needs to call `POST /customers/{client}/alerts/{alert_id}/events`
+     when users actually interact with alerts. Everything else is implemented, tested,
+     migrated, and pushed.
 
 ---
 
