@@ -22,7 +22,7 @@ See `DEPLOYMENT_PLAN.md` for the full deployment checklist and `DEPLOYMENT_SUMMA
 | Folder | What it contains |
 |---|---|
 | `pipeline/` | **The core alerts pipeline.** Detect → Score → Facts → Investigate stages, config, adapter views, deployment. See `pipeline/README.md`. |
-| `pipeline/tests/` | Automated **pytest unit tests** (425 tests) for pipeline logic. Run offline — no Snowflake connection needed: `python -m pytest pipeline/tests/ -q` |
+| `pipeline/tests/` | Automated **pytest unit tests** (444 tests) for pipeline logic. Run offline — no Snowflake connection needed: `python -m pytest pipeline/tests/ -q` |
 | `pipeline/qc/` | Jupyter notebooks for manual QC of pipeline outputs. |
 | `scripts/` | **Operational helper scripts** run manually against live Snowflake (connectivity check, deployment state, daily run validation, Cortex model checks). Require VPN + credentials. See `scripts/README.md`. |
 | `docs/` | Repo-level docs: Snowflake connection status, project context notes. |
@@ -78,6 +78,52 @@ python pipeline/tools/backtest_thresholds.py \
 ```
 
 Output is written to `STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE`.
+
+## How to run and test
+
+### Unit tests (no Snowflake needed)
+
+```powershell
+python -m pytest pipeline/tests/ -q
+```
+
+Current status: **444 passed**.
+
+### Run the full pipeline locally for one date
+
+```powershell
+python pipeline/pipeline/run_batch.py \
+  --client eastofengland \
+  --analysis-date 2026-07-21 \
+  --overwrite
+```
+
+### Run for a subset of stores (useful for validation)
+
+```powershell
+python pipeline/pipeline/run_batch.py \
+  --client eastofengland \
+  --analysis-date 2026-07-21 \
+  --store-id 508 492 641 \
+  --overwrite
+```
+
+### Validate the latest output table contents
+
+```powershell
+python scripts/check_run_output.py
+```
+
+### Backtest threshold changes on a subset of stores
+
+```powershell
+python pipeline/tools/backtest_thresholds.py \
+  --client eastofengland \
+  --analysis-date 2026-07-17 \
+  --store-ids 508,492,641 \
+  --proposed-config proposed_thresholds.yaml \
+  --output report.json
+```
 
 ## Schema migration
 

@@ -1,5 +1,27 @@
 # Store Insight Pipeline — Changes Log
 
+## 2026-07-21 — Final engineering-gap close-out
+
+### Summary
+- Completed, migrated, validated, and pushed all remaining engineering-gap work:
+  - Full run lineage columns (`RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`,
+    `PROMPT_HASH`, `SOURCE_DATA_WATERMARK`) on every card and in the live
+    `ALERTS_PIPELINE` table.
+  - Card validation extended to the rule-based path via shared `quality.py`;
+    `QUALITY_REASON` column persisted.
+  - Threshold backtesting CLI with store filtering and baseline vs proposed
+    comparison.
+  - Lifecycle/post-action measurement backend: event table, `record_event()`
+    helper, KPI SQL builders, FastAPI endpoints, and live table creation.
+- Live Snowflake validation 2026-07-21 confirmed 25 columns in
+  `ALERTS_PIPELINE` and lineage population on a test run.
+- Unit tests: **444 passed**.
+- Branch pushed: `feat/store-insight-ukcoop-env`.
+
+### Remaining
+- Front-end must call `POST /customers/{client}/alerts/{alert_id}/events` when
+  users interact with alerts.
+
 ## 2026-07-20
 
 ### Run lineage columns

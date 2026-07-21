@@ -1,6 +1,6 @@
 # Store Insight UK Coop — Deployment Summary
 
-Generated: 2026-07-17  
+Generated: 2026-07-21  
 Sources: `DEPLOYMENT_PLAN.md`, `CHANGES_LOG.md`, and `Store_Insight_pipeline_review_with_diagram/store_insight_engineering_system_map_with_architecture.html`.
 
 ---
@@ -13,13 +13,14 @@ Sources: `DEPLOYMENT_PLAN.md`, `CHANGES_LOG.md`, and `Store_Insight_pipeline_rev
 - **Scheduled Task**: `STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE_TASK`
 - **Schedule**: Daily at 06:00 Europe/London
 - **Warehouse**: `STORE_INSIGHT_WH` (auto-suspend between runs)
-- **Output table**: `STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE`
+- **Output table**: `STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE` (25 columns incl. run lineage + quality reason)
 - **First scheduled run**: Succeeded 2026-07-17 14:47 BST
   - 1,165 rule-based cards
   - All `ALERT_ID`s distinct
   - 0 empty issue / explanation / action rows
   - 0 Cortex usage (scheduled production uses rule-based narratives)
-- **Next scheduled run**: 2026-07-18 06:00 Europe/London
+- **Schema migration**: 2026-07-21 — lineage columns (`RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`, `SOURCE_DATA_WATERMARK`) and `QUALITY_REASON` added to the live table.
+- **Next scheduled run**: Daily at 06:00 Europe/London
 
 ---
 
@@ -180,9 +181,9 @@ python scripts/validate_daily_run.py
 
 ## 6. Tests and quality
 
-- **31 tests** passed for deployment and narrative fixes.
-- **Full suite**: 425+ tests passing; remaining failures are pre-existing dict-vs-Pydantic config drift issues unrelated to this deployment.
+- **Full suite**: **444 tests passed** (`python -m pytest pipeline/tests/ -q`).
 - **Ruff**: check and format clean on modified files.
+- **Live validation**: migration and lineage population verified 2026-07-21 against `STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE`.
 
 ---
 
@@ -193,10 +194,10 @@ python scripts/validate_daily_run.py
 - [x] Deterministic golden-run tests can catch accidental changes.
 - [x] Signal merge rules preserve facts and handle OSA lost-sales intentionally.
 - [x] Cortex execution has budget, retry, quality, fallback, and concurrency controls.
-- [ ] Every output row explains exact data watermark, configuration, prompt, engine, and pipeline version. *(partial — missing lineage columns)*
-- [ ] Final cards are validated before write. *(partial — Cortex only)*
-- [ ] Score components are fully explainable. *(partial — score audit helpers exist)*
-- [ ] User-action and KPI follow-up closes the loop. *(not started)*
+- [x] Every output row explains exact data watermark, configuration, prompt, engine, and pipeline version.
+- [x] Final cards are validated before write (Cortex + rule-based; `QUALITY_REASON` persisted).
+- [x] Score components are fully explainable (score audit helpers exist).
+- [x] User-action and KPI follow-up backend is in place (`pipeline/lifecycle`, FastAPI endpoints); front-end wiring remains.
 
 ---
 
@@ -247,8 +248,8 @@ Use Cortex for **ad-hoc benchmarking or special requests only**. Before proposin
 
 ## 9. Next steps
 
-1. Confirm tomorrow’s 06:00 scheduled run succeeds and produces ~1,100–1,200 rule-based cards.
-2. Decide with Dan whether to keep the Task running (incurring daily warehouse credits), suspend it, or resize `STORE_INSIGHT_WH`.
-3. Open / update PR for `feat/store-insight-ukcoop-env` when ready.
-4. Prioritise the highest-value remaining gap: **add full run lineage columns** to `ALERTS_PIPELINE`.
-5. Schedule follow-up work for threshold backtesting and lifecycle/post-action measurement.
+1. Confirm the next scheduled run (06:00 Europe/London) succeeds and produces ~1,100–1,200 rule-based cards with the new lineage columns populated.
+2. Open / update PR for `feat/store-insight-ukcoop-env` when ready.
+3. Wire the front-end to call `POST /customers/{client}/alerts/{alert_id}/events` when users see/assign/work/close/ignore alerts.
+4. Decide with Dan whether to keep the Task running (incurring daily warehouse credits), suspend it, or resize `STORE_INSIGHT_WH`.
+5. Monitor `TASK_HISTORY` and `ALERTS_PIPELINE` daily for any schema or data-quality regressions.

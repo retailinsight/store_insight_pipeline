@@ -3,8 +3,8 @@
 Living document: re-validate before each deployment step and after each production run.
 Validation helpers: `scripts/validate_deploy_risks.py`, `scripts/check_run_output.py`, `scripts/spot_check_cards.py`, `scripts/migrate_alerts_table_schema.py`, `scripts/validate_lineage_populated.py` (read-only except migration; VPN required).
 
-Last live-Snowflake validation: **2026-07-21 10:05** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
-Requirements/code review updated: **2026-07-21 10:10**
+Last live-Snowflake validation: **2026-07-21 10:30** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
+Requirements/code review updated: **2026-07-21 10:35**
 
 ---
 
@@ -91,6 +91,9 @@ same migration script as the lineage columns.
 Test run (store 634, 2026-07-21): 10 cards produced, 1 flagged with
 `QUALITY_REASON = 'explanation contains None/nan leakage'`. The remaining 9 had
 empty `QUALITY_REASON`.
+
+Lifecycle events table `STORE_INSIGHT_DB.PUBLIC.ACTION_LIFECYCLE_EVENTS` created
+2026-07-21; KPI SQL executed successfully against live `ALERTS_PIPELINE`.
 
 ---
 
