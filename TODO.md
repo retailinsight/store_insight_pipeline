@@ -34,8 +34,10 @@ Last updated: 2026-07-20 17:55
 
 ## Next
 - [x] **Migrate live table schema** — completed 2026-07-21; `ALERTS_PIPELINE` now has 25 columns.
-- [ ] **Lifecycle UI/API integration** — emit `seen`, `assigned`, `worked`, `closed`,
-      and `ignored` events from the UI and build KPI measurement queries.
+- [x] **Lifecycle backend** — event table, `record_event()` helper, KPI SQL builders, and
+      FastAPI endpoints added in `pipeline_ui/backend/app/main.py`.
+- [ ] **Lifecycle UI wiring** — front-end must call
+      `POST /customers/{client}/alerts/{alert_id}/events` when users see/assign/work/close/ignore alerts.
 - [ ] **Monitor daily runs** — confirm 06:00 Europe/London run produces cards
       and check `TASK_HISTORY` for any failures.
 - [ ] **Open PR** — branch already pushed; create PR when Dan is happy with the
@@ -51,10 +53,10 @@ Last updated: 2026-07-20 17:55
       validates every narrative; `QUALITY_REASON` column persisted in output table.
 - [x] **P1 — Threshold backtesting tool** *(complete)*: compare current vs proposed
       YAML thresholds with store filtering. See `pipeline/tools/backtest_thresholds.py`.
-- [ ] **P2 — Lifecycle/KPI post-action loop** *(foundation added, KPI SQL added)*:
+- [x] **P2 — Lifecycle/KPI post-action loop** *(backend complete, UI wiring remains)*:
       `pipeline/lifecycle` module with event table schema, `record_event()` helper,
-      funnel summary/per-store action-rate SQL builders, and integration README.
-      Needs UI/analytics integration to emit events and measure KPI movement.
+      funnel summary/per-store action-rate SQL builders, integration README, and
+      FastAPI endpoints in `pipeline_ui/backend/app/main.py`. Needs front-end to emit events.
 
 ## Housekeeping / follow-ups
 - [ ] **Learning-env references in other services** — actions in `api2` now use

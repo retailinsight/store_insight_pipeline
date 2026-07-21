@@ -40,7 +40,13 @@
 - Added `pipeline/lifecycle/measurement.py` with SQL builders for funnel summary
   per run, per-store action rates, and a convenience view.
 - Added `pipeline/lifecycle/README.md` with integration checklist.
-- Still needs UI/API integration to emit `seen`, `assigned`, `worked`, `closed`,
+- Added FastAPI endpoints in `pipeline_ui/backend/app/main.py`:
+  - `POST /customers/{client}/alerts/{alert_id}/events` — record lifecycle event.
+  - `GET /customers/{client}/lifecycle/kpis` — funnel summary per run.
+  - `GET /customers/{client}/lifecycle/stores` — per-store action rates.
+- Added `scripts/ensure_lifecycle_events_table.py` to create the events table.
+- Live table `STORE_INSIGHT_DB.PUBLIC.ACTION_LIFECYCLE_EVENTS` created.
+- Still needs the front-end to emit `seen`, `assigned`, `worked`, `closed`,
   and `ignored` events.
 
 ## 2026-07-17

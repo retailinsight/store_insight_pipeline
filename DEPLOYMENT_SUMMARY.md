@@ -66,9 +66,8 @@ The engineering review identified **15 recommendations**, prioritised as **P0** 
 
 | Status | Count | Items |
 |---|---|---|
-| ✅ Fully addressed | 13 | Stable IDs, full run lineage, source-data checks, deterministic regression, signal merging, Cortex budget/quality/fallback, shared-session safety, package setup, CI gates, debug/replay tables, rule-based validation, card validation for rule-based path, threshold backtesting CLI. |
-| ⚠️ Partial | 1 | Lifecycle/post-action measurement loop (foundation + KPI SQL added; needs UI/API integration to emit events). |
-| ❌ Not started | 0 | — |
+| ✅ Fully addressed | 14 | Stable IDs, full run lineage, source-data checks, deterministic regression, signal merging, Cortex budget/quality/fallback, shared-session safety, package setup, CI gates, debug/replay tables, rule-based validation, card validation for rule-based path, threshold backtesting CLI, lifecycle/post-action measurement backend. |
+| ⚠️ Partial | 0 | — |
 
 ### P0 recommendations addressed
 
@@ -94,10 +93,14 @@ The engineering review identified **15 recommendations**, prioritised as **P0** 
 
 ### Remaining engineering gaps
 
-1. **P2 — Lifecycle / post-action measurement** *(foundation + KPI SQL added)*
+1. **P2 — Lifecycle / post-action measurement** *(backend complete; UI wiring remains)*
    - Added `pipeline/lifecycle/__init__.py` with event table schema and `record_event()` helper.
    - Added `pipeline/lifecycle/measurement.py` with funnel summary and per-store action-rate SQL builders.
-   - Still needs UI/API integration to emit `seen`, `assigned`, `worked`, `closed`, and `ignored` events.
+   - Added FastAPI endpoints in `pipeline_ui/backend/app/main.py`:
+     - `POST /customers/{client}/alerts/{alert_id}/events` — record lifecycle event.
+     - `GET /customers/{client}/lifecycle/kpis` — funnel summary per run.
+     - `GET /customers/{client}/lifecycle/stores` — per-store action rates.
+   - Still needs the front-end to call the event endpoint when users see/assign/work/close/ignore alerts.
 
 ---
 

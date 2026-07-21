@@ -8,13 +8,13 @@ UI/API integration is required to emit the actual events.
 
 from __future__ import annotations
 
-from enum import StrEnum
+from enum import Enum
 from typing import Any
 
 from snowflake.snowpark import Session
 
 
-class ActionEvent(StrEnum):
+class ActionEvent(str, Enum):  # noqa: UP042
     GENERATED = "generated"
     SEEN = "seen"
     ASSIGNED = "assigned"

@@ -35,6 +35,13 @@ from fastapi import FastAPI, HTTPException  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import StreamingResponse  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
+from store_insight.pipeline.lifecycle import ensure_events_table, record_event  # noqa: E402
+from store_insight.pipeline.lifecycle.measurement import (  # noqa: E402
+    DEFAULT_ALERTS_TABLE,
+    DEFAULT_EVENTS_TABLE,
+    kpi_summary_sql,
+    store_action_rate_sql,
+)
 
 from app import catalog  # noqa: E402
 from app.runner import run_experiment  # noqa: E402
@@ -57,8 +64,22 @@ app.add_middleware(
 class RunRequest(BaseModel):
     analysis_date: str = Field(..., description="YYYY-MM-DD")
     store_ids: list[int] = Field(default_factory=list)
-    signal_types: list[str] = Field(default_factory=list, description="Signal types to run; empty = all")
+    signal_types: list[str] = Field(
+        default_factory=list, description="Signal types to run; empty = all"
+    )
     config: dict = Field(..., description="Full merged cfg dict")
+
+
+class LifecycleEventRequest(BaseModel):
+    event_type: str = Field(..., description="One of: seen, assigned, worked, closed, ignored")
+    actor: str | None = Field(default=None, description="User or system that emitted the event")
+    run_id: str | None = Field(
+        default=None, description="Optional run_id; looked up from alerts table if omitted"
+    )
+    store_id: int | None = Field(
+        default=None, description="Optional store_id; looked up from alerts table if omitted"
+    )
+    payload: dict = Field(default_factory=dict, description="Arbitrary JSON context")
 
 
 @app.get("/health")
@@ -80,6 +101,7 @@ def get_catalog():
 def get_customer_config(client: str):
     try:
         from store_insight.pipeline.config.loader import load_config
+
         return load_config(client)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -140,6 +162,7 @@ def get_customer_stores(client: str):
 
     try:
         from store_insight.pipeline.config.loader import load_config
+
         cfg = load_config(client)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -169,6 +192,7 @@ def get_customer_stores(client: str):
 @app.post("/customers/{client}/run")
 def run_customer_pipeline(client: str, body: RunRequest):
     from store_insight.pipeline.config.models import PipelineConfig
+
     cfg_dict = dict(body.config)
     cfg_dict.setdefault("client_name", client)
     try:
@@ -212,7 +236,7 @@ def run_customer_pipeline_stream(client: str, body: RunRequest):
         log_queue.put(line)
 
     result_holder: list[dict] = []
-    exc_holder:    list[str]  = []
+    exc_holder: list[str] = []
 
     def worker() -> None:
         try:
@@ -252,3 +276,88 @@ def run_customer_pipeline_stream(client: str, body: RunRequest):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.post("/customers/{client}/alerts/{alert_id}/events")
+def record_alert_event(client: str, alert_id: str, body: LifecycleEventRequest):
+    """Record a lifecycle event (seen, assigned, worked, closed, ignored) for an alert."""
+    from app.snowflake_session import get_session
+
+    session = get_session()
+    ensure_events_table(session)
+
+    run_id = body.run_id
+    store_id = body.store_id
+
+    if run_id is None or store_id is None:
+        try:
+            rows = session.sql(
+                "SELECT RUN_ID, STORE_ID FROM STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE WHERE ALERT_ID = ?",
+                params=[alert_id],
+            ).collect()
+            if rows:
+                if run_id is None:
+                    run_id = rows[0]["RUN_ID"]
+                if store_id is None:
+                    store_id = int(rows[0]["STORE_ID"])
+        except Exception:
+            logger.exception("Failed to look up alert %s", alert_id)
+
+    try:
+        record_event(
+            session,
+            alert_id=alert_id,
+            event_type=body.event_type,
+            run_id=run_id,
+            store_id=store_id,
+            actor=body.actor,
+            payload=body.payload,
+        )
+    except Exception:
+        logger.exception("Failed to record lifecycle event for alert %s", alert_id)
+        raise HTTPException(status_code=500, detail="Failed to record event.") from None
+
+    return {
+        "status": "recorded",
+        "client": client,
+        "alert_id": alert_id,
+        "event_type": body.event_type,
+    }
+
+
+@app.get("/customers/{client}/lifecycle/kpis")
+def get_lifecycle_kpis(client: str, run_id: str | None = None):
+    """Return lifecycle KPI summary per run."""
+    from app.snowflake_session import get_session
+
+    session = get_session()
+    try:
+        sql = kpi_summary_sql(
+            events_table=DEFAULT_EVENTS_TABLE,
+            alerts_table=DEFAULT_ALERTS_TABLE,
+            run_id=run_id,
+        )
+        rows = session.sql(sql).collect()
+        return {"kpis": [dict(r) for r in rows]}
+    except Exception:
+        logger.exception("Failed to load lifecycle KPIs for %s", client)
+        raise HTTPException(status_code=500, detail="Failed to load KPIs.") from None
+
+
+@app.get("/customers/{client}/lifecycle/stores")
+def get_lifecycle_store_rates(client: str, days: int = 7):
+    """Return per-store action rates over the last N days."""
+    from app.snowflake_session import get_session
+
+    session = get_session()
+    try:
+        sql = store_action_rate_sql(
+            events_table=DEFAULT_EVENTS_TABLE,
+            alerts_table=DEFAULT_ALERTS_TABLE,
+            days=days,
+        )
+        rows = session.sql(sql).collect()
+        return {"stores": [dict(r) for r in rows]}
+    except Exception:
+        logger.exception("Failed to load store lifecycle rates for %s", client)
+        raise HTTPException(status_code=500, detail="Failed to load store rates.") from None

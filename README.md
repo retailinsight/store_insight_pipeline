@@ -91,17 +91,29 @@ python scripts/migrate_alerts_table_schema.py --client eastofengland
 This adds `RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`,
 `SOURCE_DATA_WATERMARK`, and `QUALITY_REASON` if they do not already exist.
 
-## Action lifecycle (foundation)
+## Action lifecycle
 
-`pipeline/lifecycle/` provides the building blocks for tracking generated → seen →
-assigned → worked → closed/ignored events:
+`pipeline/lifecycle/` provides the backend for tracking generated → seen →
+assigned → worked → closed/ignored events.
 
+Python helpers:
 - `__init__.py` — `ACTION_LIFECYCLE_EVENTS` table schema and `record_event()` helper.
 - `measurement.py` — SQL builders for funnel summary per run and per-store action
   rates, plus `create_kpi_summary_view()`.
 
-UI/API integration is still needed to emit the actual events from the user-facing
-action workflow.
+FastAPI endpoints (in `pipeline_ui/backend/app/main.py`):
+- `POST /customers/{client}/alerts/{alert_id}/events` — record an event.
+- `GET /customers/{client}/lifecycle/kpis` — funnel summary per run.
+- `GET /customers/{client}/lifecycle/stores` — per-store action rates.
+
+Create the events table once:
+
+```powershell
+python scripts/ensure_lifecycle_events_table.py --client eastofengland
+```
+
+Front-end wiring remains: call the event endpoint when users see/assign/work/close/ignore
+an alert.
 
 ## Snowflake environment
 
