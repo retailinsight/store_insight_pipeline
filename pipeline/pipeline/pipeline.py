@@ -52,6 +52,7 @@ Schema: RUN_DATE, ALERT_TYPE, STORE_ID, SECTION, TYPE, TRIGGER_TYPES,
 """
 
 import datetime
+import hashlib
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor
@@ -111,10 +112,20 @@ def _resolve_config(config: 'DetectorConfig' = None, cfg=None) -> DetectorConfig
     if config is not None:
         return config
     if cfg is not None:
-        # Extract thresholds from detector_config
-        thresholds_dict = cfg.detector_config.thresholds.model_dump() if cfg.detector_config else {}
-        return DetectorConfig.from_config({'thresholds': thresholds_dict})
+        if isinstance(cfg, dict):
+            detector_config = cfg.get('detector_config', {})
+            thresholds = detector_config.get('thresholds', {}) if isinstance(detector_config, dict) else detector_config.thresholds.model_dump()
+        else:
+            thresholds = cfg.detector_config.thresholds.model_dump() if cfg.detector_config else {}
+        return DetectorConfig.from_config({'thresholds': thresholds})
     return DetectorConfig()
+
+
+def _alert_id(run_date: str, store_id, signal_type: str, alert_type: str, section) -> str:
+    """Deterministic SHA-2 identifier for an alert card."""
+    section_part = section if section is not None else ''
+    raw = f'{run_date}|{store_id}|{signal_type}|{alert_type}|{section_part}'
+    return hashlib.sha256(raw.encode()).hexdigest()
 
 
 def _build_card(sig: dict, narrative: dict, sort_value: float, cfg=None, label: str = 'Structural') -> dict:
@@ -122,18 +133,28 @@ def _build_card(sig: dict, narrative: dict, sort_value: float, cfg=None, label: 
     signal_wo_facts = {k: v for k, v in sig.items() if k != 'facts'}
 
     # Get signal type bucket from config, use default if not provided
-    signal_type_buckets = cfg.output.signal_type_buckets if cfg else None
     default_type = 'Availability'
+    if cfg is None:
+        signal_type_buckets = None
+    elif isinstance(cfg, dict):
+        output_cfg = cfg.get('output', {})
+        signal_type_buckets = output_cfg.get('signal_type_buckets')
+    else:
+        signal_type_buckets = cfg.output.signal_type_buckets
     if signal_type_buckets:
         bucket = signal_type_buckets.get(sig['signal_type'])
         type_value = bucket.value if bucket else default_type
     else:
         type_value = default_type
 
+    alert_type = ','.join(sorted(sig['trigger_types']))
+    section    = sig.get('section') or sig.get('department')
+
     return {
-        'alert_type':            ','.join(sorted(sig['trigger_types'])),
+        'alert_id':              _alert_id('', sig['store_id'], sig['signal_type'], alert_type, section),
+        'alert_type':            alert_type,
         'store_id':              sig['store_id'],
-        'section':               sig.get('department'),
+        'section':               section,
         'type':                  type_value,
         'trigger_types':         sig['trigger_types'],
         'short_long_term_label': label,
@@ -159,6 +180,7 @@ def _card_schema():
         StructType,
     )
     return StructType([
+        StructField('ALERT_ID',           StringType()),
         StructField('RUN_DATE',           StringType()),
         StructField('ALERT_TYPE',         StringType()),
         StructField('STORE_ID',           IntegerType()),
@@ -190,6 +212,7 @@ def _json_dump(value) -> str:
 def _card_to_row(card: dict, run_date: str) -> tuple:
     """Serialise one card dict to a row tuple matching ``_card_schema``."""
     return (
+        _alert_id(run_date, card['store_id'], card.get('signal_json', {}).get('signal_type', ''), card['alert_type'], card.get('section')),
         run_date,
         card['alert_type'],
         card['store_id'],
@@ -211,6 +234,8 @@ def _card_to_row(card: dict, run_date: str) -> tuple:
 def _output_table(cfg=None) -> str:
     """Resolve the output table name from config or env var fallback."""
     if cfg:
+        if isinstance(cfg, dict):
+            return cfg['output']['alerts']
         return cfg.output.alerts
     return os.environ.get('ALERTS_OUTPUT_TABLE', 'SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_PIPELINE')
 

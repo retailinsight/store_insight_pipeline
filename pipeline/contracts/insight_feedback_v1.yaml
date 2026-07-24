@@ -1,0 +1,93 @@
+# Contract: insight_feedback (v1)
+# =================================
+
+
+name: insight_feedback
+version: v1
+
+description: |
+  One row per Commitment — records that a store manager has explicitly
+  committed to act on a specific Store Insight alert card.
+
+  Distinct from the `feedback` contract (LSM_ALERT_FEEDBACK), which is at
+  the item-day grain and drives the COMPLIANCE/TICK_AND_FLICK detector.
+  This contract is at the alert-card grain, keyed by ALERT_ID.
+
+grain:
+  - ALERT_ID
+
+columns:
+  ALERT_ID:
+    type: VARCHAR
+    required: true
+    description: |
+      SHA-2 hex digest of (RUN_DATE|STORE_ID|SIGNAL_TYPE|ALERT_TYPE|COALESCE(SECTION,''))
+      for the alert card the manager committed to.  Deterministic — computed
+      from the card's natural key so the UI can derive it without a
+      Snowflake round-trip.
+
+  STORE_ID:
+    type: NUMBER
+    required: true
+    description: |
+      Store the Commitment applies to.  Denormalised from the alert card
+      for query convenience — avoids a join to the alerts table when
+      filtering Commitments by store.
+
+  SIGNAL_TYPE:
+    type: VARCHAR
+    required: true
+    description: |
+      Signal type of the committed card (e.g. OSA, COMPLIANCE, WASTE).
+      Denormalised for query convenience and used by the outcome
+      measurement stage to determine whether the signal re-fired.
+
+  SECTION:
+    type: VARCHAR
+    required: false
+    description: |
+      Department or section the signal was scoped to, if any.  NULL for
+      store-level signals.  Must be NULL (not empty string) when the
+      original card's SECTION was NULL, so that the outcome measurement
+      join on (STORE_ID, SIGNAL_TYPE, SECTION) behaves correctly.
+
+  CARD_RUN_DATE:
+    type: DATE
+    required: true
+    description: |
+      The RUN_DATE of the alert card the manager committed to.  Used by
+      the outcome measurement stage to enforce the 7-day eligibility
+      window: a Commitment is not measured until
+      current_run_date >= CARD_RUN_DATE + 7 days.
+
+  ACTIONED_AT:
+    type: TIMESTAMP
+    required: true
+    description: |
+      Timestamp (with timezone) at which the manager ticked the insight
+      card in the UI.
+
+  ACTIONED_BY:
+    type: VARCHAR
+    required: true
+    description: |
+      Identity of the manager who made the Commitment (e.g. username or
+      session ID).  Captured for audit purposes; not used in outcome
+      measurement calculations in v1.
+
+data_quality_findings:
+  - column: SECTION
+    severity: high
+    concern: |
+      Must be NULL (not empty string) when the original card had no
+      section.  An empty string instead of NULL will cause the outcome
+      measurement join on (STORE_ID, SIGNAL_TYPE, SECTION) to miss the
+      match, marking the signal as unresolved when it was actually
+      resolved.
+
+notes: |
+  - This contract intentionally has no joins.  The outcome measurement
+    stage joins it to the alerts table via ALERT_ID at runtime.
+  - ALERT_ID uniqueness is enforced by the UI — one Commitment per card.
+    Duplicate ALERT_IDs in this table are a data quality issue and will
+    cause the outcome measurement stage to produce duplicate outcome rows.

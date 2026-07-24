@@ -76,21 +76,25 @@ def _load_env():
 
 
 def _zip_package(dest_path: str) -> None:
-    """Zip the store_insight/pipeline/ subpackage into dest_path.
+    """Zip the full store_insight package into dest_path.
 
     Arcnames are rooted so paths inside the zip are of the form
-    ``store_insight/pipeline/...`` — matching the import path
+    ``store_insight/...`` — matching the import path
     ``store_insight.pipeline.*`` used at runtime in the SP.
+    Only pipeline/ and the top-level __init__.py are included to keep
+    the zip small; other subpackages (api, ui, etc.) are excluded.
     """
-    excludes = {'__pycache__', '.pyc', '.ipynb_checkpoints', '.env'}
+    excludes = {'__pycache__', '.pyc', '.ipynb_checkpoints', '.env',
+                'pipeline_2', 'pipeline_ui', 'api', 'api2', 'ui', 'mcp',
+                'experiments', 'docs', 'prds', '.devin', '.windsurf'}
     with zipfile.ZipFile(dest_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for path in _PKG_DIR.rglob('*'):
-            if any(ex in str(path) for ex in excludes):
+        for path in _SI_PKG.rglob('*'):
+            if any(ex in path.parts for ex in excludes):
                 continue
             if path.is_file():
                 arcname = path.relative_to(_ZIP_ROOT)
                 zf.write(path, arcname)
-    print(f'[deploy] Zipped store_insight/pipeline/ → {dest_path}')
+    print(f'[deploy] Zipped store_insight/ -> {dest_path}')
 
 
 def _create_session():
@@ -121,11 +125,39 @@ def _ensure_stage(session, stage: str) -> None:
     print(f'[deploy] Stage ready: {stage}')
 
 
+def _ensure_outcomes_table(session, db: str, schema: str) -> None:
+    fqn = f'{db}.{schema}.STORE_INSIGHT_OUTCOMES'
+    session.sql(f"""
+        CREATE TABLE IF NOT EXISTS {fqn} (
+            ALERT_ID                  VARCHAR     NOT NULL,
+            STORE_ID                  NUMBER      NOT NULL,
+            SIGNAL_TYPE               VARCHAR     NOT NULL,
+            SECTION                   VARCHAR,
+            CARD_RUN_DATE             DATE        NOT NULL,
+            OUTCOME_RUN_DATE          DATE        NOT NULL,
+            SIGNAL_RESOLVED           BOOLEAN     NOT NULL,
+            ESTIMATED_VALUE_RECOVERED FLOAT
+        )
+    """).collect()
+    print(f'[deploy] Outcomes table ready: {fqn}')
+
+    role = os.environ.get('SNOWFLAKE_ROLE')
+    if role:
+        try:
+            session.sql(
+                f'GRANT SELECT ON TABLE {fqn} TO ROLE {role}'
+            ).collect()
+        except Exception as exc:  # noqa: BLE001
+            print(f'[deploy] Could not grant SELECT on outcomes table ({exc})')
+
+
 def _upload_zip(session, zip_path: str, stage: str) -> None:
+    zip_uri = zip_path.replace('\\', '/')
+    session.sql(f"REMOVE @{stage}/{_ZIP_NAME}").collect()
     session.sql(
-        f"PUT 'file://{zip_path}' @{stage}/{_ZIP_NAME} OVERWRITE = TRUE AUTO_COMPRESS = FALSE"
+        f"PUT 'file://{zip_uri}' @{stage} OVERWRITE = TRUE AUTO_COMPRESS = FALSE"
     ).collect()
-    print(f'[deploy] Uploaded {_ZIP_NAME} → @{stage}')
+    print(f'[deploy] Uploaded {_ZIP_NAME} -> @{stage}')
 
 
 def _register_sp(session, stage: str, warehouse: str) -> None:
@@ -143,11 +175,12 @@ RETURNS STRING
 LANGUAGE PYTHON
 RUNTIME_VERSION = '3.11'
 PACKAGES = ('snowflake-snowpark-python', 'snowflake-ml-python')
-IMPORTS   = ('@{stage}/{_ZIP_NAME}')
+IMPORTS   = ('@{stage}/store_insight.zip')
 HANDLER   = 'store_insight.pipeline.deploy.handler.run'
 EXECUTE AS CALLER
-COMMENT   = 'Runs the full Alerts Pipeline (detect → facts → investigate → score → write).'
 """
+    role = os.environ.get('SNOWFLAKE_ROLE', 'PUBLIC')
+    session.sql(f"GRANT READ ON STAGE {stage} TO ROLE {role}").collect()
     session.sql(ddl).collect()
     print(f'[deploy] Stored Procedure registered: {sp_fqn}')
 
@@ -160,21 +193,41 @@ def _register_task(session, stage: str, warehouse: str, cron: str, tz: str,
     sp_fqn   = f'{db}.{schema}.RUN_ALERTS_PIPELINE'
 
     client_arg = f"'{client}'" if client else 'NULL'
+    client_label = client or 'default'
     ddl = f"""
 CREATE OR REPLACE TASK {task_fqn}
   WAREHOUSE = {warehouse}
   SCHEDULE  = 'USING CRON {cron} {tz}'
-  COMMENT   = 'Daily Alerts Pipeline run. Calls {sp_fqn}({client_arg}, NULL, FALSE).'
+  COMMENT   = 'Daily Alerts Pipeline run for client {client_label}.'
 AS
   CALL {sp_fqn}({client_arg}, NULL, FALSE)
 """
     session.sql(ddl).collect()
+    print(f'[deploy] Task created (suspended): {task_fqn}')
 
-    # Tasks are created in suspended state by default — resume it.
-    session.sql(f'ALTER TASK {task_fqn} RESUME').collect()
-    print(f'[deploy] Task registered and resumed: {task_fqn}')
-    print(f'         Schedule: CRON {cron} {tz}')
-    print(f'         Client:   {client or "default"}')
+    role = os.environ.get('SNOWFLAKE_ROLE', '')
+
+    # Tasks require the account-level EXECUTE TASK privilege on the owner role.
+    # Attempt the grant (no-op if already granted; may fail if role lacks rights).
+    if role:
+        try:
+            session.sql(f'GRANT EXECUTE TASK ON ACCOUNT TO ROLE {role}').collect()
+            print(f'[deploy] Granted EXECUTE TASK on account to role {role}.')
+        except Exception as exc:  # noqa: BLE001
+            print(f'[deploy] Could not self-grant EXECUTE TASK ({exc}).')
+
+    # Tasks are created in suspended state by default - resume it.
+    try:
+        session.sql(f'ALTER TASK {task_fqn} RESUME').collect()
+        print(f'[deploy] Task resumed: {task_fqn}')
+        print(f'         Schedule: CRON {cron} {tz}')
+        print(f'         Client:   {client or "default"}')
+    except Exception as exc:  # noqa: BLE001
+        print('[deploy] WARNING: Task created but NOT resumed.')
+        print(f'         Reason: {exc}')
+        print('         An ACCOUNTADMIN must run the following, then resume the task:')
+        print(f'           GRANT EXECUTE TASK ON ACCOUNT TO ROLE {role or "<your_role>"};')
+        print(f'           ALTER TASK {task_fqn} RESUME;')
 
 
 # ---------------------------------------------------------------------------
@@ -201,27 +254,27 @@ def main():
     # ── Load config ─────────────────────────────────────────────────────
     from store_insight.pipeline.config.loader import load_config
     cfg = load_config(args.client)
-    print(f'[deploy] Config loaded: client={cfg["client_name"]}')
+    print(f'[deploy] Config loaded: client={cfg.client_name}')
 
-    conn      = cfg.get('connection', {})
-    schedule  = cfg.get('schedule', {})
-    warehouse = args.warehouse or conn.get('warehouse') or os.environ['SNOWFLAKE_WAREHOUSE']
-    db        = conn.get('database')  or os.environ['SNOWFLAKE_DATABASE']
-    schema    = conn.get('schema')    or os.environ['SNOWFLAKE_SCHEMA']
-    cron      = args.cron or schedule.get('cron', '0 6 * * *')
-    tz        = args.tz   or schedule.get('timezone', 'Europe/London')
+    conn      = cfg.connection
+    schedule  = cfg.schedule
+    warehouse = args.warehouse or conn.warehouse or os.environ['SNOWFLAKE_WAREHOUSE']
+    db        = conn.database      or os.environ['SNOWFLAKE_DATABASE']
+    schema    = conn.schema_name   or os.environ['SNOWFLAKE_SCHEMA']
+    cron      = args.cron or schedule.cron
+    tz        = args.tz   or schedule.timezone
     stage     = args.stage or f'{db}.{schema}.ALERTS_PIPELINE_STAGE'
 
     print('[deploy] Connecting to Snowflake...')
     session = _create_session()
     print('[deploy] Connected.')
 
-    with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp:
-        zip_path = tmp.name
+    zip_path = str(Path(tempfile.gettempdir()) / _ZIP_NAME)
 
     try:
         _zip_package(zip_path)
         _ensure_stage(session, stage)
+        _ensure_outcomes_table(session, db, schema)
         _upload_zip(session, zip_path, stage)
         _register_sp(session, stage, warehouse)
 

@@ -227,6 +227,50 @@ def test_waste_wow_narrative():
 
 
 # ---------------------------------------------------------------------------
+# WASTE_TRIM
+# ---------------------------------------------------------------------------
+
+def _waste_trim(**overrides):
+    base = {
+        'signal_type': 'WASTE_TRIM',
+        'store_id': 1,
+        'site_name': 'Store 1',
+        'item_id': 42,
+        'item_description': 'Milk 2L',
+        'department': 'CHILLED',
+        'trigger_types': ['WASTE_TRIM'],
+        'markdown_units': 10,
+        'total_units': 20,
+        'markdown_ratio': 0.5,
+        'markdown_value': 125.0,
+        'projected_cost': 125.0,
+        'facts': {
+            'chain_markdown_ratio': 0.12,
+            'dept_markdown_ratio': 0.18,
+            'weekly_trend': [
+                {'week_start': '2025-01-06', 'markdown_units': 4, 'total_units': 20, 'ratio': 0.2},
+                {'week_start': '2025-01-13', 'markdown_units': 10, 'total_units': 20, 'ratio': 0.5},
+            ],
+        },
+    }
+    base.update(overrides)
+    return base
+
+
+def test_waste_trim_narrative():
+    out = generate(_waste_trim())
+    _assert_card_keys(out)
+    assert 'Milk 2L' in out['issue']
+    assert '50.0%' in out['issue']
+    assert '10 of 20 units' in out['explanation']
+    assert '\u00a3125.00' in out['explanation']
+    assert '12.0%' in out['explanation']  # chain ratio
+    assert '18.0%' in out['explanation']  # dept ratio
+    assert 'w/c 2025-01-13' in out['explanation']
+    assert 'ranging and ordering for Milk 2L' in out['recommended_action']
+
+
+# ---------------------------------------------------------------------------
 # MARKDOWN_SELLTHROUGH
 # ---------------------------------------------------------------------------
 
@@ -321,10 +365,71 @@ def test_markdown_sku_history_block_added():
 
 
 # ---------------------------------------------------------------------------
+# OSA_RECURRING_SLOT
+# ---------------------------------------------------------------------------
+
+def _osa_recurring_slot(**overrides):
+    base = {
+        'signal_type': 'OSA_RECURRING_SLOT',
+        'store_id': 42,
+        'department': 'PRODUCE',
+        'dow': 2,
+        'dow_name': 'Monday',
+        'period_id': 1,
+        'period_label': 'Morning (6am-12pm)',
+        'trigger_types': ['RECURRING_SLOT'],
+        'repeat_item_count': 2,
+        'repeat_item_details': [
+            {'item_code': 'APL001', 'repeat_weeks': 4, 'total_lsv': 350.0, 'avg_weekly_lsv': 87.5},
+            {'item_code': 'BAN002', 'repeat_weeks': 3, 'total_lsv': 210.0, 'avg_weekly_lsv': 70.0},
+        ],
+        'total_lsv': 560.0,
+        'avg_weekly_lsv': 157.5,
+        'facts': {
+            'slot_history': [
+                {'year': 2025, 'week': 1, 'sales': 80.0, 'lsv_vol': 20.0, 'lsv': 100.0, 'osa_pct': 80.0},
+                {'year': 2025, 'week': 2, 'sales': 75.0, 'lsv_vol': 25.0, 'lsv': 125.0, 'osa_pct': 75.0},
+                {'year': 2025, 'week': 3, 'sales': 70.0, 'lsv_vol': 30.0, 'lsv': 150.0, 'osa_pct': 70.0},
+            ],
+            'recurring_slot_share_pct': 45.0,
+            'slot_share_of_dept_total_pct': 12.5,
+            'slot_trend': 'increasing',
+        },
+    }
+    base.update(overrides)
+    return base
+
+
+def test_osa_recurring_slot_narrative():
+    out = generate(_osa_recurring_slot())
+    _assert_card_keys(out)
+    assert 'PRODUCE has recurring lost sales on Monday Morning (6am-12pm)' in out['issue']
+    assert '2 items repeatedly lost sales' in out['explanation']
+    assert '\u00a3560.00' in out['explanation']
+    assert '\u00a3157.50' in out['explanation']
+    assert '45.0% of lost sales in this Monday Morning (6am-12pm) slot' in out['explanation']
+    assert '12.5% of total lost sales in PRODUCE' in out['explanation']
+    assert 'trend is increasing' in out['explanation']
+    assert 'APL001' in out['explanation']
+    assert '2025-W1' in out['explanation']
+    assert '\u00a3630.00' in out['cost_if_not_fixed']  # 157.5 * 4
+    assert 'Investigate operational drivers behind Monday Morning (6am-12pm)' in out['recommended_action']
+
+
+def test_osa_recurring_slot_narrative_without_optional_facts():
+    sig = _osa_recurring_slot()
+    sig['facts'] = {}
+    out = generate(sig)
+    _assert_card_keys(out)
+    assert '2 items repeatedly lost sales' in out['explanation']
+    assert 'recurring slot problem continues' in out['cost_if_not_fixed']
+
+
+# ---------------------------------------------------------------------------
 # Graceful handling of missing optional data
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize('builder', [_osa, _mdo, _waste, _sell, _sku])
+@pytest.mark.parametrize('builder', [_osa, _mdo, _waste, _waste_trim, _sell, _sku, _osa_recurring_slot])
 def test_defaults_do_not_raise(builder):
     out = generate(builder())
     _assert_card_keys(out)

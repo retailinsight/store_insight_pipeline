@@ -162,3 +162,17 @@ const data: MyRouteResponse = await response.json();
 - Production-ready with multiple deployment options
 - Comprehensive UI component library included
 - Type-safe API communication via shared interfaces
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Uses default triage labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Multi-context layout. See `docs/agents/domain.md`.

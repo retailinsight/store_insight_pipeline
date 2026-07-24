@@ -328,7 +328,7 @@ def generate(signal: dict, session) -> dict:
 
     try:
         result = session.sql(
-            f"SELECT SNOWFLAKE.CORTEX.COMPLETE('mistral-large', '{prompt_escaped}') AS RESPONSE"
+            f"SELECT SNOWFLAKE.CORTEX.COMPLETE('claude-haiku-4-5', '{prompt_escaped}') AS RESPONSE"
         ).collect()
         raw = result[0]['RESPONSE'].strip()
 

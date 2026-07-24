@@ -78,13 +78,14 @@ def test_required_contracts_handles_real_waste_dept_breakdown_gatherer():
 # discover_capabilities — filesystem
 # ---------------------------------------------------------------------------
 
-def test_discover_capabilities_for_eastofengland_returns_all_eight():
-    """EoE has all 8 contracts deployed in pipeline/adapters/eastofengland/."""
+def test_discover_capabilities_for_eastofengland_returns_all_nine():
+    """EoE has all 9 contracts deployed in pipeline/adapters/eastofengland/."""
     found = caps.discover_capabilities('eastofengland')
     assert found == {
         'osa', 'hierarchy', 'feedback',
         'markdown_log', 'markdown_sales', 'wastage',
-        'wmd_item_hierarchy', 'wmd_store_hierarchy',
+        'wmd_store_hierarchy', 'wmd_item_hierarchy',
+        'insight_feedback',
     }
 
 

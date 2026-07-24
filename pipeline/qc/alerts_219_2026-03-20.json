@@ -1,0 +1,168 @@
+[
+  {
+    "alert_id": "271a8e34bbc3b9de91b3f2596dfbcc58b745c631170447ed296b89e2f69405e3",
+    "alert_type": "WASTE_TRIM",
+    "store_id": 292,
+    "section": "FRUIT|4238",
+    "type": "WASTE_TRIM",
+    "trigger_types": [
+      "WASTE_TRIM"
+    ],
+    "short_long_term_label": "Structural",
+    "issue": "Manningtree Supermarket: CP BANANAS                in FRUIT sold 86.7% of its units at markdown this week",
+    "explanation": "1733 of 1998 units sold were at markdown (\u00a3502.57 markdown sales).\nAcross all stores, this item had 86.8% markdown sales.\nThe FRUIT department averaged 86.8% markdown sales this week.\nWeekly markdown ratio trend:\n\u2022 w/c 2026-02-23: 3370/3633 units (92.8%)\n\u2022 w/c 2026-03-02: 3383/3624 units (93.3%)\n\u2022 w/c 2026-03-09: 2238/2496 units (89.7%)\n\u2022 w/c 2026-03-16: 1047/1238 units (84.6%)",
+    "cost_if_not_fixed": "If this item continues to rely on markdown clearance, it risks losing approximately \u00a3502.57 in full-price sales potential each week.",
+    "recommended_action": "Review ranging and ordering for CP BANANAS                in FRUIT. Check whether demand forecasting is overestimating sales or whether the store is receiving excess stock that can only clear at markdown.",
+    "sort_value": 0.2006,
+    "llm_prompt": null,
+    "signal_json": {
+      "signal_type": "WASTE_TRIM",
+      "merge_key": [
+        "WASTE_TRIM",
+        292,
+        4238
+      ],
+      "store_id": 292,
+      "site_name": "Manningtree Supermarket",
+      "item_id": 4238,
+      "item_description": "CP BANANAS               ",
+      "department": "FRUIT",
+      "section": "FRUIT|4238",
+      "trigger_types": [
+        "WASTE_TRIM"
+      ],
+      "markdown_units": 1733,
+      "total_units": 1998,
+      "markdown_ratio": 0.8674,
+      "markdown_value": 502.57,
+      "projected_cost": 502.57,
+      "score": 0.2006
+    },
+    "facts_json": {
+      "chain_markdown_ratio": 0.8681,
+      "dept_markdown_ratio": 0.8681,
+      "weekly_trend": [
+        {
+          "week_start": "2026-02-16",
+          "markdown_units": 818.0,
+          "total_units": 1056.0,
+          "ratio": 0.7746
+        },
+        {
+          "week_start": "2026-02-23",
+          "markdown_units": 3370.0,
+          "total_units": 3633.0,
+          "ratio": 0.9276
+        },
+        {
+          "week_start": "2026-03-02",
+          "markdown_units": 3383.0,
+          "total_units": 3624.0,
+          "ratio": 0.9335
+        },
+        {
+          "week_start": "2026-03-09",
+          "markdown_units": 2238.0,
+          "total_units": 2496.0,
+          "ratio": 0.8966
+        },
+        {
+          "week_start": "2026-03-16",
+          "markdown_units": 1047.0,
+          "total_units": 1238.0,
+          "ratio": 0.8457
+        }
+      ]
+    }
+  },
+  {
+    "alert_id": "86f5cb1c1ea9eb62ead41caeedd8dd61e109c270456df6eed7e3437b180785bb",
+    "alert_type": "WASTE_TRIM",
+    "store_id": 292,
+    "section": "IN-STORE BAKERY|1079",
+    "type": "WASTE_TRIM",
+    "trigger_types": [
+      "WASTE_TRIM"
+    ],
+    "short_long_term_label": "Structural",
+    "issue": "Manningtree Supermarket: CP VANILLA CROWN DANISH   in IN-STORE BAKERY sold 78.1% of its units at markdown this week",
+    "explanation": "25 of 32 units sold were at markdown (\u00a325.00 markdown sales).",
+    "cost_if_not_fixed": "If this item continues to rely on markdown clearance, it risks losing approximately \u00a325.00 in full-price sales potential each week.",
+    "recommended_action": "Review ranging and ordering for CP VANILLA CROWN DANISH   in IN-STORE BAKERY. Check whether demand forecasting is overestimating sales or whether the store is receiving excess stock that can only clear at markdown.",
+    "sort_value": 0.0813,
+    "llm_prompt": null,
+    "signal_json": {
+      "signal_type": "WASTE_TRIM",
+      "merge_key": [
+        "WASTE_TRIM",
+        292,
+        1079
+      ],
+      "store_id": 292,
+      "site_name": "Manningtree Supermarket",
+      "item_id": 1079,
+      "item_description": "CP VANILLA CROWN DANISH  ",
+      "department": "IN-STORE BAKERY",
+      "section": "IN-STORE BAKERY|1079",
+      "trigger_types": [
+        "WASTE_TRIM"
+      ],
+      "markdown_units": 25,
+      "total_units": 32,
+      "markdown_ratio": 0.7812,
+      "markdown_value": 25.0,
+      "projected_cost": 25.0,
+      "score": 0.0813
+    },
+    "facts_json": {
+      "chain_markdown_ratio": null,
+      "dept_markdown_ratio": null,
+      "weekly_trend": []
+    }
+  },
+  {
+    "alert_id": "e97438e4336c6c2a1da5f7f40edc195905c26eab0234b9d5200a115951467c8b",
+    "alert_type": "WASTE_TRIM",
+    "store_id": 292,
+    "section": "IN-STORE BAKERY|317",
+    "type": "WASTE_TRIM",
+    "trigger_types": [
+      "WASTE_TRIM"
+    ],
+    "short_long_term_label": "Structural",
+    "issue": "Manningtree Supermarket: CP LBU PRTGSE CUSTRD TRT  in IN-STORE BAKERY sold 47.8% of its units at markdown this week",
+    "explanation": "11 of 23 units sold were at markdown (\u00a38.69 markdown sales).",
+    "cost_if_not_fixed": "If this item continues to rely on markdown clearance, it risks losing approximately \u00a38.69 in full-price sales potential each week.",
+    "recommended_action": "Review ranging and ordering for CP LBU PRTGSE CUSTRD TRT  in IN-STORE BAKERY. Check whether demand forecasting is overestimating sales or whether the store is receiving excess stock that can only clear at markdown.",
+    "sort_value": 0.0772,
+    "llm_prompt": null,
+    "signal_json": {
+      "signal_type": "WASTE_TRIM",
+      "merge_key": [
+        "WASTE_TRIM",
+        292,
+        317
+      ],
+      "store_id": 292,
+      "site_name": "Manningtree Supermarket",
+      "item_id": 317,
+      "item_description": "CP LBU PRTGSE CUSTRD TRT ",
+      "department": "IN-STORE BAKERY",
+      "section": "IN-STORE BAKERY|317",
+      "trigger_types": [
+        "WASTE_TRIM"
+      ],
+      "markdown_units": 11,
+      "total_units": 23,
+      "markdown_ratio": 0.4783,
+      "markdown_value": 8.69,
+      "projected_cost": 8.69,
+      "score": 0.0772
+    },
+    "facts_json": {
+      "chain_markdown_ratio": null,
+      "dept_markdown_ratio": null,
+      "weekly_trend": []
+    }
+  }
+]

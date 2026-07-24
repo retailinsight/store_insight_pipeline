@@ -86,8 +86,8 @@ class TestLoadConfigBaseOnly:
           markdown_log: "{database}.{schema}.MARKDOWN_LOG_V1"
           markdown_sales: "{database}.{schema}.MARKDOWN_SALES_V1"
           wastage: "{database}.{schema}.WASTAGE_V1"
-          wmd_item_hierarchy: "{database}.{schema}.WMD_ITEM_HIERARCHY_V1"
-          wmd_store_hierarchy: "{database}.{schema}.WMD_STORE_HIERARCHY_V1"
+          store_hierarchy:     "{database}.{schema}.WMD_STORE_HIERARCHY_V1"
+          wmd_hierarchy:       "{database}.{schema}.WMD_ITEM_HIERARCHY_V1"
         output:
           alerts: "{database}.{schema}.ALERTS_PIPELINE"
           signals: "{database}.{schema}.ALERTS_SIGNALS"
@@ -208,8 +208,8 @@ class TestLoadConfigWithClient:
           markdown_log: "{database}.{schema}.MARKDOWN_LOG_V1"
           markdown_sales: "{database}.{schema}.MARKDOWN_SALES_V1"
           wastage: "{database}.{schema}.WASTAGE_V1"
-          wmd_item_hierarchy: "{database}.{schema}.WMD_ITEM_HIERARCHY_V1"
-          wmd_store_hierarchy: "{database}.{schema}.WMD_STORE_HIERARCHY_V1"
+          store_hierarchy:     "{database}.{schema}.WMD_STORE_HIERARCHY_V1"
+          wmd_hierarchy:       "{database}.{schema}.WMD_ITEM_HIERARCHY_V1"
         output:
           alerts: "{database}.{schema}.ALERTS_PIPELINE"
           top_n_per_store: 10
@@ -360,8 +360,8 @@ class TestEnvLoading:
           markdown_log: "{database}.{schema}.MARKDOWN_LOG_V1"
           markdown_sales: "{database}.{schema}.MARKDOWN_SALES_V1"
           wastage: "{database}.{schema}.WASTAGE_V1"
-          wmd_item_hierarchy: "{database}.{schema}.WMD_ITEM_HIERARCHY_V1"
-          wmd_store_hierarchy: "{database}.{schema}.WMD_STORE_HIERARCHY_V1"
+          store_hierarchy:     "{database}.{schema}.WMD_STORE_HIERARCHY_V1"
+          wmd_hierarchy:       "{database}.{schema}.WMD_ITEM_HIERARCHY_V1"
         output:
           alerts: "{database}.{schema}.ALERTS_PIPELINE"
           top_n_per_store: 10

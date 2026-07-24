@@ -15,9 +15,17 @@ OSA:
   name: osa
   description: projected_cost = this_week_lsv (direct £ — no DB query)
 
+OSA_RECURRING_SLOT:
+  name: osa_recurring_slot
+  description: projected_cost = avg_weekly_lsv × projection_weeks
+
 WASTE:
   name: waste
   description: projected_cost = this_week_waste_value (direct £ — no DB query)
+
+WASTE_TRIM:
+  name: waste_trim
+  description: projected_cost = markdown_value (total £ markdown sales for the flagged store-item this week)
 
 MARKDOWN_SELLTHROUGH:
   name: markdown_sellthrough

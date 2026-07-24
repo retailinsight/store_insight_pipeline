@@ -32,8 +32,8 @@ def test_discover_sql_files_returns_all_for_eastofengland():
     stems = sorted(f.stem for f in files)
     # Mirrors the contracts shipped in pipeline/contracts/.
     assert stems == [
-        'feedback', 'hierarchy', 'markdown_log', 'markdown_sales',
-        'osa', 'wastage', 'wmd_item_hierarchy', 'wmd_store_hierarchy',
+        'feedback', 'hierarchy', 'insight_feedback', 'markdown_log',
+        'markdown_sales', 'osa', 'store_hierarchy', 'wastage', 'wmd_hierarchy',
     ]
 
 

@@ -69,6 +69,14 @@ columns:
       gatherer reads it.  Kept on the contract for forward compatibility;
       adapters that omit it will not break the pipeline.
 
+  REPORTING_PERIOD_ID:
+    type: NUMBER
+    required: false
+    description: |
+      Optional reporting-period identifier (e.g. 1 = morning, 2 = afternoon,
+      3 = evening). Required by the `osa_item_time_patterns` fact gatherer;
+      adapters that omit it cause that gatherer to skip silently.
+
 # Canonical joins — how the pipeline enriches this contract with related ones.
 # Used by the validator and MCP discovery tools; cardinality is declarative only
 # (we don't enforce it at runtime, but adapter authors should honour it).

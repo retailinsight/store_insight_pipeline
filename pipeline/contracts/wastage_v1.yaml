@@ -31,7 +31,7 @@ columns:
     required: true
     description: |
       Item identifier (UPC).  Required because the department-breakdown gatherer
-      joins waste rows to wmd_hierarchy via this column; rows with
+      joins waste rows to wmd_item_hierarchy via this column; rows with
       NULL UPC would silently drop out of departmental breakdowns.
       Waste detectors that aggregate at store/week grain will simply ignore
       this column.
@@ -72,12 +72,12 @@ columns:
       future segmentation.
 
 joins:
-  - contract: wmd_hierarchy
+  - contract: wmd_item_hierarchy
     cardinality: many_to_one
     match:
       UPC: UPC
     purpose: Resolve department for department-breakdown gatherer.
-  - contract: store_hierarchy
+  - contract: wmd_store_hierarchy
     cardinality: many_to_one
     match:
       STORE_ID: STORE_ID

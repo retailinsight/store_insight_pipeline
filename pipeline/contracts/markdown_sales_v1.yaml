@@ -28,7 +28,7 @@ columns:
   UPC:
     type: NUMBER
     required: true
-    description: Item sold (UPC); joins to wmd_hierarchy.
+    description: Item sold (UPC); joins to wmd_item_hierarchy.
 
   DATE:
     type: DATE
@@ -62,12 +62,12 @@ columns:
       today's load_wmd() — see the SQL view for the alias.
 
 joins:
-  - contract: wmd_hierarchy
+  - contract: wmd_item_hierarchy
     cardinality: many_to_one
     match:
       UPC: UPC
     purpose: Resolve item name and department for narrative output.
-  - contract: store_hierarchy
+  - contract: wmd_store_hierarchy
     cardinality: many_to_one
     match:
       STORE_ID: STORE_ID

@@ -1,10 +1,6 @@
 # Contract: feedback (v1)
 # ========================
-# Per-intervention feedback on previously-shipped alerts.  Used exclusively
-# by the TICK_AND_FLICK compliance detector and its breakdown gatherer.
-#
-# Today's reference: ANALYSIS.FINAL.LSM_ALERT_FEEDBACK (East of England),
-# loaded with a two-week filter in pipeline/pipeline/run_batch.py load_feedback().
+
 
 name: feedback
 version: v1

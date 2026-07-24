@@ -29,7 +29,7 @@ columns:
     type: NUMBER
     required: true
     description: |
-      Item identifier (UPC).  Joins many-to-one to wmd_hierarchy.UPC for
+      Item identifier (UPC).  Joins many-to-one to wmd_item_hierarchy.UPC for
       department names and item descriptions.
 
   DATE:
@@ -84,14 +84,14 @@ columns:
       Not currently filtered on; useful for future segmentation.
 
 joins:
-  - contract: wmd_hierarchy
+  - contract: wmd_item_hierarchy
     cardinality: many_to_one
     match:
       UPC: UPC
     purpose: |
       Resolve ITEM_DESCRIPTION and DEPARTMENT for narrative output and
       department-level breakdowns.
-  - contract: store_hierarchy
+  - contract: wmd_store_hierarchy
     cardinality: many_to_one
     match:
       STORE_ID: STORE_ID

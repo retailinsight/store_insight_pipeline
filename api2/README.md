@@ -34,8 +34,13 @@ package — both are separate entry points in this repo.
 
 ### 1. Install dependencies
 
-```bash
-pip install -r requirements.txt
+Use a dedicated venv — this service's pinned deps (e.g. `pydantic==2.7.1`)
+conflict with `mcp/` and other services in the repo.
+
+```powershell
+cd api2
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
 ### 2. Configure credentials
@@ -49,9 +54,9 @@ Required variables — see [Configuration](#configuration) for the full list.
 
 ### 3. Start the API locally
 
-```bash
+```powershell
 # From the api2/ directory:
-uvicorn app.main:app --reload --port 8000
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 ```
 
 Requests to `/data/*` and `/auth/*` must include `X-API-Key: <value>` matching

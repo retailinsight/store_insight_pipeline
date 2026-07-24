@@ -66,10 +66,18 @@ def investigate(signal: dict, session=None, cfg: dict = None) -> dict:
     dict with keys: issue, explanation, cost_if_not_fixed, recommended_action
     """
     signal_type = signal.get('signal_type', '')
-    inv_cfg     = getattr(cfg, 'investigation', None) if cfg else None
+    if cfg is None:
+        inv_cfg = None
+    elif isinstance(cfg, dict):
+        inv_cfg = cfg.get('investigation')
+    else:
+        inv_cfg = getattr(cfg, 'investigation', None)
     type_config = None
     if inv_cfg is not None:
-        type_config = getattr(inv_cfg, signal_type, None)
+        if isinstance(inv_cfg, dict):
+            type_config = inv_cfg.get(signal_type)
+        else:
+            type_config = getattr(inv_cfg, signal_type, None)
     if type_config is None:
         type_config = SIGNAL_TYPE_MAP.get(signal_type, {})
     engine_name = type_config.get('engine', 'rule_based') if isinstance(type_config, dict) else getattr(type_config, 'engine', 'rule_based')

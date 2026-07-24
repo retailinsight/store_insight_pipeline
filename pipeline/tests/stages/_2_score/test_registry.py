@@ -10,7 +10,7 @@ from store_insight.pipeline.stages._2_score import registry
 from store_insight.pipeline.stages._2_score.config import ScorerInfo
 
 EXPECTED_SCORERS = {
-    'osa', 'waste', 'markdown_sellthrough',
+    'osa', 'osa_recurring_slot', 'waste', 'waste_trim', 'markdown_sellthrough',
     'markdown_override', 'markdown_sku', 'compliance',
 }
 
@@ -38,8 +38,8 @@ def test_every_scorer_has_metadata():
 
 def test_signal_type_scorers_covers_all_types():
     assert set(registry.SIGNAL_TYPE_SCORERS.keys()) == {
-        'OSA', 'WASTE', 'MARKDOWN_SELLTHROUGH',
-        'MARKDOWN_OVERRIDE', 'MARKDOWN_SKU', 'COMPLIANCE',
+        'OSA', 'OSA_RECURRING_SLOT', 'WASTE', 'WASTE_TRIM',
+        'MARKDOWN_SELLTHROUGH', 'MARKDOWN_OVERRIDE', 'MARKDOWN_SKU', 'COMPLIANCE',
     }
 
 
@@ -57,6 +57,13 @@ def test_signal_only_scorers_have_no_gather():
         assert not callable(getattr(mod, 'gather', None)), (
             f'{stype} scorer has a gather() but should read from the signal dict only'
         )
+
+
+def test_osa_recurring_slot_scorer_has_gather():
+    mod = registry.SIGNAL_TYPE_SCORERS['OSA_RECURRING_SLOT']
+    assert callable(getattr(mod, 'gather', None)), (
+        'OSA_RECURRING_SLOT scorer must expose gather() for projection_weeks'
+    )
 
 
 def test_unknown_yaml_entry_raises_import_error(tmp_path):
