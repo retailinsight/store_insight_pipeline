@@ -103,6 +103,11 @@ data_quality_findings:
       English even for non-English customers — the rest of the pipeline
       treats this as an opaque grouping key, not display text.
 
+checks:
+  - column: ITEM_DESCRIPTION
+    rule: no_nulls
+    severity: medium
+
 notes: |
   - The EoE source is snapshot-based (multiple rows per VME_CODE differing
     only by FILE_TIMESTAMP).  The adapter view must deduplicate to the

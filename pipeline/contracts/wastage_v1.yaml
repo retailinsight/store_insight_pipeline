@@ -97,6 +97,16 @@ data_quality_findings:
       DECIMAL(38,2) which casts cleanly; other sources may have it as
       VARCHAR — adapter must cast.
 
+freshness_max_age_days: 1
+
+checks:
+  - column: WASTE_QUANTITY
+    rule: positive
+    severity: medium
+  - column: ORIGINAL_PRICE
+    rule: no_nulls
+    severity: medium
+
 notes: |
   - The original WMD_WASTAGE table has a FINAL_PRICE column that was
     intended to discriminate "straight-to-bin" disposals from

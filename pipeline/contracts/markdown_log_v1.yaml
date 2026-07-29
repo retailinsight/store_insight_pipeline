@@ -112,6 +112,18 @@ data_quality_findings:
       sources store this as text or as a decimal fraction; adapter views
       must normalise to whole-percent integers.
 
+freshness_max_age_days: 1
+
+checks:
+  - column: IS_OVERRIDDEN
+    rule: boolean_strict
+    severity: high
+  - column: MARKDOWN_PERCENTAGE
+    rule: range
+    min: 0
+    max: 100
+    severity: medium
+
 notes: |
   - The pipeline's load_wmd applies a 4-week lookback filter.  Adapter
     views should expose all rows; filtering happens in Python.

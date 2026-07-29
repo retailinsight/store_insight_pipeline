@@ -87,6 +87,13 @@ data_quality_findings:
       authors should always quote it ("DATE") in their view DDL to avoid
       ambiguity.
 
+freshness_max_age_days: 1
+
+checks:
+  - column: MARKDOWN_QUANTITY
+    rule: positive
+    severity: medium
+
 notes: |
   - Pipeline applies the same 4-week lookback as markdown_log.
   - To combine markdown sales with OSA actual sales, join through the WMD

@@ -92,6 +92,13 @@ data_quality_findings:
       Adapter authors may prefer to NULL this and rely on a join to
       store_hierarchy for current names.
 
+freshness_max_age_days: 1
+
+checks:
+  - column: TICK_AND_FLICK_FLAG
+    rule: boolean_strict
+    severity: high
+
 notes: |
   - Pipeline window is exactly two weeks; older feedback is invisible.
   - This contract intentionally does NOT join to a store hierarchy — SITE_NAME

@@ -107,6 +107,18 @@ data_quality_findings:
       EoE adapter selects it.  Keep it available to avoid future adapter
       churn; no need to backfill it for new customers if missing from source.
 
+freshness_max_age_days: 1
+
+checks:
+  - column: LOST_SALES_VALUE
+    rule: min_value
+    value: 0
+    severity: high
+  - column: LOST_SALES_VOLUME
+    rule: min_value
+    value: 0
+    severity: high
+
 # Free-text notes for adapter authors.  Not validated.
 notes: |
   - Pipeline filters this contract by DATE windows of up to ~10

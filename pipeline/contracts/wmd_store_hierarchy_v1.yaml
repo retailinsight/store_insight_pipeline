@@ -54,6 +54,11 @@ data_quality_findings:
       store name is missing.  Adapter views should COALESCE to a
       sensible fallback (e.g. 'Store ' || STORE_ID::VARCHAR).
 
+checks:
+  - column: STORE_NAME
+    rule: no_nulls
+    severity: medium
+
 notes: |
   - This contract intentionally keeps the column set narrow — fields like
     SQUARE_FOOTAGE, NUMBER_OF_BASKETS, POSTCODE etc. exist in the EoE

@@ -85,6 +85,11 @@ data_quality_findings:
       match, marking the signal as unresolved when it was actually
       resolved.
 
+checks:
+  - column: SECTION
+    rule: no_empty_strings
+    severity: high
+
 notes: |
   - This contract intentionally has no joins.  The outcome measurement
     stage joins it to the alerts table via ALERT_ID at runtime.
