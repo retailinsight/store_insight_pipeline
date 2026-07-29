@@ -16,6 +16,7 @@ Usage (library):
 from __future__ import annotations
 
 import datetime
+import json as _json
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -55,6 +56,72 @@ class HealthReport:
         lines = [f"Data Health Report — {self.metadata.get('analysis_date', '?')}"]
         lines.append(f"Findings: {len(self.findings)}")
         return '\n'.join(lines)
+
+    def to_markdown(self) -> str:
+        """Render the report as a Markdown document."""
+        ad = self.metadata.get('analysis_date', '?')
+        lines: list[str] = [f'# Data Health Report — {ad}', '']
+
+        if not self.findings:
+            lines.append('No findings.')
+            return '\n'.join(lines)
+
+        # Group findings by contract
+        by_contract: dict[str, list[dict]] = {}
+        for f in self.findings:
+            by_contract.setdefault(f.get('contract', 'unknown'), []).append(f)
+
+        lines.append(f'**Total findings: {len(self.findings)}**')
+        lines.append('')
+
+        for contract_name, findings in by_contract.items():
+            lines.append(f'## {contract_name}')
+            lines.append('')
+            lines.append('| Check | Severity | Details |')
+            lines.append('|-------|----------|---------|')
+            for f in findings:
+                check = f.get('check', '?')
+                severity = f.get('severity', '?')
+                details = self._finding_detail(f)
+                lines.append(f'| {check} | {severity} | {details} |')
+            lines.append('')
+
+        return '\n'.join(lines)
+
+    def to_json(self) -> str:
+        """Serialize the report as JSON."""
+        return _json.dumps({
+            'metadata': self.metadata,
+            'findings': self.findings,
+            'sql_statements': self.sql_statements,
+        }, indent=2, default=str)
+
+    @staticmethod
+    def _finding_detail(f: dict) -> str:
+        """Build a human-readable detail string for a finding."""
+        check = f.get('check', '')
+        if check == 'null_rate':
+            return f"column={f.get('column')}, count={f.get('count')}, rate={f.get('rate'):.2%}"
+        if check == 'grain_uniqueness':
+            return f"duplicates={f.get('duplicate_count')}, total={f.get('total')}"
+        if check == 'freshness':
+            return f"max_date={f.get('max_date')}, expected≥{f.get('expected_min_date')}"
+        if check == 'referential_integrity':
+            return f"target={f.get('target_contract')}, orphans={f.get('orphan_count')}, rate={f.get('orphan_rate'):.2%}"
+        if check == 'date_gaps':
+            return f"missing={f.get('missing_days')} days in [{f.get('window_start')}..{f.get('window_end')}]"
+        if check == 'domain_rule':
+            return f"column={f.get('column')}, rule={f.get('rule')}, violations={f.get('violation_count')}"
+        return str(f)
+
+
+def format_report(report: HealthReport, fmt: str = 'console') -> str:
+    """Format a HealthReport as console, markdown, or json."""
+    if fmt == 'markdown':
+        return report.to_markdown()
+    if fmt == 'json':
+        return report.to_json()
+    return str(report)
 
 
 # ---------------------------------------------------------------------------
