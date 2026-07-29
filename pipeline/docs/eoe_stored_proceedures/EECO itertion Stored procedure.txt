@@ -1,0 +1,941 @@
+USE [EECO_Reporting]
+GO
+/****** Object:  StoredProcedure [dbo].[sp_Iteration]    Script Date: 28/07/2026 12:24:57 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- =============================================
+-- Author:		<Beth Kirby>
+-- Create date: <March 24>
+-- Description:	<Md Sales & Waste by iteration>
+-- =============================================
+ALTER PROCEDURE [dbo].[sp_Iteration]
+
+AS
+BEGIN
+
+
+	DECLARE @ProcedureName VARCHAR(MAX)
+	DECLARE @StartTime DATETIME
+	DECLARE @EndTime DATETIME
+	DECLARE @RunTime Time
+	DECLARE @SystemUser VARCHAR(200)
+
+	SET @ProcedureName = 'sp_Iteration'
+	SET @StartTime = CAST(GetDATE() AS datetime)
+	SET @SystemUser = SYSTEM_USER
+
+
+------DATES--------
+IF OBJECT_ID('tempdb..#Dates') IS NOT NULL DROP TABLE #Dates
+SELECT WeekNbr
+		,Year
+		,Min(CalendarDate) AS MinDate
+		,Max(CalendarDate) AS MaxDate
+		,ROW_NUMBER() OVER(ORDER BY Year DESC, WeekNbr DESC) AS Rank
+INTO #Dates
+FROM [dbo].[Calendar]
+WHERE CalendarDate < GetDate()
+GROUP BY WeekNbr
+		,Year
+HAVING COUNT(*) = 7
+
+DECLARE @StartDate DATE = (SELECT MinDate FROM #Dates WHERE Rank = 4)
+DECLARE @EndDate DATE = (SELECT MaxDate FROM #Dates WHERE Rank = 1)
+
+
+------BRING IN ITEM INFORMATION--------
+IF OBJECT_ID('tempdb..#products') IS NOT NULL DROP TABLE #products
+SELECT i.ItemID
+		,i.Department AS DepartmentName
+		,i.Section AS CategoryName
+		,i.SubSection AS SubCategoryName
+		,p.PPGClusterID
+INTO #products
+FROM dbo.Item AS i
+	INNER JOIN dbo.PPGClusters AS p
+				ON p.ItemNumber = i.Itemid
+WHERE i.ItemID NOT IN (SELECT ItemID FROM EECO_Reporting.[dbo].[LooseItems])
+AND Department IN ('BAKERY', 'DELICATESSEN', 'FROZEN FOODS', 'FRUIT & VEGETABLES', 'GROC 2-EDIBLE', 'GROC 3 - SNACKING', 'IN-STORE BAKERY', 'MEAT & POULTRY', 'PROVISIONS DAIRY', 'PROVISIONS PREPARED', 'SOFT BEVERAGES')
+--Excluding Hot Food 30-10-2024 KL
+AND SubSection != 'Hot Food'
+AND Section != 'Hot Food'
+--Excluding Ingredients
+AND SubSection != 'INGREDIENTS'
+AND Itemid NOT in('5018028165897', '5037435005794', '5000128753081', '5016792000130', '5000128753708', '5000128611589', '7000000653575', '5000129333527', '5000129348514', '6191514336076'
+, '0000000056847', '7000000646829', '5037435084652', '5000129348583', '5000129350197', '7000022421909', '5037435005398', '5018028254003', '7000000646812', '7000000646843', '5000129313505'
+, '7000035353501', '5038794000635', '5037435005831', '5000129349948', '5018028165903', '5038794000314', '7000043234403', '7000002020214', '7000039920884', '5000128753944', '7000000601569'
+, '7000039920082', '0000000008963', '7000000609015', '5038794000413', '5000128753067', '5000129332391', '6191514333921', '7000007435303', '5000129331905', '5000128968751', '0000000009010'
+, '5037435005381', '5019312099201', '5000128753784', '5038794000642', '7000007941101', '5000128753760', '6191514336069', '7000000574283', '5019312099218', '5037435005244', '5038794000406'
+, '5037435005800', '5000128995245', '5000129360325', '5000129333510', '5000128753210', '5000129349870', '5000129348446', '5038794000291', '7000005770505', '7000000559396', '5000129313581'
+, '5037435004926', '7000039920099', '5037435002335', '5000129360332', '7000004040401', '5000128923774', '5000129348453', '5037435005732', '0000000008978', '5038794000604', '5000129350128'
+, '5000129348439', '5000129333398', '5000129350074', '5000128693592', '5000129349184', '7000001010124', '5037435005770', '7000007435105', '5000128611190', '6191514336083')
+
+------BRING IN STORE INFORMATION--------
+IF OBJECT_ID('tempdb..#AllStores') IS NOT NULL DROP TABLE #AllStores
+SELECT
+s.StoreID,
+s.StoreName
+INTO #AllStores
+FROM EECO_Reporting.dbo.Store AS s
+
+------BRING IN RAW DATA--------
+
+----MARKDOWN SALES
+IF OBJECT_ID('tempdb..#MarkdownSales_Raw') IS NOT NULL DROP TABLE #MarkdownSales_Raw
+SELECT	M.StoreID
+		,M.ItemID
+		,M.Date
+		,CONVERT(DateTIME, M.Date) + CONVERT(DateTime, M.Time) AS DateTime
+		,CAST(ROUND(MarkdownValue / MarkdownQuantity,2) AS decimal(7,2)) AS MarkdownValue
+		,CAST(ROUND(OriginalRetailPrice / MarkdownQuantity,2) AS decimal(7,2)) AS OriginalPrice
+		,CASE WHEN OriginalRetailPrice = 0 THEN 0 ELSE CAST(ROUND(100*((OriginalRetailPrice - MarkdownValue) / OriginalRetailPrice),2) AS decimal(7,2)) END  AS PctApplied
+		,SUM(CAST(ROUND(MarkdownQuantity,2) AS INT)) AS MarkdownQuantity
+INTO #MarkdownSales_Raw
+FROM [dbo].[MarkdownSales] M WITH (INDEX = CIX_MarkdownSales_Date_StoreID_ItemID)
+INNER JOIN
+	#products AS I
+ON M.ItemID = I.ItemID
+INNER JOIN
+	#AllStores AS S
+ON M.StoreID = S.StoreID
+WHERE M.Date BETWEEN @StartDate AND @EndDate
+AND NOT (M.StoreID IN (502, 291) AND Date >= '2024-12-08')
+AND NOT (M.StoreID IN (504) AND Date >= '2025-03-23')
+AND NOT (m.StoreID IN (411) AND Date BETWEEN '2025-05-10' AND '2025-06-05') --Closed for refit
+AND NOT (m.StoreID IN (421) AND Date BETWEEN '2025-05-24' AND '2025-06-11') --Closed for refit
+AND NOT (m.StoreID = 427 AND Date >= '2025-06-17') --Closed store
+and not (m.StoreID in (411) and m.ItemID in ('5000128271417','5000129299410') and date between '2025-08-10' and '2025-08-11') --product has no cost
+AND OriginalRetailPrice != 0 
+GROUP BY M.StoreID
+		,M.ItemID
+		,M.Date
+		,CONVERT(DateTIME, M.Date) + CONVERT(DateTime, M.Time)
+		,MarkdownValue / MarkdownQuantity 
+		,OriginalRetailPrice / MarkdownQuantity 
+		,CASE WHEN OriginalRetailPrice = 0 THEN 0 ELSE CAST(ROUND(100*((OriginalRetailPrice - MarkdownValue) / OriginalRetailPrice),2) AS decimal(7,2)) END
+
+
+
+-----WASTE
+IF OBJECT_ID('tempdb..#Waste_Raw') IS NOT NULL DROP TABLE #Waste_Raw
+SELECT W.*
+INTO #Waste_Raw
+FROM [Waste_EECO].[dbo].[Wastage] W WITH (INDEX = CIX_Wastage_Date_StoreID_ItemID)
+INNER JOIN
+	#products AS I
+ON W.EAN = I.ItemID
+INNER JOIN
+	#AllStores AS S
+ON W.StoreID = S.StoreID
+WHERE W.Date BETWEEN @StartDate AND @EndDate
+AND WasteReason IN ('OUT OF DATE','TOO GOOD TO GO','AFTER BEST BEFORE DATE')
+AND NOT (W.StoreID IN (502, 291) AND Date >= '2024-12-08')
+AND NOT (W.StoreID IN (504) AND Date >= '2025-03-23')
+AND NOT (W.StoreID IN (411) AND Date BETWEEN '2025-05-10' AND '2025-06-05') --Closed for refit
+AND NOT (W.StoreID IN (421) AND Date BETWEEN '2025-05-24' AND '2025-06-11') --Closed for refit
+AND NOT (W.StoreID = 427 AND Date >= '2025-06-17') --Closed store
+and not (w.StoreID in (411) and i.ItemID in ('5000128271417','5000129299410') and date between '2025-08-10' and '2025-08-11') --product has no cost
+
+-----MARKDOWN LOG
+IF OBJECT_ID('tempdb..#MarkdownLog') IS NOT NULL DROP TABLE #MarkdownLog
+SELECT A.*, I.DepartmentName, I.CategoryName
+,CAST([LocalTime] AT TIME ZONE 'UTC' AT TIME ZONE 'GMT Standard Time' AS datetime) AS LocalTimeNew
+,o.MinDaysToExpiry
+INTO #MarkdownLog
+FROM 
+	[dbo].[MarkdownLogConverted] AS A WITH (INDEX = CIX_MarkdownLogConverted_LocalDate)
+INNER JOIN
+	#products AS I
+ON A.ItemID = I.ItemID
+INNER JOIN
+	#AllStores AS S
+ON A.StoreID = S.StoreID
+INNER JOIN [dbo].[OnShowOffShowRules] O
+ON O.ItemNumber = A.ItemID
+WHERE LocalDate BETWEEN DATEADD(DAY, -7, @StartDate) AND @EndDate
+And MarkdownIteration IS NOT NULL
+AND NOT (A.StoreID IN (502, 291) AND LocalDate >= '2024-12-08')
+AND NOT (A.StoreID IN (504) AND LocalDate >= '2025-03-23')
+AND NOT (A.StoreID IN (411) AND LocalDate BETWEEN '2025-05-10' AND '2025-06-05') --Closed for refit
+AND NOT (A.StoreID IN (421) AND LocalDate BETWEEN '2025-05-24' AND '2025-06-11') --Closed for refit
+AND NOT (A.StoreID = 427 AND LocalDate >= '2025-06-17') --Closed store
+and not (a.StoreID in (411) and a.ItemID in ('5000128271417','5000129299410') and LocalDate between '2025-08-10' and '2025-08-11') --product has no cost
+
+
+--------END OF RAW DATA IMPORT----------
+
+---Create ranking table of iterations
+
+IF OBJECT_ID('tempdb..#Ranking') IS NOT NULL DROP TABLE #Ranking
+SELECT B.*
+		,lead(B.MinLocalTime) OVER(Partition by ItemID, StoreID, ExpiryDate,OriginalPrice ORDER BY Rank) AS NextMarkdownTime
+INTO #Ranking
+FROM (
+SELECT	ItemID
+		--,Barcode
+		,StoreID
+		,DepartmentName
+		,CategoryName
+		,ExpiryDate
+		,OriginalPrice
+		,MarkdownToPrice
+		,MarkdownPercentage
+		,ExpiryTime
+		,Rank
+		,STRING_AGG(MarkdownType, ', ') WITHIN GROUP (order by MarkdownType) AS MarkdownType
+		,Min(MinLocalTime) AS MinLocalTime
+		,Max(MaxLocalTime) AS MaxLocalTime
+		,MAX(MarkdownIteration) AS MarkdownIteration
+		,SUM(QtyMarkdown) AS QtyMarkdown
+		,SUM(CountOfRows) AS CountOfRows
+FROM (
+	SELECT	ItemID
+			--,Barcode
+			,StoreID
+			,DepartmentName
+			,CategoryName
+			,DATEADD(DAY, -MinDaysToExpiry, CAST(ExpiryTime AS Date)) AS ExpiryDate
+			,OriginalPrice
+			,MarkdownToPrice
+			,MarkdownPercentage
+			,DATEADD(DAY, -MinDaysToExpiry, DATETIMEFROMPARTS(Year(ExpiryTime), Month(ExpiryTime), Day(ExpiryTime), 23, 59, 59,0)) AS ExpiryTime
+			,CASE WHEN MarkdownType LIKE '%Damaged%' THEN 'Damaged' ELSE MarkdownType END AS MarkdownType
+			,Rank() OVER (PARTITION BY ItemID, StoreID, CAST(ExpiryTime AS Date), OriginalPrice ORDER BY MarkdownToPrice DESC) AS Rank
+			,Min(LocalTimeNew) AS MinLocalTime
+			,Max(LocalTimeNew) AS MaxLocalTime
+			,MAX(MarkdownIteration) AS MarkdownIteration
+			,SUM(QtyMarkdown) AS QtyMarkdown
+			,COUNT(*) AS CountOfRows
+	FROM
+		#MarkdownLog
+	GROUP BY ItemID
+			--,Barcode
+			,StoreID
+			,DepartmentName
+			,CategoryName
+			,DATEADD(DAY, -MinDaysToExpiry, CAST(ExpiryTime AS Date))
+			,OriginalPrice
+			,MarkdownToPrice
+			,MarkdownPercentage
+			,CASE WHEN MarkdownType LIKE '%Damaged%' THEN 'Damaged' ELSE MarkdownType END
+			,DATEADD(DAY, -MinDaysToExpiry, DATETIMEFROMPARTS(Year(ExpiryTime), Month(ExpiryTime), Day(ExpiryTime), 23, 59, 59,0))
+			,ExpiryTime
+	) A
+GROUP BY ItemID
+		--,Barcode
+		,StoreID
+		,DepartmentName
+		,CategoryName
+		,ExpiryDate
+		,OriginalPrice
+		,MarkdownToPrice
+		,MarkdownPercentage
+		,Rank
+		,ExpiryTime
+		--,CountOfRows
+)B
+
+DELETE FROM [dbo].[MarkdownPercentageByIteration]
+WHERE Date >= (SELECT MinDate FROM #Dates WHERE Rank = 4)
+
+INSERT INTO [dbo].[MarkdownPercentageByIteration]
+SELECT ItemID
+		,StoreID
+		,CAST(MinLocalTime AS Date) AS Date
+		,CASE WHEN Rank < 3 THEN Rank ELSE 3 END AS MarkdownIteration
+		,markdownPercentage
+		,COUNT(*) AS CountOfInstances
+--INTO [dbo].[MarkdownPercentageByIteration]
+FROM #Ranking
+GROUP BY ItemID
+		,StoreID
+		,CAST(MinLocalTime AS Date) 
+		,CASE WHEN Rank < 3 THEN Rank ELSE 3 END
+		,markdownPercentage
+
+
+----Create view of markdown log by iteration
+
+IF OBJECT_ID('tempdb..#MarkdownsByIteration_Initial') IS NOT NULL DROP TABLE #MarkdownsByIteration_Initial
+SELECT	A.ExpiryDate
+		,A.ItemID
+		,A.StoreID
+		,A.OriginalPrice
+		,A.DepartmentName
+		,A.CategoryName
+		,A.ExpiryTime
+		,M1.MarkdownIteration AS MarkdownIteration_at_1
+		,M1.MinLocalTime AS MarkdownTime_at_1
+		,M1.MarkdownToPrice AS MarkdownToPrice_at_1
+		,M1.MarkdownPercentage AS MarkdownPercentage_at_1
+		,M1.QtyMarkdown AS QtyMarkdown_at_1
+		,M1.MarkdownType AS MarkdownType_at_1
+		,M2.MarkdownIteration AS MarkdownIteration_at_2
+		,M2.MinLocalTime AS MarkdownTime_at_2
+		,M2.MarkdownToPrice AS MarkdownToPrice_at_2
+		,M2.MarkdownPercentage AS MarkdownPercentage_at_2
+		,M2.QtyMarkdown AS QtyMarkdown_at_2
+		,M2.MarkdownType AS MarkdownType_at_2
+		,M3.MarkdownIteration AS MarkdownIteration_at_3
+		,M3.MinLocalTime AS MarkdownTime_at_3
+		,M3.MarkdownToPrice AS MarkdownToPrice_at_3
+		,M3.MarkdownPercentage AS MarkdownPercentage_at_3
+		,M3.QtyMarkdown AS QtyMarkdown_at_3
+		,M3.MarkdownType AS MarkdownType_at_3
+		,M4.MarkdownIteration AS MarkdownIteration_at_4
+		,M4.MinLocalTime AS MarkdownTime_at_4
+		,M4.MarkdownToPrice AS MarkdownToPrice_at_4
+		,M4.MarkdownPercentage AS MarkdownPercentage_at_4
+		,M4.QtyMarkdown AS QtyMarkdown_at_4
+		,M4.MarkdownType AS MarkdownType_at_4
+		,M5.MarkdownIteration AS MarkdownIteration_at_5
+		,M5.MinLocalTime AS MarkdownTime_at_5
+		,M5.MarkdownToPrice AS MarkdownToPrice_at_5
+		,M5.MarkdownPercentage AS MarkdownPercentage_at_5
+		,M5.QtyMarkdown AS QtyMarkdown_at_5
+		,M5.MarkdownType AS MarkdownType_at_5
+		,Rank() OVER (PARTITION BY A.ItemID, A.StoreID, CAST(M1.MinLocalTime AS Date), A.OriginalPrice, M1.MarkdownToPrice ORDER BY M1.MinLocalTime) AS RankIteration1
+		,Rank() OVER (PARTITION BY A.ItemID, A.StoreID, CAST(M2.MinLocalTime AS Date), A.OriginalPrice, M1.MarkdownToPrice ORDER BY M2.MinLocalTime) AS RankIteration2
+		,Rank() OVER (PARTITION BY A.ItemID, A.StoreID, CAST(M3.MinLocalTime AS Date), A.OriginalPrice, M1.MarkdownToPrice ORDER BY M3.MinLocalTime) AS RankIteration3
+		,Rank() OVER (PARTITION BY A.ItemID, A.StoreID, CAST(M4.MinLocalTime AS Date), A.OriginalPrice, M1.MarkdownToPrice ORDER BY M4.MinLocalTime) AS RankIteration4
+		,Rank() OVER (PARTITION BY A.ItemID, A.StoreID, CAST(M5.MinLocalTime AS Date), A.OriginalPrice, M1.MarkdownToPrice ORDER BY M5.MinLocalTime) AS RankIteration5
+INTO #MarkdownsByIteration_Initial
+FROM (SELECT ExpiryDate
+			,ExpiryTime
+			,ItemID
+			,StoreID
+			,OriginalPrice
+			,DepartmentName
+			,CategoryName
+		FROM #Ranking
+		GROUP BY ExpiryDate
+			,ExpiryTime
+			,ItemID
+			,StoreID
+			,OriginalPrice
+			,DepartmentName
+			,CategoryName
+) AS A
+LEFT JOIN
+	#Ranking AS M1
+ON M1.Rank = 1
+AND A.ExpiryDate = M1.ExpiryDate
+AND A.ItemID = M1.ItemID
+AND A.StoreID = M1.StoreID
+AND A.OriginalPrice = M1.OriginalPrice
+
+LEFT JOIN
+	#Ranking AS M2
+ON M2.Rank = 2
+AND A.ExpiryDate = M2.ExpiryDate
+AND A.ItemID = M2.ItemID
+AND A.StoreID = M2.StoreID
+AND A.OriginalPrice = M2.OriginalPrice
+
+LEFT JOIN
+	#Ranking AS M3
+ON M3.Rank = 3
+AND A.ExpiryDate = M3.ExpiryDate
+AND A.ItemID = M3.ItemID
+AND A.StoreID = M3.StoreID
+AND A.OriginalPrice = M3.OriginalPrice
+
+LEFT JOIN
+	#Ranking AS M4
+ON M4.Rank = 4
+AND A.ExpiryDate = M4.ExpiryDate
+AND A.ItemID = M4.ItemID
+AND A.StoreID = M4.StoreID
+AND A.OriginalPrice = M4.OriginalPrice
+
+LEFT JOIN
+	#Ranking AS M5
+ON M5.Rank = 5
+AND A.ExpiryDate = M5.ExpiryDate
+AND A.ItemID = M5.ItemID
+AND A.StoreID = M5.StoreID
+AND A.OriginalPrice = M5.OriginalPrice
+
+
+----Start of straight to bin logic
+--Add markdown Index into MD by Iteration
+IF OBJECT_ID('tempdb..#MarkdownsByIteration') IS NOT NULL DROP TABLE #MarkdownsByIteration
+SELECT ExpiryDate
+		,ItemID
+		,StoreID
+		,OriginalPrice
+		,ExpiryTime
+		,MarkdownTime_at_1
+		,MarkdownToPrice_at_1
+		,QtyMarkdown_at_1
+		,MarkdownTime_at_2
+		,MarkdownToPrice_at_2
+		,QtyMarkdown_at_2
+		,MarkdownTime_at_3
+		,MarkdownToPrice_at_3
+		,QtyMarkdown_at_3
+		,MarkdownTime_at_4
+		,MarkdownToPrice_at_4
+		,QtyMarkdown_at_4
+		,MarkdownTime_at_5
+		,MarkdownToPrice_at_5
+		,QtyMarkdown_at_5
+		,row_number() OVER(ORDER BY StoreID, ItemID, ExpiryTime, MarkdownTime_at_1, QtyMarkdown_at_1, MarkdownToPrice_at_1) AS MarkdownIndex
+INTO #MarkdownsByIteration
+FROM #MarkdownsByIteration_Initial
+WHERE CAST(MarkdownTime_at_1 AS Date) >= '2024-01-08'
+
+--Add a MarkdownSale index
+IF OBJECT_ID('tempdb..#MarkdownSales') IS NOT NULL DROP TABLE #MarkdownSales
+SELECT	ItemID
+		,StoreID
+		,DateTime
+		,OriginalPrice
+		,MarkdownValue
+		,MarkdownQuantity
+		,row_number() OVER(ORDER BY StoreID, ItemID, DateTime, MarkdownQuantity, MarkdownValue) AS MarkdownSalesIndex
+INTO #MarkdownSales
+FROM #MarkdownSales_Raw
+
+---Insert duplicate rows into the sales table so we have 1 row for each sale
+DECLARE @MaxMarkdownQty INT = (SELECT Max(MarkdownQuantity) FROM #MarkdownSales)
+DECLARE @MkdQty INT = 2
+
+WHILE (@MkdQty <= @MaxMarkdownQty)
+BEGIN
+
+	INSERT INTO #MarkdownSales
+	SELECT DISTINCT *
+	FROM #MarkdownSales
+	WHERE MarkdownQuantity >= @MkdQty
+	
+	SET @MkdQty = @MkdQty + 1
+
+END
+--End of duplicate row addition
+
+IF OBJECT_ID('tempdb..#MarkdownSales_withDupes') IS NOT NULL DROP TABLE #MarkdownSales_withDupes
+SELECT	*
+		--,row_number() OVER(ORDER BY StoreID, ItemID, DateTime, MarkdownQuantity, MarkdownValue) AS MarkdownSalesIndex
+		,1 AS MarkdownQty_New
+INTO #MarkdownSales_WithDupes
+FROM #MarkdownSales
+
+
+--Add a Binned index
+IF OBJECT_ID('tempdb..#Waste') IS NOT NULL DROP TABLE #Waste
+SELECT	EAN AS ItemID
+		,StoreID
+		,Date
+		,OriginalPrice
+		,WasteQuantity
+		,WasteReason
+		,row_number() OVER(ORDER BY StoreID, EAN, Date, WasteQuantity, OriginalPrice) AS BinnedIndex
+INTO #Waste
+FROM #Waste_Raw
+
+---Insert duplicate rows into the waste table so we have 1 row for each sale
+DECLARE @MaxWasteQty INT = (SELECT Max(WasteQuantity) FROM #Waste)
+DECLARE @WasteQty INT = 2
+
+WHILE (@WasteQty <= @MaxWasteQty)
+BEGIN
+
+	INSERT INTO #Waste
+	SELECT DISTINCT *
+	FROM #Waste
+	WHERE WasteQuantity >= @WasteQty
+	
+	SET @WasteQty = @WasteQty + 1
+
+END
+--End of duplicate row addition
+
+IF OBJECT_ID('tempdb..#Waste_withDupes') IS NOT NULL DROP TABLE #Waste_withDupes
+SELECT	*
+		,1 AS WasteQty_New
+INTO #Waste_WithDupes
+FROM #Waste
+
+
+
+---Join MarkdownSales to Markdown Log
+DECLARE @MaxIteration INT = 5
+DECLARE @IterationCount INT = 1
+ 
+WHILE (@IterationCount <= @MaxIteration)
+BEGIN
+
+
+IF @IterationCount = 1
+--CREATE combined table
+	BEGIN
+		IF OBJECT_ID('tempdb..#Combined_Iteration') IS NOT NULL DROP TABLE #Combined_Iteration
+		SELECT	ExpiryDate
+				,B.ItemID
+				,B.StoreID
+				,B.OriginalPrice
+				,ExpiryTime
+				,MarkdownTime_at_1
+				,MarkdownToPrice_at_1
+				,QtyMarkdown_at_1
+				,MarkdownTime_at_2
+				,MarkdownToPrice_at_2
+				,QtyMarkdown_at_2
+				,MarkdownTime_at_3
+				,MarkdownToPrice_at_3
+				,QtyMarkdown_at_3
+				,MarkdownTime_at_4
+				,MarkdownToPrice_at_4
+				,QtyMarkdown_at_4
+				,MarkdownTime_at_5
+				,MarkdownToPrice_at_5
+				,QtyMarkdown_at_5
+				,MarkdownIndex
+				,QtyMarkdown_at_1 AS IterationMarkdown
+				,A.DateTime
+				,A.MarkdownValue
+				,A.MarkdownQuantity
+				--,A.MarkdownQty_New
+				,MarkdownSalesIndex
+				,1 AS IterationJoin
+				,NULL AS WasteQuantity
+				,convert(varchar(50), NULL) AS WasteReason
+				,NULL AS BinnedIndex
+				,CONVERT(date, NULL) AS WasteDate
+				,NULL AS Max_Binned_Iteration
+				,NULL AS Max_Iteration_Markdown
+		INTO #Combined_Iteration
+		FROM [dbo].[#MarkdownSales_withDupes] A
+		INNER JOIN
+			[dbo].[#MarkdownsByIteration] B
+		ON A.ItemID = B.ItemID
+		AND A.StoreID = B.StoreID
+		AND A.OriginalPrice = B.OriginalPrice
+		AND A.DateTime BETWEEN MarkdownTime_at_1 and ISNULL(MarkdownTime_at_2, ExpiryTime)
+		AND B.MarkdownToPrice_at_1 = A.MarkdownValue
+	END
+
+	ELSE IF @IterationCount < @MaxIteration
+	BEGIN 
+		
+	DECLARE @String nvarchar(4000)
+	SET @String = 
+		'INSERT INTO #Combined_Iteration
+		SELECT ExpiryDate
+				,B.ItemID
+				,B.StoreID
+				,B.OriginalPrice
+				,ExpiryTime
+				,MarkdownTime_at_1
+				,MarkdownToPrice_at_1
+				,QtyMarkdown_at_1
+				,MarkdownTime_at_2
+				,MarkdownToPrice_at_2
+				,QtyMarkdown_at_2
+				,MarkdownTime_at_3
+				,MarkdownToPrice_at_3
+				,QtyMarkdown_at_3
+				,MarkdownTime_at_4
+				,MarkdownToPrice_at_4
+				,QtyMarkdown_at_4
+				,MarkdownTime_at_5
+				,MarkdownToPrice_at_5
+				,QtyMarkdown_at_5
+				,MarkdownIndex
+				,QtyMarkdown_at_'+ CONVERT(Varchar(10), @IterationCount) + ' AS IterationMarkdown
+				,A.DateTime
+				,A.MarkdownValue
+				,A.MarkdownQuantity
+				,MarkdownSalesIndex
+				,' + CONVERT(Varchar(10), @IterationCount) + ' AS IterationJoin
+				,NULL AS WasteQuantity
+				,convert(varchar(50), NULL) AS WasteReason
+				,NULL AS BinnedIndex
+				,CONVERT(Date, NULL) AS WasteDate
+				,NULL AS Max_Binned_Iteration
+				,NULL AS Max_Iteration_Markdown
+		FROM [dbo].[#MarkdownSales_withDupes] A
+		INNER JOIN
+			[dbo].[#MarkdownsByIteration] B
+		ON A.ItemID = B.ItemID
+		AND A.StoreID = B.StoreID
+		AND A.OriginalPrice = B.OriginalPrice
+		AND A.DateTime BETWEEN MarkdownTime_at_' + CONVERT(Varchar(10), @IterationCount) + ' and ISNULL(MarkdownTime_at_' + CONVERT(Varchar(10), @IterationCount + 1) +' , ExpiryTime)
+		AND B.MarkdownToPrice_at_' + CONVERT(Varchar(10), @iterationCount) + ' = A.MarkdownValue'
+
+	EXEC sys.sp_executesql @stmt = @String
+
+	END
+
+	ELSE IF @IterationCount = @MaxIteration
+	BEGIN
+		INSERT INTO #Combined_Iteration
+		SELECT ExpiryDate
+				,B.ItemID
+				,B.StoreID
+				,B.OriginalPrice
+				,ExpiryTime
+				,MarkdownTime_at_1
+				,MarkdownToPrice_at_1
+				,QtyMarkdown_at_1
+				,MarkdownTime_at_2
+				,MarkdownToPrice_at_2
+				,QtyMarkdown_at_2
+				,MarkdownTime_at_3
+				,MarkdownToPrice_at_3
+				,QtyMarkdown_at_3
+				,MarkdownTime_at_4
+				,MarkdownToPrice_at_4
+				,QtyMarkdown_at_4
+				,MarkdownTime_at_5
+				,MarkdownToPrice_at_5
+				,QtyMarkdown_at_5
+				,MarkdownIndex
+				,QtyMarkdown_at_5 AS IterationMarkdown
+				,A.DateTime
+				,A.MarkdownValue
+				,A.MarkdownQuantity
+				--,A.MarkdownQty_New
+				,MarkdownSalesIndex
+				,5 AS IterationJoin
+				,NULL AS WasteQuantity
+				,convert(varchar(50), NULL) AS WasteReason
+				,NULL AS BinnedIndex
+				,CONVERT(date, NULL) AS WasteDate
+				,NULL AS Max_Binned_Iteration
+				,NULL AS Max_Iteration_Markdown
+		FROM #MarkdownSales_withDupes A
+		INNER JOIN
+			#MarkdownsByIteration B
+		ON A.ItemID = B.ItemID
+		AND A.StoreID = B.StoreID
+		AND A.OriginalPrice = B.OriginalPrice
+		AND A.DateTime BETWEEN MarkdownTime_at_5 and ExpiryTime
+		AND B.MarkdownToPrice_at_5 = A.MarkdownValue
+		--AND B.MarkdownToPrice_at_5 BETWEEN A.MarkdownValue - 0.01 AND A.MarkdownValue + 0.01
+		ORDER BY B.StoreID, B.ItemID, ExpiryTime, DateTime
+	END
+
+	SET @IterationCount = @IterationCount + 1
+END
+
+--Joined Binned data 
+IF OBJECT_ID('tempdb..#Binned_Iteration') IS NOT NULL DROP TABLE #Binned_Iteration
+SELECT A.*
+		,NULL AS IterationMarkdown
+		,NULL AS DateTime
+		,NULL AS MarkdownValue
+		,NULL AS MarkdownQuantity
+		,NULL AS MarkdownSalesIndex
+		,999 AS IterationJoin
+		,B.WasteQuantity
+		,B.WasteReason
+		,B.BinnedIndex
+		,B.Date AS WasteDate
+		,CASE
+			WHEN A.MarkdownTime_at_5 IS NOT NULL THEN 5
+			WHEN A.MarkdownTime_at_4 IS NOT NULL THEN 4
+			WHEN A.MarkdownTime_at_3 IS NOT NULL THEN 3
+			WHEN A.MarkdownTime_at_2 IS NOT NULL THEN 2
+			WHEN A.MarkdownTime_at_1 IS NOT NULL THEN 1
+		END AS Max_Binned_Iteration
+		,CASE
+			WHEN A.MarkdownTime_at_5 IS NOT NULL THEN QtyMarkdown_at_5
+			WHEN A.MarkdownTime_at_4 IS NOT NULL THEN QtyMarkdown_at_4
+			WHEN A.MarkdownTime_at_3 IS NOT NULL THEN QtyMarkdown_at_3
+			WHEN A.MarkdownTime_at_2 IS NOT NULL THEN QtyMarkdown_at_2
+			WHEN A.MarkdownTime_at_1 IS NOT NULL THEN QtyMarkdown_at_1
+		END AS Max_Iteration_Markdown
+INTO #Binned_Iteration
+FROM #MarkdownsByIteration A
+LEFT JOIN [dbo].[OnShowOffShowRules] C
+On C.ItemNumber = A.ItemID
+INNER JOIN #Waste B
+ON A.ItemID = B.ItemID
+AND A.StoreID = B.StoreID
+AND A.OriginalPrice = B.OriginalPrice
+AND B.Date BETWEEN DATEADD(DAY, MinDaysToExpiry ,ExpiryDate) AND DATEADD(DAY, 1, ExpiryDate)
+WHERE NOT
+
+    (
+
+        (A.StoreID = 419 AND Date BETWEEN '2024-10-30' AND '2024-12-11')
+
+        AND NOT
+
+        (A.StoreID = 590 AND Date BETWEEN '2024-10-19' AND '2024-11-18')
+
+    )
+ORDER BY ItemID, StoreID, Date
+
+
+-----Append Binned to Combined Iteration
+INSERT INTO #Combined_Iteration
+SELECT *
+FROM #Binned_Iteration
+
+--Add additional columns for de-dupes and row numbers
+IF OBJECT_ID('tempdb..#Combined_Iteration2') IS NOT NULL DROP TABLE #Combined_Iteration2
+SELECT *
+		,0 AS Deduped
+		,row_number() OVER(ORDER BY StoreID, ItemID, ExpiryTime, CASE WHEN MarkdownQuantity IS NULL THEN 1 ELSE 0 END ,DateTime, WasteDate) AS RowNumbers
+INTO #Combined_Iteration2
+FROM #Combined_Iteration
+
+CREATE INDEX IX_#Combined_Iteration2 ON #Combined_Iteration2 (RowNumbers) 
+
+
+
+--Create new markdown tracker table and fill with zeros
+IF OBJECT_ID('tempdb..#Markdown_Tracker') IS NOT NULL DROP TABLE #Markdown_Tracker
+SELECT DISTINCT MarkdownIndex
+		,CASE WHEN IterationJoin = 999 THEN Max_Binned_Iteration ELSE IterationJoin END AS IterationJoin
+		,0 AS MarkdownSales
+INTO #Markdown_Tracker
+FROM #Combined_Iteration2
+
+CREATE INDEX IX_#Markdown_Tracker ON #Markdown_Tracker (MarkdownIndex, IterationJoin) 
+
+--Create Sales tracker
+IF OBJECT_ID('tempdb..#Sales_Tracker') IS NOT NULL DROP TABLE #Sales_Tracker
+SELECT DISTINCT MarkdownSalesIndex
+		,0 AS MarkdownSales
+INTO #Sales_Tracker
+FROM #MarkdownSales
+
+CREATE INDEX IX_#Sales_Tracker ON #Sales_Tracker (MarkdownSalesIndex) 
+
+--Create Binned tracker
+IF OBJECT_ID('tempdb..#Binned_Tracker') IS NOT NULL DROP TABLE #Binned_Tracker
+SELECT DISTINCT BinnedIndex
+		,0 AS Waste
+INTO #Binned_Tracker
+FROM #Waste
+
+CREATE INDEX IX_#Binned_Tracker ON #Binned_Tracker (BinnedIndex) 
+
+
+--Create Loop
+--Over length of combined_Iteration table
+
+DECLARE @MaxLengthOfCombined INT = (SELECT COUNT(*) FROM #Combined_Iteration2)
+--DECLARE @MaxLengthOfCombined INT = 2000
+DECLARE @Loop INT = 1
+
+
+	DECLARE @MarkdownIndex INT
+	DECLARE @IterationJoin INT
+	DECLARE @MarkdownSalesIndex INT
+	DECLARE @BinnedIndex INT
+	DECLARE @IterationMarkdown INT
+	DECLARE @MarkdownSales INT
+	DECLARE @MarkdownQuantity INT
+	DECLARE @Sales INT
+	DECLARE @BinnedQty INT
+	DECLARE @Waste INT
+	DECLARE @DummyVariable INT = 1
+
+	
+WHILE @Loop <= @MaxLengthOfCombined
+BEGIN
+
+	SET @MarkdownIndex = (SELECT MarkdownIndex FROM #Combined_Iteration2 WHERE RowNumbers = @Loop)
+	SET @IterationJoin = (SELECT CASE WHEN IterationJoin = 999 THEN Max_Binned_Iteration ELSE IterationJoin END FROM #Combined_Iteration2 WHERE RowNumbers = @Loop)
+	SET @MarkdownSalesIndex = (SELECT MarkdownSalesIndex FROM #Combined_Iteration2 WHERE RowNumbers = @Loop)
+	SET @BinnedIndex = (SELECT BinnedIndex FROM #Combined_Iteration2 WHERE RowNumbers = @Loop)
+	
+	SET @IterationMarkdown = (SELECT COALESCE(IterationMarkdown, Max_Iteration_Markdown) FROM #Combined_Iteration2 WHERE RowNumbers = @Loop)
+	SET @MarkdownSales = (SELECT MarkdownSales FROM #Markdown_Tracker WHERE MarkdownIndex = @MarkdownIndex AND IterationJoin = @IterationJoin)
+	
+	SET @MarkdownQuantity = (SELECT MarkdownQuantity FROM #Combined_Iteration2 WHERE RowNumbers = @Loop)
+	SET @Sales = (SELECT MarkdownSales FROM #Sales_Tracker WHERE MarkdownSalesIndex = @MarkdownSalesIndex)
+	
+	SET @BinnedQty = (SELECT WasteQuantity FROM #Combined_Iteration2 WHERE RowNumbers = @Loop)
+	SET @Waste = (SELECT Waste FROM #Binned_Tracker WHERE BinnedIndex = @BinnedIndex)
+
+	IF @MarkdownSales >= @IterationMarkdown
+		BEGIN
+			SET @DummyVariable = 1
+		END
+	ELSE IF @MarkdownSalesIndex IS NOT NULL AND @Sales >= @MarkdownQuantity
+		BEGIN
+			SET @DummyVariable = 1
+		END
+	ELSE IF @BinnedIndex IS NOT NULL AND @Waste >= @BinnedQty
+		BEGIN
+			SET @DummyVariable = 1
+		END
+	ELSE 
+		BEGIN
+			
+			IF @MarkdownSalesIndex IS NOT NULL 
+				BEGIN
+					UPDATE #Sales_Tracker
+					SET MarkdownSales = MarkdownSales + 1
+					WHERE MarkdownSalesIndex = @MarkdownSalesIndex
+				END
+			ELSE IF @BinnedIndex IS NOT NULL
+				BEGIN
+					UPDATE #Binned_Tracker
+					SET Waste = Waste + 1
+					WHERE BinnedIndex = @BinnedIndex
+				END
+
+			UPDATE #Markdown_Tracker
+			SET MarkdownSales = MarkdownSales + 1
+			WHERE IterationJoin = @IterationJoin
+			AND MarkdownIndex = @MarkdownIndex
+
+			UPDATE #Combined_Iteration2
+			SET Deduped = 1 
+			WHERE RowNumbers = @Loop
+		END
+	
+	SET @Loop = @Loop + 1
+	
+END
+
+
+--Remove out duplicates
+IF OBJECT_ID('tempdb..#Deduped_Data') IS NOT NULL DROP TABLE #Deduped_Data
+SELECT *
+INTO #Deduped_Data
+FROM #Combined_Iteration2
+WHERE Deduped = 1
+
+
+--Sales with no markdown
+IF OBJECT_ID('tempdb..#SalesNoMarkdown') IS NOT NULL DROP TABLE #SalesNoMarkdown
+SELECT	DISTINCT A.*
+		,B.MarkdownSales
+		,CASE
+			WHEN B.MarkdownSales = 0 OR B.MarkdownSalesIndex IS NULL THEN MarkdownQuantity
+			WHEN MarkdownQuantity - MarkdownSales > 0 THEN MarkdownQuantity - MarkdownSales
+		END AS MarkdownSalesQty_ToSum
+INTO #SalesNoMarkdown
+FROM #MarkdownSales_WithDupes A
+LEFT JOIN
+	#Sales_Tracker B
+ON A.MarkdownSalesIndex = B.MarkdownSalesIndex
+WHERE (B.MarkdownSalesIndex IS NULL
+		OR B.MarkdownSales = 0
+		OR MarkdownQuantity - MarkdownSales > 0)
+
+--Binned with no markdown
+IF OBJECT_ID('tempdb..#BinnedNoMarkdown') IS NOT NULL DROP TABLE #BinnedNoMarkdown
+SELECT  DISTINCT A.*, B.Waste, WasteQuantity - Waste AS Missing
+		,CASE
+			WHEN Waste = 0 OR B.BinnedIndex IS NULL THEN WasteQuantity
+			WHEN WasteQuantity - Waste > 0 THEN WasteQuantity - Waste
+		END AS WasteQty_ToSum
+INTO #BinnedNoMarkdown
+FROM #Waste_WithDupes A
+LEFT JOIN
+	#Binned_Tracker B
+ON A.BinnedIndex = B.BinnedIndex
+WHERE (B.BinnedIndex IS NULL
+		OR B.Waste = 0
+		OR WasteQuantity - Waste > 0)
+AND A.ItemID NOT IN (
+    '5033786009047','5000128808477',
+    '5033786009061','5000128808491',
+    '5033786008989','5000128775540',
+    '5033786009214','5000128585835'
+)
+		
+
+---CREATE TABLES TO JOIN TOGETHER WITH FINAL OUTPUTS----
+
+--TRUNCATE TABLE [dbo].[Iteration]
+DELETE FROM Iteration 
+WHERE DateOfSaleOrBin >= (SELECT MinDate FROM #Dates WHERE Rank = 4)
+
+INSERT INTO [dbo].[Iteration]
+SELECT ExpiryDate
+		,ItemID
+		,StoreID
+		,OriginalPrice
+		,COALESCE(CAST(DateTime AS Date), WasteDate) AS DateOfSaleOrBin 
+		,CASE WHEN IterationJoin = 999 THEN Max_Binned_Iteration ELSE IterationJoin END AS Iteration
+		,CASE WHEN MarkdownSalesIndex IS NOT NULL THEN 'MD Sale' ELSE 'Waste' END AS Type
+		,WasteReason
+		,COUNT(*) AS Qty
+		,CAST('Markdown Seen' AS varchar(20)) AS Flag
+FROM #Deduped_Data
+GROUP BY ExpiryDate
+		,ItemID
+		,StoreID
+		,OriginalPrice
+		,COALESCE(CAST(DateTime AS Date), WasteDate) 
+		,CASE WHEN IterationJoin = 999 THEN Max_Binned_Iteration ELSE IterationJoin END 
+		,CASE WHEN MarkdownSalesIndex IS NOT NULL THEN 'MD Sale' ELSE 'Waste' END 
+		,WasteReason
+
+INSERT INTO [dbo].[Iteration]
+SELECT	NULL AS ExpiryDate
+		,ItemID
+		,StoreID
+		,OriginalPrice
+		,Date AS DateOfSaleOrBin
+		,NULL AS Iteration
+		,'Waste' AS Type
+		,WasteReason
+		,SUM(WasteQty_ToSum) AS Qty	
+		,CASE WHEN B.BinnedIndex IS NOT NULL THEN 'Markdown Seen' ELSE 'Markdown Not Seen' END AS Flag
+FROM #BinnedNoMarkdown A
+LEFT JOIN (SELECT DISTINCT BinnedIndex
+				,MIN(CASE 
+					WHEN Max_Binned_Iteration = 1 THEN MarkdownToPrice_at_1
+					WHEN Max_Binned_Iteration = 2 THEN MarkdownToPrice_at_2
+					WHEN Max_Binned_Iteration = 3 THEN MarkdownToPrice_at_3
+					WHEN Max_Binned_Iteration = 4 THEN MarkdownToPrice_at_4
+					WHEN Max_Binned_Iteration = 5 THEN MarkdownToPrice_at_5
+					END) AS MinMarkdownPrice
+FROM #Combined_Iteration
+GROUP BY BinnedIndex) B
+ON A.BinnedIndex = B.BinnedIndex
+GROUP BY ItemID
+		,StoreID
+		,OriginalPrice
+		,Date 
+		,WasteReason
+		,CASE WHEN B.BinnedIndex IS NOT NULL THEN 'Markdown Seen' ELSE 'Markdown Not Seen' END 
+
+INSERT INTO [dbo].[Iteration]
+SELECT NULL AS ExpiryDate
+		,ItemID
+		,StoreID
+		,OriginalPrice
+		,CAST(DateTime AS Date) AS DateOfSaleOrBin
+		,NULL AS Iteration
+		,'MD Sale' AS Type
+		,NULL AS WasteReason
+		,SUM(MarkdownSalesQty_ToSum) AS Qty	
+		,CASE WHEN B.MarkdownSalesIndex IS NOT NULL THEN 'Markdown Seen' ELSE 'Markdown Not Seen' END AS Flag
+FROM #SalesNoMarkdown A
+LEFT JOIN (SELECT DISTINCT MarkdownSalesIndex FROM #Combined_Iteration) B
+ON A.MarkdownSalesIndex = B.MarkdownSalesIndex
+GROUP BY ItemID
+		,StoreID
+		,OriginalPrice
+		,CAST(DateTime AS Date) 
+		,CASE WHEN B.MarkdownSalesIndex IS NOT NULL THEN 'Markdown Seen' ELSE 'Markdown Not Seen' END
+
+DELETE FROM dbo.Iteration   -- olu 22/01/26
+WHERE StoreID = 505 AND ItemID = '5060192670042' AND DateOfSaleOrBin = '2026-01-17';   -- olu 22/01/26
+		
+
+	SET @EndTime = CAST(GetDate() AS datetime)
+	SET @RunTime = CAST(@EndTime - @StartTime AS Time)
+
+	INSERT INTO [dbo].[run_time_log]
+	SELECT @ProcedureName
+		,@StartTime
+		,@EndTime
+		,@RunTime
+		,@SystemUser	
+
+END

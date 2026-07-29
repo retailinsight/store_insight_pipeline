@@ -89,6 +89,14 @@ data_quality_findings:
 
 notes: |
   - Pipeline applies the same 4-week lookback as markdown_log.
+  - To combine markdown sales with OSA actual sales, join through the WMD
+    hierarchy crosswalk: markdown_sales.UPC -> wmd_item_hierarchy.UPC ->
+    wmd_item_hierarchy.OSA_ITEM_CODE -> osa.ITEM_CODE.  Do not join UPC
+    directly to osa.ITEM_CODE.
+  - The crosswalk is many-to-one: each WMD UPC has one OSA item code, but an
+    OSA item code can represent multiple WMD UPCs.  Aggregate markdown
+    quantities and values to STORE_ID, DATE, OSA_ITEM_CODE before joining OSA
+    facts; joining OSA facts back to individual UPCs duplicates OSA measures.
   - SELLTHROUGH = SUM(MARKDOWN_QUANTITY) / SUM(QTY_MARKDOWN)  — the
     denominator comes from the markdown_log contract, NOT from this one.
   - There is intentionally no ORIGINAL_RETAIL_PRICE column on this

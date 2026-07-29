@@ -1,0 +1,55 @@
+USE [EECO_Reporting]
+GO
+/****** Object:  StoredProcedure [dbo].[csp_DailyReporting]    Script Date: 28/07/2026 12:22:52 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER PROCEDURE [dbo].[csp_DailyReporting]
+
+AS
+BEGIN
+	
+	SET NOCOUNT ON;
+
+DECLARE @ProcedureName VARCHAR(MAX)
+DECLARE @StartTime DATETIME
+DECLARE @EndTime DATETIME
+DECLARE @RunTime Time
+DECLARE @SystemUser VARCHAR(200)
+
+SET @ProcedureName = 'csp_DailyReporting'
+SET @StartTime = CAST(GetDATE() AS datetime)
+SET @SystemUser = SYSTEM_USER
+
+EXEC [dbo].[sp_PromptedCompliance]
+EXEC [dbo].[sp_PromptedNoExpiry]
+EXEC [dbo].[spPerformanceReporting]
+
+--BEGIN 
+--IF DATENAME(dw,GetDate()) IN ('Monday', 'Tuesday', 'Thursday') 
+--	EXEC [dbo].[spPerformanceReporting]
+--END;
+
+BEGIN 
+IF DATENAME(dw,GetDate()) = 'Sunday'
+	BEGIN
+	EXEC [dbo].[sp_ComplianceReporting]
+	EXEC [dbo].[sp_MarkdownData]
+	EXEC [dbo].[sp_ProductReporting] 
+	EXEC [dbo].[sp_Iteration]
+	END
+END;
+
+SET @EndTime = CAST(GetDate() AS datetime)
+SET @RunTime = CAST(@EndTime - @StartTime AS Time)
+
+INSERT INTO [dbo].[run_time_log]
+SELECT @ProcedureName
+	,@StartTime
+	,@EndTime
+	,@RunTime
+	,@SystemUser
+
+END;

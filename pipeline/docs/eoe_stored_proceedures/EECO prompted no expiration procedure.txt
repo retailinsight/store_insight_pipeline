@@ -1,0 +1,113 @@
+USE [EECO_Reporting]
+GO
+/****** Object:  StoredProcedure [dbo].[sp_PromptedNoExpiry]    Script Date: 28/07/2026 12:27:21 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER PROCEDURE [dbo].[sp_PromptedNoExpiry] 
+
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+DECLARE @ProcedureName VARCHAR(MAX)
+DECLARE @StartTime DATETIME
+DECLARE @EndTime DATETIME
+DECLARE @RunTime Time
+DECLARE @SystemUser VARCHAR(200)
+
+SET @ProcedureName = 'sp_PromptedNoExpiry'
+SET @StartTime = CAST(GetDATE() AS datetime)
+SET @SystemUser = SYSTEM_USER
+
+IF OBJECT_ID('tempdb..#Item') IS NOT NULL DROP TABLE #Item
+SELECT A.*
+INTO #Item
+FROM [dbo].[view_PromptedItem] A 
+--WHERE B.TradingDepartmentName IS NULL 
+--AND C.TradingDepartmentName IS NULL
+
+IF OBJECT_ID('tempdb..#Store') IS NOT NULL DROP TABLE #Store
+SELECT *
+INTO #Store
+FROM [dbo].[view_PromptedStore]
+--WHERE [Current] = 1
+
+/*------------------------------
+DATE CHECK COMPLIANCE NO EXPIRY
+--------------------------------*/
+IF OBJECT_ID('tempdb..#Prompts') IS NOT NULL DROP TABLE #Prompts
+SELECT * 
+INTO #Prompts
+FROM (
+	SELECT *
+			,RANK() OVER( PARTITION BY StoreCode, Barcode, ProductCode ORDER BY ReminderID DESC) AS Rank
+	FROM [dbo].[PromptedDateCheckReminder]
+	WHERE ExpiryDate >= CAST(GetDate() AS Date)
+	AND CreateDate < CAST(GetDate() AS Date) -- Excluded prompts worked this morning
+	--AND ActionsAuditID IS NULL
+	) A
+WHERE Rank = 1
+
+
+
+TRUNCATE TABLE [dbo].[Prompted_NoExpiry]
+INSERT INTO [dbo].[Prompted_NoExpiry]
+SELECT DISTINCT
+		IV.[StoreCode]
+		,ST.StoreName
+		,ST.RegionName
+		,IV.Barcode
+		,IV.[ProductCode]
+		,I.DisplayLevel1Name AS [TradingDepartmentName]
+		,I.DisplayLevel2Name AS [GroupName]
+		,I.DisplayLevel3Name AS [SectionName]
+		,IV.[Date]
+		,IV.[Stockonhand] AS StockOnHand
+		,CAST(GetDate() AS Date) AS RefreshDate --Date of refresh
+--INTO [dbo].[Prompted_NoExpiry]
+FROM [dbo].[PromptedDateCheckInventory] AS IV --Inventory file comes in early doors, so will be items with inventory as of store opening
+LEFT JOIN #Item AS I
+ON I.Barcode = IV.Barcode
+AND I.ItemID = IV.ProductCode
+LEFT JOIN #Store AS ST
+ON ST.StoreCode = IV.StoreCode
+
+LEFT OUTER JOIN #Prompts AS R
+ON IV.Barcode = R.Barcode
+AND IV.ProductCode = R.ProductCode
+AND IV.StoreCode = R.StoreCode
+
+
+WHERE R.Barcode IS NULL
+ ; --Only leave items where it doesn't exist with an expiry date post today.
+
+/*------------------------------
+DATE CHECK COMPLIANCE NO EXPIRY HISTORICAL
+--------------------------------*/
+
+DELETE FROM [dbo].[Prompted_NoExpiry_Historical]
+WHERE RefreshDate = CAST(GetDate() AS Date)
+
+INSERT INTO [dbo].[Prompted_NoExpiry_Historical]
+SELECT *
+--INTO [dbo].[Prompted_NoExpiry_Historical]
+FROM [dbo].[Prompted_NoExpiry]
+
+
+SET @EndTime = CAST(GetDate() AS datetime)
+SET @RunTime = CAST(@EndTime - @StartTime AS Time)
+
+INSERT INTO [dbo].[run_time_log]
+SELECT @ProcedureName
+	,@StartTime
+	,@EndTime
+	,@RunTime
+	,@SystemUser
+
+
+END

@@ -34,7 +34,7 @@ METADATA = DetectorInfo(
     problem     = 'A store-department repeatedly loses sales in a specific day-of-week + reporting-period slot, suggesting a time-driven operational issue such as staffing, delivery timing, or demand spikes.',
     action      = 'Investigate why this department consistently runs short in the flagged time slot and address root causes such as delivery schedules, shelf-filling routines, or staffing levels.',
     baseline    = 'The same store-department in the same day-of-week + reporting-period slot over the rolling lookback window (default: 10 weeks).',
-    logic       = 'Fires when at least min_items items in the store-department each have lost sales in the same DOW + reporting period in at least min_item_repeat_weeks distinct weeks, with total LSV above min_item_pattern_lsv, and at least one occurrence in the current or previous week.',
+    logic       = 'Item-slot = store + department + item + day of week + reporting period.\nA qualifying item-slot has lost sales volume > 0 in >= min_item_repeat_weeks distinct weeks, total lost sales value >= min_item_pattern_lsv, and an occurrence in the current or previous week.\nFires when qualifying item-slots in the same store + department + day + period >= min_items.',
     config_keys = ['min_item_repeat_weeks', 'min_item_pattern_lsv', 'min_items'],
 )
 
@@ -104,13 +104,13 @@ def detect(
         .with_column('WEEK_NUMBER', F.weekofyear(F.col('DATE')))
         .with_column('YEAR_NUMBER', F.year(F.col('DATE')))
         .select(
-            'STORE_ID', section, 'ITEM_CODE', 'DATE', 'DOW',
+            'STORE_ID', section, 'ITEM_CODE', 'ITEM_DESCRIPTION', 'DATE', 'DOW',
             'WEEK_NUMBER', 'YEAR_NUMBER', 'REPORTING_PERIOD_ID', 'LOST_SALES_VALUE',
         )
         .collect()
     )
 
-    # (store, dept, item, dow, period) -> {weeks, total_lsv, recent}
+    # (store, dept, item, dow, period) -> {weeks, total_lsv, recent, item_description}
     item_patterns = defaultdict(lambda: {'weeks': set(), 'total_lsv': 0.0, 'recent': False})
 
     for r in rows:
@@ -124,10 +124,14 @@ def detect(
         week      = int(r['WEEK_NUMBER'])
         lsv       = float(r['LOST_SALES_VALUE'] or 0)
 
+        item_desc = r['ITEM_DESCRIPTION'] if r['ITEM_DESCRIPTION'] else None
+
         key = (store_id, dept, item_code, dow, period)
         data = item_patterns[key]
         data['weeks'].add((year, week))
         data['total_lsv'] += lsv
+        if item_desc and not data.get('item_description'):
+            data['item_description'] = item_desc
         if last_week_start <= date_str <= this_week_end:
             data['recent'] = True
 
@@ -147,6 +151,7 @@ def detect(
                 'period': key[4],
                 'repeat_weeks': len(data['weeks']),
                 'total_lsv': data['total_lsv'],
+                'item_description': data.get('item_description'),
             })
 
     # Group qualifying item patterns by (store, dept, dow, period)
@@ -164,6 +169,7 @@ def detect(
         item_details = [
             {
                 'item_code': i['item_code'],
+                'item_description': i.get('item_description'),
                 'repeat_weeks': i['repeat_weeks'],
                 'total_lsv': round(i['total_lsv'], 2),
                 'avg_weekly_lsv': round(i['total_lsv'] / max(1, i['repeat_weeks']), 2),

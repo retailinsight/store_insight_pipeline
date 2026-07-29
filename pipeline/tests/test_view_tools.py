@@ -32,7 +32,7 @@ def test_discover_sql_files_returns_all_for_eastofengland():
     stems = sorted(f.stem for f in files)
     # Mirrors the contracts shipped in pipeline/contracts/.
     assert stems == [
-        'feedback', 'hierarchy', 'insight_feedback', 'markdown_log',
+        'feedback', 'hierarchy', 'markdown_log',
         'markdown_sales', 'osa', 'store_hierarchy', 'wastage', 'wmd_hierarchy',
     ]
 
@@ -171,7 +171,7 @@ def _osa_describe_perfect(_fqn):
     return [
         ('STORE_ID',            'NUMBER(38,0)'),
         ('ITEM_CODE',           'VARCHAR(16777216)'),
-        ('ANALYSIS_DATE',       'DATE'),
+        ('DATE',                'DATE'),
         ('ACTUAL_SALES_VOLUME', 'NUMBER(38,4)'),
         ('LOST_SALES_VOLUME',   'NUMBER(38,4)'),
         ('LOST_SALES_VALUE',    'NUMBER(38,4)'),

@@ -35,7 +35,7 @@ METADATA = DetectorInfo(
     problem     = 'One or more items in a store-department have had persistently poor availability across multiple weeks, indicating a chronic structural problem.',
     action      = 'Investigate the specific repeat-offender items listed in the signal and resolve underlying causes such as chronic out-of-stocks, ordering failures, or ranging issues.',
     baseline    = 'The same item in the same store-department over the rolling lookback window (default: 10 weeks).',
-    logic       = 'Fires when at least min_alert_weeks calendar weeks in the lookback window have OSA below (1 - min_osa_drop) and weekly lost sales value above min_weekly_lsv for one or more items in the store-department.',
+    logic       = 'Weekly OSA = actual sales volume / (actual sales volume + lost sales volume).\nAn item alert week requires OSA < (1 - min_osa_drop) and weekly lost sales value > min_weekly_lsv.\nFires when one or more items in the store-department have item alert weeks >= min_alert_weeks in the rolling lookback window.',
     config_keys = ['min_alert_weeks', 'min_osa_drop', 'min_weekly_lsv'],
 )
 

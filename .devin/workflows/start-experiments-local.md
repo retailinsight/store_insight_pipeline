@@ -34,7 +34,7 @@ If any prerequisite is missing, stop and tell the user what to fix.
    straight to step 4.
 
 2. Start the backend in a non-blocking background terminal.
-   - Command: `.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8002`
+   - Command: `.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --reload-dir ..\.. --port 8002`
    - Cwd: `c:\Users\DanielTaylor\StoreInsight\store_insight\pipeline_ui\backend`
    - Blocking: false
    - WaitMsBeforeAsync: 4000

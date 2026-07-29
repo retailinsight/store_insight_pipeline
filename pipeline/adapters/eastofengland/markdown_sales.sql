@@ -18,12 +18,13 @@
 -- native pre-markdown unit price column exists; the contract does not
 -- declare one (see markdown_sales_v1.yaml notes for the reasoning).
 
-CREATE OR REPLACE VIEW SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.MARKDOWN_SALES_V1 AS
+CREATE OR REPLACE VIEW STORE_INSIGHT_DB.PUBLIC.MARKDOWN_SALES_V1 AS
 SELECT
     SITE_ID                  AS STORE_ID,
-    ITEM_ID                  AS UPC,
+    ITEM_ID::NUMBER          AS UPC,
     DATE,
-    TIME,
+    "TIME"::VARCHAR          AS "TIME",
     SALE_QUANTITY            AS MARKDOWN_QUANTITY,
     SALE_VALUE               AS MARKDOWN_VALUE
-FROM ANALYSIS.FINAL.WMD_SALES;
+FROM ANALYSIS.FINAL.WMD_SALES
+WHERE TRY_TO_NUMBER(ITEM_ID) IS NOT NULL;

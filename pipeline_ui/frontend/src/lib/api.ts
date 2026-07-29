@@ -32,6 +32,7 @@ export interface DataSource {
 export interface DetectorEntry {
   name: string;                 // e.g. "osa.wow"
   signal_type: string;          // e.g. "OSA"
+  granularity: string;          // e.g. "Store × department"
   display_name: string | null;
   problem: string;
   action: string;

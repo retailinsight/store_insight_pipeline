@@ -216,8 +216,11 @@ def _waste(**overrides):
 def test_waste_vs_chain_narrative():
     out = generate(_waste(trigger_types=['VS_CHAIN']))
     _assert_card_keys(out)
-    assert '30.0%' in out['issue']
-    assert '30 of 100 wasted units' in out['explanation']
+    assert 'waste-to-markdown ratio 30.0%' in out['issue']
+    assert '100 units were wasted this week' in out['explanation']
+    assert 'Waste was 30.0% of markdown volume' in out['explanation']
+    assert 'straight-to-bin' not in out['issue'].lower()
+    assert 'straight to bin' not in out['explanation'].lower()
     assert '\u00a3250.50' in out['explanation']
 
 
@@ -380,8 +383,8 @@ def _osa_recurring_slot(**overrides):
         'trigger_types': ['RECURRING_SLOT'],
         'repeat_item_count': 2,
         'repeat_item_details': [
-            {'item_code': 'APL001', 'repeat_weeks': 4, 'total_lsv': 350.0, 'avg_weekly_lsv': 87.5},
-            {'item_code': 'BAN002', 'repeat_weeks': 3, 'total_lsv': 210.0, 'avg_weekly_lsv': 70.0},
+            {'item_code': 'APL001', 'item_description': 'Gala Apples', 'repeat_weeks': 4, 'total_lsv': 350.0, 'avg_weekly_lsv': 87.5},
+            {'item_code': 'BAN002', 'item_description': 'Bananas', 'repeat_weeks': 3, 'total_lsv': 210.0, 'avg_weekly_lsv': 70.0},
         ],
         'total_lsv': 560.0,
         'avg_weekly_lsv': 157.5,
@@ -410,7 +413,8 @@ def test_osa_recurring_slot_narrative():
     assert '45.0% of lost sales in this Monday Morning (6am-12pm) slot' in out['explanation']
     assert '12.5% of total lost sales in PRODUCE' in out['explanation']
     assert 'trend is increasing' in out['explanation']
-    assert 'APL001' in out['explanation']
+    assert 'Gala Apples (APL001)' in out['explanation']
+    assert 'Bananas (BAN002)' in out['explanation']
     assert '2025-W1' in out['explanation']
     assert '\u00a3630.00' in out['cost_if_not_fixed']  # 157.5 * 4
     assert 'Investigate operational drivers behind Monday Morning (6am-12pm)' in out['recommended_action']

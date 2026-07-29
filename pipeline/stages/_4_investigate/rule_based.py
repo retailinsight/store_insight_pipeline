@@ -189,30 +189,29 @@ def _generate_waste(signal: dict) -> dict:
     chain_rate  = signal.get('chain_stb_rate')
     above_chain = signal.get('above_chain_pp')
     waste_qty   = signal.get('this_week_waste_qty', 0)
-    stb_qty     = signal.get('this_week_stb_qty', 0)
     waste_val   = signal.get('this_week_waste_value', 0.0)
 
     facts       = signal.get('facts', {})
     dept_bdwn   = facts.get('waste_dept_breakdown', [])
 
     if 'VS_CHAIN' in triggers and above_chain is not None:
-        issue = f'{site_name}: straight-to-bin rate {this_rate:.1f}% — {above_chain:.1f}pp above chain average'
+        issue = f'{site_name}: waste-to-markdown ratio {this_rate:.1f}% — {above_chain:.1f}pp above chain average'
     elif 'WOW' in triggers and wow_change is not None:
-        issue = f'{site_name}: straight-to-bin rate up {wow_change:.1f}pp this week to {this_rate:.1f}%'
+        issue = f'{site_name}: waste-to-markdown ratio up {wow_change:.1f}pp this week to {this_rate:.1f}%'
     else:
-        issue = f'{site_name}: elevated straight-to-bin waste rate ({this_rate:.1f}%)'
+        issue = f'{site_name}: elevated waste-to-markdown ratio ({this_rate:.1f}%)'
 
     explanation_lines = [
-        f'{stb_qty} of {waste_qty} wasted units ({this_rate:.1f}%) went straight to bin this week.',
-        f'Waste value at original price: \u00a3{waste_val:,.2f}.',
+        f'{waste_qty} units were wasted this week, valued at £{waste_val:,.2f} at original price.',
+        f'Waste was {this_rate:.1f}% of markdown volume this week.',
     ]
     if 'VS_CHAIN' in triggers and chain_rate is not None:
         explanation_lines.append(
-            f'Chain average STB rate is {chain_rate:.1f}% — this store is {above_chain:.1f}pp above.'
+            f'Chain average waste-to-markdown ratio is {chain_rate:.1f}% — this store is {above_chain:.1f}pp above.'
         )
     if 'WOW' in triggers and last_rate is not None:
         explanation_lines.append(
-            f'Last week the STB rate was {last_rate:.1f}% — up {wow_change:.1f}pp.'
+            f'Last week the waste-to-markdown ratio was {last_rate:.1f}% — up {wow_change:.1f}pp.'
         )
     if dept_bdwn:
         top = dept_bdwn[0]
@@ -222,14 +221,13 @@ def _generate_waste(signal: dict) -> dict:
 
     top_dept = dept_bdwn[0]['dept'] if dept_bdwn else None
     action = (
-        f'Review end-of-life processes{f" in {top_dept}" if top_dept else ""}. '
-        'Ensure items flagged for markdown are actioned before they reach their waste date. '
-        'Check items are not being binned before markdown is applied.'
+        f'Review waste and markdown processes{f" in {top_dept}" if top_dept else ""}. '
+        'Assess markdown timing, markdown depth, ordering, and operational handling to identify opportunities to reduce waste.'
     )
 
     cost = (
-        f'Items worth approximately \u00a3{waste_val:,.2f} per week are being discarded '
-        'that could have generated revenue through markdowns.'
+        f'Items worth approximately \u00a3{waste_val:,.2f} at original price were wasted this week. '
+        'Review whether some could have been recovered through earlier markdown action.'
     )
 
     return {
@@ -276,7 +274,7 @@ def _generate_markdown_sellthrough(signal: dict) -> dict:
     if dept_bdwn:
         worst = dept_bdwn[0]
         explanation_lines.append(
-            f'Worst department: {worst["dept"]} ({worst["sellthrough_rate_pct"]:.1f}% sell-through on {worst["requested_qty"]} units).'
+            f'Worst department: {worst["dept"]} ({worst["sellthrough_rate_pct"]:.1f}% sell-through on {worst["total_qty"]} units).'
         )
 
     worst_dept = dept_bdwn[0]['dept'] if dept_bdwn else None
@@ -420,8 +418,10 @@ def _generate_osa_recurring_slot(signal: dict) -> dict:
     if item_details:
         explanation_lines.append('Top recurring items:')
         for item in item_details[:5]:
+            desc = item.get('item_description')
+            item_label = f'{desc} ({item["item_code"]})' if desc else item['item_code']
             explanation_lines.append(
-                f'\u2022 {item["item_code"]}: '
+                f'\u2022 {item_label}: '
                 f'\u00a3{item["total_lsv"]:,.2f} over {item["repeat_weeks"]} week{"s" if item["repeat_weeks"] != 1 else ""}'
             )
 

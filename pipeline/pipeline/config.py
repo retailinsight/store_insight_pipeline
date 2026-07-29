@@ -61,6 +61,10 @@ class DetectorConfig:
     min_stb_wow_increase: float     = 0.05
     min_waste_qty: int              = 5
 
+    # ---- WASTE_TRIM ----------------------------------------------------
+    min_markdown_sales_ratio: float = 0.60
+    min_markdown_units: int         = 5
+
     # ---- MARKDOWN_SELLTHROUGH ------------------------------------------
     min_sellthrough_chain_gap: float = 0.05
     min_sellthrough_wow_drop: float  = 0.05

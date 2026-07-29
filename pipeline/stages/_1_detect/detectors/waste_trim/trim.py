@@ -27,10 +27,10 @@ from store_insight.pipeline.stages._1_detect.signals import make_waste_trim_sign
 
 METADATA = DetectorInfo(
     name        = 'WASTE_TRIM',
-    problem     = 'A store-item sold mostly at markdown last week, indicating the item required clearance rather than selling at full price.',
-    action      = 'Review ranging, ordering, and demand forecasting for the item; investigate whether excess stock is being pushed through markdown.',
-    baseline    = 'Markdown sales vs total sales for the same store-item over the last completed week.',
-    logic       = 'Fires when markdown units sold in the last week exceed min_markdown_sales_ratio of total units sold, with at least min_markdown_units markdown units.',
+    problem     = 'A store-item has a high WMD-sales-to-OSA-sales ratio in the current week. This is a volume proxy, not proof that the sales occurred at a markdown price.',
+    action      = 'Treat this as a data-quality and investigation lead. Confirm markdown-price attribution before acting on ranging, ordering, or clearance decisions.',
+    baseline    = 'The current-week WMD sales quantity and OSA actual sales volume for the same store-item after the WMD-to-OSA item crosswalk.',
+    logic       = 'Current proxy = WMD sales quantity / (WMD sales quantity + OSA actual sales volume).\nFires when the proxy > min_markdown_sales_ratio and WMD sales quantity >= min_markdown_units.\nLimitation: the available WMD sales source does not identify markdown-priced transactions, so this is not a verified markdown-sales ratio.',
     config_keys = ['min_markdown_sales_ratio', 'min_markdown_units'],
 )
 

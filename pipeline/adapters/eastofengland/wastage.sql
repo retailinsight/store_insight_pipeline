@@ -11,14 +11,20 @@
 -- Note: FINAL_PRICE is intentionally not surfaced — it is NULL for 100% of
 -- rows in EoE and was dropped from the canonical contract during the
 -- 2026-04-09 review of the WASTE alert metric (see semantic_model.md).
+--
+-- Note: UPC is sourced from EAN, not ITEM_ID.  WMD_WASTAGE.ITEM_ID is a
+-- short internal product code that does not overlap with WMD_ITEM_HIERARCHY,
+-- whereas EAN matches it with >99% coverage.  Rows with NULL EAN are
+-- excluded because they cannot be resolved to a hierarchy.
 
-CREATE OR REPLACE VIEW SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.WASTAGE_V1 AS
+CREATE OR REPLACE VIEW STORE_INSIGHT_DB.PUBLIC.WASTAGE_V1 AS
 SELECT
     SITE_ID            AS STORE_ID,
-    ITEM_ID            AS UPC,
+    EAN::NUMBER        AS UPC,
     WASTE_DATE         AS DATE,
     WASTE_DATETIME,
     WASTE_QUANTITY,
     ORIGINAL_PRICE,
     WASTE_REASON
-FROM ANALYSIS.FINAL.WMD_WASTAGE;
+FROM ANALYSIS.FINAL.WMD_WASTAGE
+WHERE EAN IS NOT NULL;

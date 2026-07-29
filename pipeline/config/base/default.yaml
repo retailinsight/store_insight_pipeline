@@ -87,7 +87,7 @@ detector_config:
 
     OSA_RECURRING_SLOT:
       min_item_repeat_weeks: 3        # min distinct weeks per item pattern
-      min_item_pattern_lsv:  100.0    # min total £ LSV per item pattern
+      min_item_pattern_lsv:  50.0    # min total £ LSV per item pattern
       min_items:             2        # min qualifying items in the slot to fire
 
     COMPLIANCE:
@@ -106,7 +106,7 @@ detector_config:
       min_waste_qty:           5      # min total waste units to qualify
 
     WASTE_TRIM:
-      min_markdown_sales_ratio: 0.40  # markdown units / total units threshold
+      min_markdown_sales_ratio: 0.50  # markdown units / total units threshold
       min_markdown_units:       5      # min markdown units sold in the week
 
     MARKDOWN_SELLTHROUGH:
@@ -117,7 +117,7 @@ detector_config:
     MARKDOWN_SKU:
       lookback_weeks:          4      # rolling window for SKU-level detectors
       min_markdown_weeks:      3      # REPEAT_REQUEST — min distinct weeks with a request
-      min_markdown_requests:   8      # REPEAT_REQUEST — min total requests in window (guards against low-volume, routine markdowns)
+      min_markdown_requests:   16      # REPEAT_REQUEST — min total requests in window (guards against low-volume, routine markdowns)
       min_sku_override_rate:   0.90   # EXCESSIVE_OVERRIDE — min override rate (0.0–1.0)
       min_sku_requests:        5      # EXCESSIVE_OVERRIDE — min requests in window
 

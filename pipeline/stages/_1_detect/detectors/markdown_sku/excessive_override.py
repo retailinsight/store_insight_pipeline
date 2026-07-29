@@ -30,7 +30,7 @@ METADATA = DetectorInfo(
     problem     = 'A specific item at this store is being overridden at a disproportionately high rate relative to its total markdown requests, suggesting persistent staff resistance to pricing guidance for this SKU.',
     action      = 'Review why this item is being overridden so frequently. Discuss the pricing guidance with the store manager and investigate whether the algorithm recommendation is appropriate for this SKU.',
     baseline    = 'The override rate (overrides / total requests) for this item at this store over the rolling window.',
-    logic       = 'Fires when the item has an override rate of at least min_sku_override_rate and at least min_sku_requests total markdown requests within the lookback_weeks rolling window.',
+    logic       = 'SKU override rate = overridden markdown requests / all markdown requests for the same store-item.\nFires when SKU override rate >= min_sku_override_rate and total requests in the rolling lookback_weeks window >= min_sku_requests.',
     config_keys = ['lookback_weeks', 'min_sku_override_rate', 'min_sku_requests'],
 )
 

@@ -28,7 +28,7 @@ METADATA = DetectorInfo(
     problem     = 'Store markdown override rate has risen sharply week-on-week, indicating a sudden deterioration in adherence to pricing guidance.',
     action      = 'Investigate what changed this week — specific staff, departments, or items driving the spike in overrides.',
     baseline    = 'The same store override rate from the previous week.',
-    logic       = 'Fires when the override rate has risen by more than min_override_wow_increase percentage points compared to last week, and the store processed at least min_total_markdowns markdowns this week.',
+    logic       = 'Override rate = overridden markdown requests / all markdown requests.\nWoW increase = this-week override rate - last-week override rate.\nFires when WoW increase >= min_override_wow_increase and this-week markdown requests >= min_total_markdowns.',
     config_keys = ['min_override_wow_increase', 'min_total_markdowns'],
 )
 

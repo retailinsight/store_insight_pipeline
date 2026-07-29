@@ -1,0 +1,174 @@
+﻿WORKSHOP SUMMARY
+EoE Store Insight
+Metrics, smart actions, required data and in-app successes
+Session: East of England workshop
+Date: 28 July 2026
+Source: Workshop transcript
+Purpose: Capture what was discussed without adding assumptions
+Scope note. The workshop focused primarily on Waste, particularly markdown and prompted-check compliance. Availability was discussed mainly as a future opportunity to connect availability and waste data; detailed Availability smart actions were not defined.
+How to read this summary
+The notes distinguish the strength of each point so exploratory discussion is not presented as a decision.
+Supported direction: A preference or direction clearly supported during the workshop.
+Proposed for investigation: An idea discussed but not agreed as part of the initial Store Insight design.
+Unresolved: A question, dependency or design choice that remains open.
+1. Metrics that matter for EoE
+Markdown compliance
+Supported direction: Show overall markdown compliance and explain the reasons driving non-compliance.
+The underlying components discussed were:
+Markdowns completed outside the agreed markdown window.
+Products sent straight to bin without a matched markdown.
+Manual or unmatched markdowns: sales or waste transactions that cannot be matched to a markdown recorded through the RI process.
+The preferred presentation discussed was to:
+Show the overall compliance percentage.
+Show the agreed target or threshold; an 80% aim was referenced during the workshop.
+Identify the non-compliance reason having the greatest impact.
+Allow managers who want more detail to drill into the component breakdown.
+Unresolved: The precise calculation, display design and lookback period were not agreed.
+Prompted-check compliance
+Supported direction: Treat prompted compliance as a separate important measure.
+The measure discussed includes:
+Whether prompted product checks were completed.
+Whether products with missing expiry dates were investigated and resolved.
+Whether checks were completed on the day they were issued.
+The discussion indicated that prompted checks and missing-expiry checks should generally reach 100% daily compliance. Fresh products were described as more time-sensitive than ambient products.
+Proposed for investigation: Use shelf-life information to distinguish urgent missed checks from less urgent ones. Availability of the required shelf-life data was not confirmed.
+Waste performance
+The following measures were discussed:
+Sell-through.
+Giveaway.
+Volume entering the reduced-to-clear process.
+Waste.
+Performance versus the previous financial period.
+Performance versus the corresponding period in the previous year.
+For EoE, financial periods were described as four-week blocks based on its financial calendar.
+Supported direction: Keep waste performance information simple and secondary to compliance.
+The group was cautious about presenting these measures as directly actionable or attributing changes to store behaviour. Outcomes can also be affected by deliveries, stock volumes, range, case size, shelf life, weather and sales.
+Waste trim
+Supported direction: Do not treat waste trim as a strong initial Store Insight metric.
+A high waste-trim result can have several causes, including case size, range decisions, product demand, promotional activity, delivery or depot behaviour, and product location or merchandising.
+Because many causes may be outside store control, the group did not identify a reliable generic store action. Waste trim may be more useful to commercial or head-office users.
+Availability and waste together
+Proposed for investigation: Create an item-level view of the relationship between availability and waste.
+Examples raised during the discussion included:
+Items becoming unavailable after remaining stock entered markdown.
+Products repeatedly alternating between excess waste and periods off sale.
+Case size and shelf life creating a trade-off between waste and availability.
+Identifying a healthier balance rather than pursuing 100% availability regardless of waste.
+Unresolved: No production-ready metric or smart action was defined. The suggested sequence was to establish the Availability and Waste views separately before joining them.
+2. Smart actions that could be sent to stores
+The table translates the workshop discussion into candidate Store Insight use cases. Confidence reflects how directly each full use case was supported by the sessionâ€”not whether it is technically feasible.
+High: The core anomaly, investigation and store response were distinctly discussed.
+Medium: The workshop supported the underlying issue, but part of the detection, investigation or action has been developed from that discussion.
+Low: The idea is based on partial workshop evidence and introduces a material suggestion that still requires validation.
+
+Use case title | Anomaly detected | Investigation | Action sent to store | Confidence
+Markdown compliance trending down | This weekâ€™s markdown compliance is lower than last week or the storeâ€™s recent average. | Review the components that make up compliance: markdown timing, manual or unmatched markdowns, and straight-to-bin. Break down by iteration, department and day to identify the largest driver. | Focus today on the largest cause of the decline. Follow the relevant markdown process and monitor whether compliance recovers during the remainder of the week. | High
+Persistent markdown non-compliance | Overall markdown compliance has remained below the agreed threshold across several weeks. | Confirm whether the pattern is persistent rather than caused by one exceptional week. Review the contribution from each compliance component and identify whether it is concentrated in a department, iteration or day. | Address the process contributing most to the sustained gap. Use the drill-down to brief the relevant colleagues and check progress over the following days. | High
+Markdowns completed outside the agreed window | A material share of markdowns is being recorded outside the agreed first or second markdown window. | Review the affected markdown iteration, completion times, departments and daily pattern. Check whether this is consistent or caused by an isolated operational event. | Complete the relevant markdown iteration within the agreed time window today. If the timing could not be met, record or investigate the operational reason. | High
+Manual or unmatched markdowns are high | Sales or waste transactions that appear to be markdowns cannot be matched to markdown activity recorded through the RI process. | Review the trend over time, affected departments and products, transaction timing, markdown price and available markdown logs. Recognise that the current classification is a best available match rather than an exact measure. | Ensure markdowns are completed through the agreed RI process. Investigate with the relevant colleagues why markdown transactions are not appearing in the RI record. | High
+Straight-to-bin is contributing to poor compliance | Products are being wasted without a matched prior markdown, and this is a leading contributor to the compliance gap. | Review affected products, departments, dates and any available iteration history. Determine whether products are consistently being found too late or whether the result is concentrated in one event. | Check affected short-life products earlier in the day and complete the markdown process before they reach the point of disposal. | High
+Recurring markdown issue expected | The same compliance component repeatedly deteriorates on a particular day of the week. | Compare that day across several weeks and review iterations, departments and the component driving the pattern. Exclude a single exceptional week before treating it as recurring. | Plan the relevant markdown activity and colleague coverage ahead of the recurring risk day, then check whether the pattern repeats. | Medium
+Prompted compliance below 100% | One or more prompted product checks issued for the day have not been completed. | Review outstanding prompts by department, product type and status. Separate prompts that have not been opened from prompts that were started but not resolved. | Complete all outstanding prompted checks today and record the correct outcome for each product. | High
+Date-code records are incomplete | Products show inventory but do not have an expiry date recorded, or missing-expiry checks remain unresolved. | Review the missing-expiry list by department and product. Check whether the product is physically present and whether the recorded inventory is correct. | Find the product and enter the most recent expiry date. If the product cannot be found, correct or escalate the inventory discrepancy through the agreed process. | High
+Fresh date-code checks are outstanding | Outstanding prompted or missing-expiry checks include fresh products, which were described as more time-sensitive. | Separate fresh from ambient products and review expiry date, quantity and department where those data are available. | Prioritise the outstanding fresh-product checks today, then complete the remaining checks. | Medium
+Recorded expiry date looks implausible | A recorded expiry date is materially inconsistent with the productâ€™s expected shelf life. | Compare the entered expiry date with expected shelf life and review recent date entries for the product. This requires a reliable shelf-life source that was not confirmed in the session. | Recheck the productâ€™s date code and correct the recorded expiry date if it was entered incorrectly. | Low
+Prompt workload could be prioritised | The store has an unusually high number of prompts, including products with different expiry risk. | Review prompt volume, expiry proximity, fresh or ambient classification, inventory quantity and expected shelf life. The session did not define an agreed prioritisation model. | Work the highest-risk prompts first while still completing all prompts due that day. | Low
+---
+
+3. Data required
+Existing markdown data and logic
+The required information is currently assembled from existing data using SQL and stored procedures in the reporting environment. The workshop identified a need to access:
+Markdown scan logs and timestamps.
+The expected first and second markdown windows.
+Sales transactions.
+Waste transactions.
+Markdown prices.
+Matches between sales or waste transactions and recorded markdown activity.
+The logic used to classify transactions as compliant, outside the window, straight to bin, manual or unmatched.
+Daily and longer-term store-level outputs.
+Department, product and day-level detail where available.
+Approximately five or six stored procedures were referenced, depending on the client. Read access to the reporting server was suggested so the existing calculations and table outputs can be inspected.
+Caveat: The current manual or unmatched classification was described as a best available calculation rather than an exact measure.
+Prompted-check data
+The required information includes:
+Prompts issued.
+Date issued and expected completion date.
+Prompt outcome.
+Missing-expiry records.
+Whether each prompt or missing-expiry record was resolved.
+Product department or category.
+Inventory quantity associated with the expiry record.
+Expiry dates entered by stores.
+Additional data proposed
+The group identified several data points that could improve prioritisation:
+Expected product shelf life.
+Fresh versus ambient classification.
+Department.
+Product-level volume due to expire.
+Delivery timing and delivery volumes.
+Case size.
+Sales velocity.
+Availability or OSA.
+Product and store identifiers that can join Waste and Availability datasets.
+EoEâ€™s financial week, period and quarter definitions.
+Unresolved: Availability of all these fields was not confirmed.
+Snowflake data assurance
+A material concern was raised about using EoE Waste data in Snowflake without reconciliation. Previous comparisons reportedly found differences between SQL and Snowflake, potentially involving duplicate-removal logic. It was not confirmed whether those historic issues still exist.
+Before Store Insight depends on the Snowflake data, the discussion identified the need to:
+Confirm what EoE Waste data is currently loaded.
+Compare totals between SQL and Snowflake by date and measure.
+Investigate differences at transaction level.
+Determine whether records removed as duplicates are genuine duplicates.
+Confirm product and store identifier mappings across Waste and Availability.
+Confirm data refresh and processing times.
+Important: No conclusion was reached that Snowflake is currently complete or incorrect; the need is to test it.
+4. Successes that could be shown in the app
+Supported direction: Recognise improvements in behaviours the store can control.
+Potential successes explicitly discussed included:
+Markdown compliance has improved versus the previous week or period.
+The store has improved relative to its own historical performance.
+The store is performing above the estate benchmark.
+The store completed all prompted checks.
+The store cleared all missing-expiry records.
+A previously persistent compliance problem has improved.
+The largest cause of markdown non-compliance has reduced.
+Compliance improved on a day that had previously shown a recurring problem.
+The discussion favoured comparing stores primarily against:
+Their own previous performance.
+The EoE estate.
+Comparison against clusters was questioned because the current clusters were not considered meaningful for this purpose.
+Successes to treat cautiously
+The group advised against directly presenting the following as the result of a store taking an action:
+Additional sales.
+Monetary benefits.
+Reduced waste.
+Improved sell-through.
+Improved availability.
+These outcomes can be influenced by factors beyond store control, and the workshop did not establish a defensible causal relationship between a particular action and the outcome.
+Suggested framing: â€œWhat is this store getting better at?â€ rather than â€œWhat financial or operational outcome did this specific action cause?â€
+5. Important design principles raised
+Show stores something they can understand and act upon.
+Prioritise the largest issue rather than presenting every available measure.
+Make supporting detail available for managers who want to challenge or investigate the result.
+Distinguish a persistent pattern from an isolated incident.
+Use timely data where possible; weekly reporting alone was considered too slow.
+Avoid assigning responsibility for factors the store cannot control.
+Be careful not to imply causation between compliance and waste or sales outcomes.
+Avoid a single blended score that hides different behaviours.
+Consider how metrics could be gamed if they become targets or incentives.
+Keep informational insights separate from actions the store is expected to complete.
+6. Outstanding decisions
+The exact headline KPI set.
+Whether Markdown and Prompted compliance should ever be combined.
+The precise markdown-compliance formula.
+The initial lookback period.
+The method for detecting persistent, recent and recurring issues.
+The exact target and comparison hierarchy.
+The content and depth of drill-down screens.
+Whether stores should be able to submit explanations.
+How smart actions should be prioritised when several problems exist.
+Whether Waste performance metrics belong in the initial Store Insight release.
+Whether Snowflake contains complete and reconciled EoE Waste data.
+Which Availability smart actions should be included.
+How Availability and Waste should ultimately be linked.
+

@@ -325,6 +325,7 @@ class InvestigationConfig(BaseModel):
     OSA: dict[str, Any] = {}
     OSA_RECURRING_SLOT: dict[str, Any] = {}
     COMPLIANCE: dict[str, Any] = {}
+    MARKDOWN_OVERRIDE: dict[str, Any] = {}
     WASTE: dict[str, Any] = {}
     WASTE_TRIM: dict[str, Any] = {}
     MARKDOWN_SELLTHROUGH: dict[str, Any] = {}

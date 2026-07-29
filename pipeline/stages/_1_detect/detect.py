@@ -150,7 +150,7 @@ def detect_signals(
     Parameters
     ----------
     osa            : Snowpark DataFrame with columns:
-                     STORE_ID, ITEM_CODE, ANALYSIS_DATE,
+                     STORE_ID, ITEM_CODE, DATE,
                      ACTUAL_SALES_VOLUME, LOST_SALES_VOLUME,
                      LOST_SALES_VALUE, DEPARTMENT_NAME,
                      SUBCLASS_NAME, PRODUCT_PROFILE_GROUP_NAME

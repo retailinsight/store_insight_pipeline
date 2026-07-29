@@ -1,0 +1,127 @@
+USE [EECO_Reporting]
+GO
+/****** Object:  StoredProcedure [dbo].[sp_MarkdownData]    Script Date: 28/07/2026 12:25:37 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER PROCEDURE [dbo].[sp_MarkdownData]
+
+AS
+BEGIN
+
+SET NOCOUNT ON;
+
+DECLARE @ProcedureName VARCHAR(MAX)
+DECLARE @StartTime DATETIME
+DECLARE @EndTime DATETIME
+DECLARE @RunTime Time
+DECLARE @SystemUser VARCHAR(200)
+
+SET @ProcedureName = 'sp_MarkdownData'
+SET @StartTime = CAST(GetDATE() AS datetime)
+SET @SystemUser = SYSTEM_USER
+	
+IF OBJECT_ID('tempdb..#Calendar') IS NOT NULL DROP TABLE #Calendar
+SELECT	WeekNbr
+		,Year
+		,RANK() OVER (ORDER BY Year DESC, WeekNbr DESC) AS WeekRank
+		,Min(CalendarDate) AS StartOfWeek
+		,Max(CalendarDate) AS EndOfWeek
+INTO #Calendar
+FROM [dbo].[Calendar]
+WHERE CalendarDate < GetDate()
+GROUP BY WeekNbr, Year
+HAVING COUNT(*) = 7
+
+DECLARE @StartDate DATE = (SELECT StartOfWeek FROM #Calendar WHERE WeekRank = 16)
+DECLARE @EndDate DATE = (SELECT EndOfWeek FROM #Calendar WHERE WeekRank = 1)
+
+
+--edit products in scope
+IF OBJECT_ID('tempdb..#products1') IS NOT NULL DROP TABLE #products1
+SELECT *
+INTO #products1
+FROM dbo.view_item
+WHERE Loose_FruitAndVeg = 'N'
+AND SubCategoryName != 'INGREDIENTS'
+
+IF OBJECT_ID('tempdb..#Stores') IS NOT NULL DROP TABLE #Stores
+SELECT *
+INTO #Stores
+FROM dbo.view_Store
+WHERE StoreID NOT IN ('418', '485')
+
+--DROP TABLE [dbo].[MarkdownData]
+TRUNCATE TABLE [dbo].[MarkdownData]
+
+INSERT INTO [dbo].[MarkdownData] 
+SELECT 
+	MDL.[StoreID]
+	,S.StoreName
+	,cal.WeekNbr AS Week
+	,cal.Year AS Year
+	,CAST(MDL.[LocalDate] AS date) AS Date
+	,DATEPART(weekday, CAST(MDL.[LocalDate] AS date)) AS DoW
+	,DATEPART(HOUR, [LocalTime] AT TIME ZONE 'UTC' AT TIME ZONE 'GMT Standard Time') AS Hour
+	,P.DepartmentName
+	,P.CategoryName
+	,P.SubCategoryName
+	,P.ComplianceCategories
+	,MDL.[MarkdownType]
+	,S.AreaNumber
+	,DATEDIFF(DAY, LocalDate, ExpiryTime) AS DaysTillExpiry
+	,CASE	WHEN OriginalPrice = CurrentPrice THEN 1
+		WHEN MarkdownIteration = 1 and OriginalPrice != CurrentPrice THEN 2
+		ELSE MarkdownIteration END AS AppMDIteration
+	,CASE WHEN MDL.MarkdownType = 'ManualOverride' THEN 1 ELSE 0 END AS IsOverridden
+	,SUM(MDL.[QtyMarkdown]) AS QtyMarkdown
+	,COUNT(*) AS CountOfInstances
+--INTO [dbo].[MarkdownData]
+FROM
+	[dbo].[MarkdownLogConverted] MDL WITH (INDEX = [CIX_MarkdownLogConverted_LocalDate])
+INNER JOIN #Stores S 
+	ON MDL.StoreID = S.StoreID
+INNER JOIN #products1 P 
+	ON MDL.ItemID = P.ItemID
+LEFT JOIN [dbo].[Calendar] AS cal
+	ON mdl.LocalDate = cal.CalendarDate
+WHERE
+	LocalDate BETWEEN @startdate AND @enddate
+	--AND MDL.StoreID IN (SELECT s.StoreID FROM #TrialStores1 s)  --Pre Full Rollout
+	AND LocalTime NOT BETWEEN '2021-11-17 10:00:00' AND '2021-11-17 14:00:00'  --EXCLUDES ANY PROD TESTNG DONE DURING LIVE DOWNTIME FOR PROD DEPLOYMENT
+	AND ErrorCode IS NULL
+	AND NOT (MDL.StoreID IN (502, 291) AND LocalDate >= '2024-12-08')
+	AND NOT (MDL.StoreID IN (504) AND LocalDate >= '2025-03-23')
+GROUP BY 
+	MDL.[StoreID]
+	,S.StoreName
+	,cal.WeekNbr 
+	,cal.Year 
+	,CAST(MDL.[LocalDate] AS date) 
+	,DATEPART(weekday, CAST(MDL.[LocalDate] AS date)) 
+	,DATEPART(HOUR, [LocalTime] AT TIME ZONE 'UTC' AT TIME ZONE 'GMT Standard Time') 
+	,P.DepartmentName
+	,P.CategoryName
+	,P.SubCategoryName
+	,P.ComplianceCategories
+	,MDL.[MarkdownType]
+	,S.AreaNumber
+	,DATEDIFF(DAY, LocalDate, ExpiryTime)
+	,CASE	WHEN OriginalPrice = CurrentPrice THEN 1
+		WHEN MarkdownIteration = 1 and OriginalPrice != CurrentPrice THEN 2
+		ELSE MarkdownIteration END 
+	,CASE WHEN MDL.MarkdownType = 'ManualOverride' THEN 1 ELSE 0 END
+
+SET @EndTime = CAST(GetDate() AS datetime)
+SET @RunTime = CAST(@EndTime - @StartTime AS Time)
+
+INSERT INTO [dbo].[run_time_log]
+SELECT @ProcedureName
+	,@StartTime
+	,@EndTime
+	,@RunTime
+	,@SystemUser
+
+END

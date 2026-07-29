@@ -36,13 +36,13 @@ columns:
       contract is not required for compliance alerts.
 
   ITEM_CODE:
-    type: NUMBER
+    type: VARCHAR
     required: true
     description: |
-      Item the alert intervention was about (source ITEM_ID).  Joins to
-      osa.ITEM_CODE on (STORE_ID, ITEM_CODE, DATE) so the COMPLIANCE scorer
-      can attribute the £ LOST_SALES_VALUE of the items behind tick-and-flick
-      dismissals, rather than diluting against whole-store LSV.
+      Item the alert intervention was about (source ITEM_ID, cast to VARCHAR).
+      Joins to osa.ITEM_CODE on (STORE_ID, ITEM_CODE, DATE) so the COMPLIANCE
+      scorer can attribute the £ LOST_SALES_VALUE of the items behind
+      tick-and-flick dismissals, rather than diluting against whole-store LSV.
 
   ALERT_TYPE_NAME:
     type: VARCHAR

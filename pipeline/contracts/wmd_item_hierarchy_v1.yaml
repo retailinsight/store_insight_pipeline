@@ -24,9 +24,32 @@ columns:
     type: NUMBER
     required: true
     description: |
-      Numeric item identifier — the join key for all WMD transactional
-      tables (markdown_log, markdown_sales, wastage).  Sourced from
+      Numeric item identifier from the WMD source.  Sourced from
       VME_CODE in EoE; cast to NUMBER by the adapter view.
+
+  UPC:
+    type: NUMBER
+    required: true
+    description: |
+      Canonical item identifier exposed to WMD transactional tables
+      (markdown_log, markdown_sales, wastage).  The EoE adapter aliases
+      ITEM_ID to UPC; other customers may source this directly.  All
+      WMD fact joins use this column.
+
+  EAN:
+    type: VARCHAR
+    required: false
+    description: Optional EAN / barcode retained for WMD-side diagnostics.
+
+  OSA_ITEM_CODE:
+    type: VARCHAR
+    required: false
+    description: |
+      Crosswalk from this WMD UPC to the LSM/OSA internal item code.  This is
+      the supported bridge from WMD transactional data to OSA actual sales:
+      markdown_sales.UPC -> wmd_item_hierarchy.UPC -> OSA_ITEM_CODE ->
+      osa.ITEM_CODE.  Multiple WMD UPCs may map to one OSA item code, so
+      aggregate WMD measures by OSA_ITEM_CODE before joining OSA facts.
 
   ITEM_DESCRIPTION:
     type: VARCHAR
@@ -56,14 +79,23 @@ columns:
     required: false
     description: Sub-departmental grouping; used in narrative breakdowns.
 
+joins:
+  - contract: hierarchy
+    cardinality: many_to_one
+    match:
+      OSA_ITEM_CODE: ITEM_CODE
+    purpose: |
+      Crosswalk WMD items to the OSA hierarchy.  Use this route before
+      combining WMD markdown measures with OSA actual-sales measures.
+
 data_quality_findings:
   - column: ITEM_ID
     severity: high
     concern: |
       The EoE source stores this as VME_CODE (LONG); some other customers
       may have item IDs as VARCHAR.  Adapter views must CAST to NUMBER
-      consistent with the markdown_log.ITEM_ID type or joins will silently
-      produce no rows.
+      consistent with the UPC type used by markdown_log, markdown_sales
+      and wastage, or joins will silently produce no rows.
   - column: DEPARTMENT
     severity: medium
     concern: |

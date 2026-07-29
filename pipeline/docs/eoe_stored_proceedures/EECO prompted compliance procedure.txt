@@ -1,0 +1,212 @@
+USE [EECO_Reporting]
+GO
+/****** Object:  StoredProcedure [dbo].[sp_PromptedCompliance]    Script Date: 28/07/2026 12:26:54 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER PROCEDURE [dbo].[sp_PromptedCompliance] 
+
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+DECLARE @ProcedureName VARCHAR(MAX)
+DECLARE @StartTime DATETIME
+DECLARE @EndTime DATETIME
+DECLARE @RunTime Time
+DECLARE @SystemUser VARCHAR(200)
+
+SET @ProcedureName = 'sp_PromptedCompliance'
+SET @StartTime = CAST(GetDATE() AS datetime)
+SET @SystemUser = SYSTEM_USER
+
+IF OBJECT_ID('tempdb..#Calendar') IS NOT NULL DROP TABLE #Calendar
+SELECT *
+INTO #Calendar
+FROM [dbo].[Calendar]
+WHERE CalendarDate < GetDate()
+ORDER BY CalendarDate DESC
+
+
+IF OBJECT_ID('tempdb..#PromptedData') IS NOT NULL DROP TABLE #PromptedData
+SELECT	A.[StoreCode]
+		,A.[Barcode]
+		,A.[ProductCode]
+		,A.[Quantity]
+		,A.[ExpiryDate]
+		,[DaysBeforeAlert]
+		,OriginalAlertDueDate
+		,AlertDueDate
+		,CASE WHEN CAST(ActionDateTime AS Date) = AlertDueDate THEN A.ActionID ELSE NULL END AS ActionID
+		,CASE WHEN CAST(ActionDateTime AS Date) = AlertDueDate THEN ActionDateTime ELSE NULL END AS ActionDateTime
+		,DATEDIFF(DAY,AlertDueDate, OriginalAlertDueDate) AS ActionDuration
+		,[ItemDescription]
+		,[TradingDepartmentName]
+		,[GroupName]
+		,[SectionName]
+		,CASE
+			WHEN CAST(ActionDateTime AS Date) <= AlertDueDate THEN 'Y'
+			ELSE 'N'
+		END AS Compliant
+		,S.RegionName
+		,S.StoreName
+		,B.Action
+		,CreateDate
+INTO #PromptedData
+FROM (
+		
+		SELECT	[ReminderID]
+				,[StoreCode]
+				,[Barcode]
+				,[ProductCode]
+				,[Quantity]
+				,[ExpiryDate]
+				,[CreateDate]
+				,[ModifiedDate]
+				,[DaysBeforeAlert]
+				,AlertDueDate AS OriginalAlertDueDate
+				,Date AS AlertDueDate
+				--,RemainingDays
+				,ActionID
+				,ActionDateTime
+				,ActionDuration
+				,[ItemDescription]
+				,[TradingDepartmentName]
+				,[GroupName]
+				,[SectionName]
+		FROM (		
+				SELECT DISTINCT 
+					   R.[ReminderID]
+					 , R.[StoreCode]
+					 , R.[Barcode]
+					 , R.[ProductCode]
+					 , R.[Quantity]
+					 , R.[ExpiryDate]
+					 , R.[CreateDate]
+					 , R.[ModifiedDate]
+					 , D.[DaysBeforeAlert]
+					 , DATEADD(d, -(D.[DaysBeforeAlert]), R.ExpiryDate) AS AlertDueDate
+					 , RD.RemainingDays AS RemainingDays
+					 , A.ActionID
+					 , A.[Datestamp] AS ActionDateTime
+					 , DATEDIFF(d, DATEADD(d, -(D.[DaysBeforeAlert]), R.ExpiryDate), A.[Datestamp]) AS ActionDuration
+					 , D.[ItemDescription]
+					 , D.DisplayLevel1Name AS [TradingDepartmentName]
+					 , D.DisplayLevel2Name AS [GroupName]
+					 , D.DisplayLevel3Name AS [SectionName]
+					-- , @RefreshTime AS RefreshTime
+
+				FROM [dbo].[PromptedDateCheckReminder] AS R
+					JOIN [dbo].[PromptedDateCheckExpiryThresholdItemAlertDays] AS D
+						ON R.Barcode = D.Barcode
+						   AND R.ProductCode = D.ProductCode
+					CROSS APPLY Waste_EECO.[dbo].[tvf_GetPromptedDateCheckRemainingDays](R.[StoreCode], GetDate(), DATEADD(d, -(D.[DaysBeforeAlert]), R.ExpiryDate)) AS RD
+					LEFT OUTER JOIN [dbo].[PromptedDateCheckAudit] AS A
+						ON A.AuditID = R.ActionsAuditID
+		
+				WHERE ((A.ActionID > 0)
+						   OR (RD.RemainingDays < 0
+							   AND R.ActionsAuditID IS NULL))
+				) A
+		INNER JOIN (SELECT CalendarDate AS Date FROM #Calendar) B
+		ON B.Date >= A.AlertDueDate
+		AND B.Date <= CAST(COALESCE(ActionDateTime, GetDate() -1 ) AS Date)
+
+
+		) A
+LEFT JOIN [dbo].[view_PromptedStore] S
+ON A.StoreCode = S.StoreCode
+LEFT JOIN [dbo].[PromptedDateCheckActions] B
+ON A.ActionID = B.ActionID
+WHERE AlertDueDate < CAST(GetDate() AS Date)
+AND A.StoreCode NOT IN ('759', '761', '762', '763', '764', '765')    ---- Forecourts excluded from Prompted Compliance Report
+
+
+CREATE CLUSTERED INDEX ix_tempPromptedComplianceCluster ON #PromptedData ([StoreCode],[ProductCode], AlertDueDate);
+
+
+--------CREATE COMPLIANCE TABLE-----
+--DROP TABLE [dbo].[Prompted_Compliance]
+TRUNCATE TABLE [dbo].[Prompted_Compliance]
+INSERT INTO [dbo].[Prompted_Compliance]
+SELECT	TradingDepartmentName
+		,GroupName
+		,SectionName
+		,RegionName
+		,StoreCode
+		,StoreName
+		,AlertDueDate
+		,OriginalAlertDueDate
+		,ActionDuration
+		,Compliant
+		,Barcode
+		,ProductCode
+		,SUM(Quantity) AS TotalUnits
+		,COUNT(*) AS CountOfPrompts
+--INTO [dbo].[Prompted_Compliance]
+FROM #PromptedData
+WHERE AlertDueDate between GETDATE()-85 and GETDATE()-1
+GROUP BY TradingDepartmentName
+		,GroupName
+		,SectionName
+		,RegionName
+		,StoreCode
+		,StoreName
+		,AlertDueDate
+		,OriginalAlertDueDate
+		,ActionDuration
+		,Compliant
+		,Barcode
+		,ProductCode
+
+--------CREATE TABLE OF WHEN PRODUCTS HIT THE PROMPTED SYSTEM-----
+--DROP TABLE [dbo].[Prompted_NonActionedPrompts]
+TRUNCATE TABLE [dbo].[Prompted_NonActionedPrompts]
+INSERT INTO [dbo].[Prompted_NonActionedPrompts]
+SELECT	ItemDescription
+		,ProductCode
+		,Barcode
+		,TradingDepartmentName
+		,GroupName
+		,SectionName
+		,StoreCode
+		,StoreName
+		,RegionName
+		,ExpiryDate
+		,CreateDate
+		,DaysBeforeAlert
+		,AlertDueDate
+		,ActionDuration AS DaysSincePrompt
+		,Quantity
+--INTO [dbo].[Prompted_NonActionedPrompts]
+FROM #PromptedData
+WHERE ActionID IS NULL
+AND [AlertDueDate] between GETDATE()-85 and GETDATE()-1
+
+
+------CREATE TABLE OF NON-COMPLIANT PRODUCTS-------
+
+TRUNCATE TABLE [dbo].[Prompted_NonCompliant]
+INSERT INTO [dbo].[Prompted_NonCompliant]
+SELECT *
+--INTO [dbo].[Prompted_NonCompliant]
+FROM #PromptedData
+WHERE Compliant = 'N'
+AND [AlertDueDate] between GETDATE()-85 and GETDATE()-1
+
+SET @EndTime = CAST(GetDate() AS datetime)
+SET @RunTime = CAST(@EndTime - @StartTime AS Time)
+
+INSERT INTO [dbo].[run_time_log]
+SELECT @ProcedureName
+	,@StartTime
+	,@EndTime
+	,@RunTime
+	,@SystemUser
+
+
+END
