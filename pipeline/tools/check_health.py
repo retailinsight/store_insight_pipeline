@@ -15,8 +15,10 @@ Usage (library):
 
 from __future__ import annotations
 
+import argparse
 import datetime
 import json as _json
+import sys
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -226,7 +228,8 @@ def _check_grain_uniqueness(runner, table_fqn, contract_name, contract_def, repo
         return
 
     distinct_rows = runner(
-        f'SELECT COUNT(DISTINCT ({grain_cols})) AS DISTINCT_COUNT FROM {table_fqn}'
+        f'SELECT COUNT(*) AS DISTINCT_COUNT FROM '
+        f'(SELECT DISTINCT {grain_cols} FROM {table_fqn})'
     )
     distinct = distinct_rows[0]['DISTINCT_COUNT'] if distinct_rows else 0
 
@@ -313,10 +316,14 @@ def _check_referential_integrity(runner, table_fqn, contract_name, contract_def,
         join_conditions = ' AND '.join(
             f'a.{lhs} = b.{rhs}' for lhs, rhs in match.items()
         )
+        null_check = ' AND '.join(
+            f'b.{rhs} IS NULL' for rhs in match.values()
+        )
 
         sql = (
             f'SELECT COUNT(*) AS ORPHAN_COUNT FROM {table_fqn} a '
-            f'LEFT ANTI JOIN {target_fqn} b ON {join_conditions}'
+            f'LEFT JOIN {target_fqn} b ON {join_conditions} '
+            f'WHERE {null_check}'
         )
         orphan_rows = runner(sql)
         orphan_count = orphan_rows[0]['ORPHAN_COUNT'] if orphan_rows else 0
@@ -421,3 +428,89 @@ def _check_domain_rules(runner, table_fqn, contract_name, contract_def, report):
                 'violation_rate': violation_count / total,
                 'severity': severity,
             })
+
+
+# ---------------------------------------------------------------------------
+# Snowflake runner adapter
+# ---------------------------------------------------------------------------
+
+def snowflake_runner(session, errors: list | None = None):
+    """Return a runner callable that executes SQL via a Snowpark session.
+
+    Parameters
+    ----------
+    session : Snowpark Session
+    errors : list or None
+        If provided, SQL errors are appended here instead of raising.
+        Each entry is a dict with 'sql' and 'error' keys.
+    """
+    def _run(sql: str) -> list[dict]:
+        try:
+            rows = session.sql(sql).collect()
+            return [row.as_dict() for row in rows]
+        except Exception as e:
+            if errors is not None:
+                errors.append({'sql': sql, 'error': str(e)})
+                return []
+            raise
+    return _run
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description='Run data health checks against live Snowflake tables.',
+    )
+    parser.add_argument('--client', required=True,
+                        help='Client config name (subfolder under config/clients/).')
+    parser.add_argument('--analysis-date', default=None,
+                        help='YYYY-MM-DD analysis date. Defaults to yesterday.')
+    parser.add_argument('--contract', default=None,
+                        help='Check only this contract (e.g. osa). Default: all.')
+    parser.add_argument('--format', dest='fmt', default='console',
+                        choices=['console', 'markdown', 'json'],
+                        help='Output format (default: console).')
+    parser.add_argument('--dry-run', action='store_true',
+                        help='Collect SQL without executing.')
+    args = parser.parse_args()
+
+    from store_insight.pipeline.config.loader import load_config
+    from store_insight.pipeline.pipeline.session import create_session
+
+    cfg = load_config(args.client)
+
+    analysis_date = args.analysis_date
+    if analysis_date is None:
+        analysis_date = str(datetime.date.today() - datetime.timedelta(days=1))
+
+    if args.dry_run:
+        runner = None  # not used in dry-run
+        sql_errors = []
+    else:
+        sql_errors = []
+        session = create_session(cfg)
+        runner = snowflake_runner(session, errors=sql_errors)
+
+    report = check_health(
+        runner=runner,
+        cfg=cfg,
+        analysis_date=analysis_date,
+        contract=args.contract,
+        dry_run=args.dry_run,
+    )
+
+    print(format_report(report, args.fmt))
+
+    if sql_errors:
+        print(f'\n⚠ {len(sql_errors)} SQL error(s) encountered:', file=sys.stderr)
+        for err in sql_errors:
+            print(f'  • {err["error"][:120]}', file=sys.stderr)
+
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
