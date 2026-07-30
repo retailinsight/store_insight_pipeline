@@ -1,10 +1,28 @@
 # Risk Validation Against Live Snowflake
 
 Living document: re-validate before each deployment step and after each production run.
-Validation helpers: `scripts/validate_deploy_risks.py`, `scripts/check_run_output.py`, `scripts/spot_check_cards.py`, `scripts/migrate_alerts_table_schema.py`, `scripts/validate_lineage_populated.py` (read-only except migration; VPN required).
+Validation helpers: `scripts/validate_deploy_risks.py`, `scripts/check_run_output.py`, `scripts/spot_check_cards.py`, `scripts/migrate_alerts_table_schema.py`, `scripts/validate_lineage_populated.py`, `scripts/validate_merge_snowflake.py`, `scripts/check_task_history.py` (read-only except migration; VPN required).
 
-Last live-Snowflake validation: **2026-07-21 10:30** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
-Requirements/code review updated: **2026-07-30 09:50**
+Last live-Snowflake validation: **2026-07-30 15:05** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
+Requirements/code review updated: **2026-07-30 15:10**
+
+---
+
+## ⚠️ ACTIVE INCIDENT — daily task failing since 2026-07-22
+
+**Status: ROOT CAUSE IDENTIFIED, FIX MERGED, REDEPLOY PENDING.**
+
+- `TASK_HISTORY` shows `RUN_ALERTS_PIPELINE_TASK` FAILED every day 2026-07-24 → 2026-07-30
+  (window limit 7 days; last successful write was `RUN_DATE=2026-07-21`).
+- Error: `Insert value list does not match column list expecting 27 but got 19`
+  raised in `write_alerts` → `save_as_table`.
+- Root cause: the table was migrated to 27 columns on 2026-07-21, but the deployed
+  zip in the stage still builds 19-column rows (pre-lineage `_card_to_row`).
+- Fix: merged branch `feat/ukcoop-env-scaling-merge` (commit `1f705c5`) writes
+  the full 27-column row (verified by `pipeline/tests/test_lineage.py`).
+- Actions: redeploy zip/SP from the merged branch, then backfill missed
+  `ANALYSIS_DATE`s 2026-07-22 → 2026-07-29 via manual SP calls.
+- Diagnosis script: `scripts/check_task_history.py` (read-only).
 
 ---
 
@@ -13,6 +31,7 @@ Requirements/code review updated: **2026-07-30 09:50**
 | Check | Result |
 |---|---|
 | First scheduled production run | ✅ SUCCEEDED (2026-07-17 14:47 BST) |
+| Latest successful run | 2026-07-21 (1,156 cards) — task failing since (see incident above) |
 | Cards written | 1,165 (`run_date=2026-07-17`, `analysis_date=2026-07-17`, rule-based) |
 | ID uniqueness | ✅ 1,165 distinct `ALERT_ID`s |
 | Engine mix | ✅ 100% rule-based, 0 Cortex for scheduled production |
@@ -54,7 +73,12 @@ scheduled runs must not use Cortex. The daily Task explicitly passes
 
 ## Risk 3 — Run lineage columns
 
-**Status: MITIGATED.**
+**Status: MITIGATED in code; production population pending redeploy.**
+
+Live check 2026-07-30: lineage columns exist on the 27-column table but are
+NULL on the latest production run (`2026-07-21`) because the deployed zip
+predates the lineage-writing code. The post-merge redeploy resolves this
+(same redeploy that fixes the active incident above).
 
 Migration completed 2026-07-21. `DESCRIBE TABLE` now shows 27 columns;
 all lineage columns are present. A test run for store 634 on
