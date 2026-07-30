@@ -130,5 +130,5 @@ Neither original branch was modified. No rebase / history rewrite.
 ## 6. Notes / blockers
 
 - Windows file locks / OneDrive sync caused interactive git prompts during the merge; OneDrive sync was paused and non-interactive commands used.
-- Branch `feat/ukcoop-env-scaling-merge` exists **locally only** — it will not appear on GitHub until pushed.
+- Branch `feat/ukcoop-env-scaling-merge` has been pushed to GitHub: https://github.com/dantretailinsight/store_insight/pull/new/feat/ukcoop-env-scaling-merge
 - Untracked files intentionally left out of the merge commit: `DEV_ENVIRONMENT_JIRA_TICKET.md`, `DEV_ENVIRONMENT_TICKET_STATUS.md`, `review-feat-pipeline-scaling.md`, `scripts/check_dev_ticket_facts*.py`.
