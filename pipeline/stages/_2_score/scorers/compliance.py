@@ -38,14 +38,15 @@ from store_insight.pipeline.stages._2_score.config import ScorerInfo
 METADATA = ScorerInfo(
     name        = 'compliance',
     signal_type = 'COMPLIANCE',
-    formula     = 'SUM(osa.LOST_SALES_VALUE of items behind tick-and-flicked alerts)',
+    formula     = 'SUM(COALESCE(osa.LOST_SALES_VALUE, 0)) for distinct tick-and-flicked (STORE_ID, ITEM_CODE, DATE) tuples',
     description = (
-        'Fires on "tick-and-flick": OSA alerts were closed without the item '
-        'genuinely being checked, so the underlying availability gap persists '
-        'while looking resolved on paper. Score = the actual £ LSV of the items '
-        'behind those dismissed alerts (feedback rows with TICK_AND_FLICK_FLAG '
-        'joined to the OSA fact on store + item + date), so stores that dismiss '
-        'genuinely costly availability gaps score highest.'
+        '“Behind an alert” means the OSA fact for the same store, item, and '
+        'alert-action date. For each flagged store, take current-week feedback '
+        'rows where TICK_AND_FLICK_FLAG = TRUE; deduplicate to (store, item, '
+        'date); left join OSA on those three fields; then sum LOST_SALES_VALUE. '
+        'An alert with no matching OSA fact contributes £0. This is the observed '
+        'alert-day availability loss for rapidly dismissed alerts, not a measured '
+        'post-dismissal or future loss estimate.'
     ),
 )
 

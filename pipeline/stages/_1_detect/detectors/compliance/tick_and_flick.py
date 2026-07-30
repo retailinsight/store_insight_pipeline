@@ -33,7 +33,7 @@ METADATA = DetectorInfo(
     problem     = "A store's rate of rapidly dismissed alerts has risen week-on-week and is above the chain average, indicating poor compliance with the alerting process.",
     action      = 'Review the store\'s alert-working behaviour with the store manager and ensure alerts are being genuinely investigated rather than dismissed.',
     baseline    = 'The chain-wide tick-and-flick rate for the same week.',
-    logic       = 'Fires when the store tick-and-flick rate has risen by at least min_wow_increase percentage points week-on-week, exceeds the chain average by at least min_chain_outperform percentage points, and the store has worked at least min_alerts_worked alerts this week.',
+    logic       = 'Tick-and-flick rate = rapid dismissals / alerts worked.\nWoW increase = this-week rate - last-week rate.\nChain gap = store this-week rate - chain this-week rate.\nFires when WoW increase >= min_wow_increase, chain gap >= min_chain_outperform, and this-week alerts worked >= min_alerts_worked.',
     config_keys = ['min_wow_increase', 'min_chain_outperform', 'min_alerts_worked'],
 )
 

@@ -187,16 +187,15 @@ def _generate_markdown_override(signal: dict) -> dict:
 
 def _generate_waste(signal: dict) -> dict:
     """Generate narrative for a WASTE alert."""
-    site_name = signal.get("site_name") or f"Store {signal['store_id']}"
-    triggers = signal.get("trigger_types", [])
-    this_rate = signal.get("this_week_stb_rate", 0.0)
-    last_rate = signal.get("last_week_stb_rate")
-    wow_change = signal.get("wow_change_pp")
-    chain_rate = signal.get("chain_stb_rate")
-    above_chain = signal.get("above_chain_pp")
-    waste_qty = signal.get("this_week_waste_qty", 0)
-    stb_qty = signal.get("this_week_stb_qty", 0)
-    waste_val = signal.get("this_week_waste_value", 0.0)
+    site_name   = signal.get('site_name') or f'Store {signal["store_id"]}'
+    triggers    = signal.get('trigger_types', [])
+    this_rate   = signal.get('this_week_stb_rate', 0.0)
+    last_rate   = signal.get('last_week_stb_rate')
+    wow_change  = signal.get('wow_change_pp')
+    chain_rate  = signal.get('chain_stb_rate')
+    above_chain = signal.get('above_chain_pp')
+    waste_qty   = signal.get('this_week_waste_qty', 0)
+    waste_val   = signal.get('this_week_waste_value', 0.0)
 
     facts = signal.get("facts", {})
     dept_bdwn = [
@@ -205,26 +204,24 @@ def _generate_waste(signal: dict) -> dict:
         if str(row.get("dept") or "").strip().lower() not in {"", "unknown", "none", "nan"}
     ]
 
-    if "VS_CHAIN" in triggers and above_chain is not None:
-        issue = f"{site_name}: straight-to-bin rate {this_rate:.1f}% — {above_chain:.1f}pp above chain average"
-    elif "WOW" in triggers and wow_change is not None:
-        issue = (
-            f"{site_name}: straight-to-bin rate up {wow_change:.1f}pp this week to {this_rate:.1f}%"
-        )
+    if 'VS_CHAIN' in triggers and above_chain is not None:
+        issue = f'{site_name}: waste-to-markdown ratio {this_rate:.1f}% — {above_chain:.1f}pp above chain average'
+    elif 'WOW' in triggers and wow_change is not None:
+        issue = f'{site_name}: waste-to-markdown ratio up {wow_change:.1f}pp this week to {this_rate:.1f}%'
     else:
-        issue = f"{site_name}: elevated straight-to-bin waste rate ({this_rate:.1f}%)"
+        issue = f'{site_name}: elevated waste-to-markdown ratio ({this_rate:.1f}%)'
 
     explanation_lines = [
-        f"{stb_qty} of {waste_qty} wasted units ({this_rate:.1f}%) went straight to bin this week.",
-        f"Waste value at original price: \u00a3{waste_val:,.2f}.",
+        f'{waste_qty} units were wasted this week, valued at £{waste_val:,.2f} at original price.',
+        f'Waste was {this_rate:.1f}% of markdown volume this week.',
     ]
     if "VS_CHAIN" in triggers and chain_rate is not None:
         explanation_lines.append(
-            f"Chain average STB rate is {chain_rate:.1f}% — this store is {above_chain:.1f}pp above."
+            f'Chain average waste-to-markdown ratio is {chain_rate:.1f}% — this store is {above_chain:.1f}pp above.'
         )
     if "WOW" in triggers and last_rate is not None:
         explanation_lines.append(
-            f"Last week the STB rate was {last_rate:.1f}% — up {wow_change:.1f}pp."
+            f'Last week the waste-to-markdown ratio was {last_rate:.1f}% — up {wow_change:.1f}pp.'
         )
     if dept_bdwn:
         top = dept_bdwn[0]
@@ -234,14 +231,13 @@ def _generate_waste(signal: dict) -> dict:
 
     top_dept = dept_bdwn[0]["dept"] if dept_bdwn else None
     action = (
-        f"Review end-of-life processes{f' in {top_dept}' if top_dept else ''}. "
-        "Ensure items flagged for markdown are actioned before they reach their waste date. "
-        "Check items are not being binned before markdown is applied."
+        f'Review waste and markdown processes{f" in {top_dept}" if top_dept else ""}. '
+        'Assess markdown timing, markdown depth, ordering, and operational handling to identify opportunities to reduce waste.'
     )
 
     cost = (
-        f"Items worth approximately \u00a3{waste_val:,.2f} per week are being discarded "
-        "that could have generated revenue through markdowns."
+        f'Items worth approximately \u00a3{waste_val:,.2f} at original price were wasted this week. '
+        'Review whether some could have been recovered through earlier markdown action.'
     )
 
     return {
@@ -292,7 +288,7 @@ def _generate_markdown_sellthrough(signal: dict) -> dict:
     if dept_bdwn:
         worst = dept_bdwn[0]
         explanation_lines.append(
-            f"Worst department: {worst['dept']} ({worst['sellthrough_rate_pct']:.1f}% sell-through on {worst['requested_qty']} units)."
+            f'Worst department: {worst["dept"]} ({worst["sellthrough_rate_pct"]:.1f}% sell-through on {worst["total_qty"]} units).'
         )
 
     worst_dept = dept_bdwn[0]["dept"] if dept_bdwn else None
@@ -389,6 +385,154 @@ def _generate_markdown_sku(signal: dict) -> dict:
     }
 
 
+def _generate_osa_recurring_slot(signal: dict) -> dict:
+    """Generate narrative for an OSA_RECURRING_SLOT alert."""
+    site_name      = signal.get('site_name') or f"Store {signal['store_id']}"
+    dept           = signal['department']
+    dow_name       = signal.get('dow_name', 'Unknown day')
+    period_label   = signal.get('period_label', 'Unknown period')
+    n_items        = signal.get('repeat_item_count', 0)
+    total_lsv      = signal.get('total_lsv', 0.0)
+    avg_weekly_lsv = signal.get('avg_weekly_lsv', 0.0)
+    item_details   = signal.get('repeat_item_details', [])
+
+    facts = signal.get('facts', {})
+    slot_share = facts.get('recurring_slot_share_pct')
+    dept_share = facts.get('slot_share_of_dept_total_pct')
+    trend      = facts.get('slot_trend', 'flat')
+    history    = facts.get('slot_history', [])
+
+    issue = (
+        f'{site_name}: {dept} has recurring lost sales on {dow_name} {period_label}'
+    )
+
+    explanation_lines = [
+        f'{n_items} item{"s" if n_items != 1 else ""} repeatedly lost sales '
+        f'in the {period_label} slot on {dow_name}s, '
+        f'with a total lost sales value of \u00a3{total_lsv:,.2f} across the lookback window.',
+        f'Average weekly lost sales for this slot: \u00a3{avg_weekly_lsv:,.2f}.',
+    ]
+
+    if slot_share is not None:
+        explanation_lines.append(
+            f'These recurring items account for {slot_share:.1f}% of lost sales '
+            f'in this {dow_name} {period_label} slot.'
+        )
+    if dept_share is not None:
+        explanation_lines.append(
+            f'This slot accounts for {dept_share:.1f}% of total lost sales in {dept}.'
+        )
+    if trend != 'flat':
+        explanation_lines.append(f'The slot lost-sales trend is {trend}.')
+
+    if item_details:
+        explanation_lines.append('Top recurring items:')
+        for item in item_details[:5]:
+            desc = item.get('item_description')
+            item_label = f'{desc} ({item["item_code"]})' if desc else item['item_code']
+            explanation_lines.append(
+                f'\u2022 {item_label}: '
+                f'\u00a3{item["total_lsv"]:,.2f} over {item["repeat_weeks"]} week{"s" if item["repeat_weeks"] != 1 else ""}'
+            )
+
+    if history:
+        explanation_lines.append(f'Weekly slot history (last {len(history)} matched weeks):')
+        for week in history[-5:]:
+            explanation_lines.append(
+                f'\u2022 {week["year"]}-W{week["week"]}: '
+                f'\u00a3{week["lsv"]:,.2f} LSV ({week["osa_pct"]:.1f}% OSA)'
+            )
+
+    explanation = '\n'.join(explanation_lines)
+
+    projection_weeks = facts.get('projection_weeks') or signal.get('projection_weeks') or 4
+    cost_projection = (
+        signal.get('projected_cost')
+        or round(avg_weekly_lsv * projection_weeks, 2)
+    )
+
+    cost = (
+        f'If this recurring slot problem continues, the store could lose approximately '
+        f'\u00a3{cost_projection:,.2f} over the next {projection_weeks} weeks.'
+    )
+
+    action = (
+        f'Investigate operational drivers behind {dow_name} {period_label} shortages in {dept}. '
+        'Check delivery schedules, shelf-filling routines, staffing levels, and demand spikes '
+        'for the flagged items.'
+    )
+
+    return {
+        'issue':              issue,
+        'explanation':        explanation,
+        'cost_if_not_fixed':  cost,
+        'recommended_action': action,
+    }
+
+
+def _generate_waste_trim(signal: dict) -> dict:
+    """Generate narrative for a WASTE_TRIM alert."""
+    site_name        = signal.get('site_name') or f"Store {signal['store_id']}"
+    item_desc        = signal.get('item_description') or f"Item {signal['item_id']}"
+    department       = signal.get('department', '')
+    markdown_units   = signal.get('markdown_units', 0)
+    total_units      = signal.get('total_units', 0)
+    markdown_ratio   = signal.get('markdown_ratio', 0.0)
+    markdown_value   = signal.get('markdown_value', 0.0)
+    projected_cost   = signal.get('projected_cost', markdown_value)
+
+    facts = signal.get('facts', {})
+    chain_ratio = facts.get('chain_markdown_ratio')
+    dept_ratio  = facts.get('dept_markdown_ratio')
+    trend       = facts.get('weekly_trend', [])
+
+    issue = (
+        f'{site_name}: {item_desc} in {department} sold '
+        f'{markdown_ratio:.1%} of its units at markdown this week'
+    )
+
+    explanation_lines = [
+        f'{markdown_units} of {total_units} units sold were at markdown '
+        f'(£{markdown_value:,.2f} markdown sales).',
+    ]
+
+    if chain_ratio is not None:
+        explanation_lines.append(
+            f'Across all stores, this item had {chain_ratio:.1%} markdown sales.'
+        )
+    if dept_ratio is not None:
+        explanation_lines.append(
+            f'The {department} department averaged {dept_ratio:.1%} markdown sales this week.'
+        )
+
+    if trend:
+        explanation_lines.append('Weekly markdown ratio trend:')
+        for week in trend[-4:]:
+            explanation_lines.append(
+                f'\u2022 w/c {week["week_start"]}: '
+                f'{week["markdown_units"]:.0f}/{week["total_units"]:.0f} units '
+                f'({week["ratio"]:.1%})'
+            )
+
+    cost = (
+        f'If this item continues to rely on markdown clearance, it risks losing '
+        f'approximately £{projected_cost:,.2f} in full-price sales potential each week.'
+    )
+
+    action = (
+        f'Review ranging and ordering for {item_desc} in {department}. '
+        'Check whether demand forecasting is overestimating sales or whether the store '
+        'is receiving excess stock that can only clear at markdown.'
+    )
+
+    return {
+        'issue':              issue,
+        'explanation':        '\n'.join(explanation_lines),
+        'cost_if_not_fixed':  cost,
+        'recommended_action': action,
+    }
+
+
 def generate(signal: dict) -> dict:
     """
     Generate narrative fields for a single enriched signal using templates.
@@ -420,8 +564,14 @@ def generate(signal: dict) -> dict:
     if signal_type == "MARKDOWN_SKU":
         return _generate_markdown_sku(signal)
 
-    dept = signal["department"]
-    facts = signal["facts"]
+    if signal_type == 'OSA_RECURRING_SLOT':
+        return _generate_osa_recurring_slot(signal)
+
+    if signal_type == 'WASTE_TRIM':
+        return _generate_waste_trim(signal)
+
+    dept     = signal['department']
+    facts    = signal['facts']
 
     lsv = signal.get("this_week_lsv") or 0
     this_week_osa = signal.get("this_week_osa")

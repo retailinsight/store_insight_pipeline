@@ -183,26 +183,26 @@ def _build_markdown_override_context(signal):
 
 
 def _build_waste_context(signal):
-    """Build context block for a WASTE (straight-to-bin) signal."""
-    facts = signal.get("facts", {})
-    store_label = signal.get("site_name") or f"Store {signal['store_id']}"
-    this_rate = signal.get("this_week_stb_rate", 0.0)
+    """Build context block for a WASTE-to-markdown-ratio signal."""
+    facts       = signal.get('facts', {})
+    store_label = signal.get('site_name') or f"Store {signal['store_id']}"
+    this_rate   = signal.get('this_week_stb_rate', 0.0)
     lines = [
-        "Alert Type: Waste (Straight-to-Bin)",
+        "Alert Type: Waste-to-Markdown Ratio",
         f"Store: {store_label}",
         f"Triggers: {', '.join(signal.get('trigger_types', []))}",
-        f"This Week Straight-to-Bin Rate: {this_rate:.1f}%",
+        f"This Week Waste-to-Markdown Ratio: {this_rate:.1f}%",
         f"This Week Waste Quantity: {signal.get('this_week_waste_qty', 0)}",
-        f"This Week STB Quantity: {signal.get('this_week_stb_qty', 0)}",
+        "Limitation: the source data cannot show whether individual wasted units were marked down before disposal.",
         f"This Week Waste Value: \u00a3{signal.get('this_week_waste_value', 0.0):,.2f}",
     ]
-    if signal.get("last_week_stb_rate") is not None:
-        lines.append(f"Last Week STB Rate: {signal['last_week_stb_rate']:.1f}%")
-    if signal.get("wow_change_pp") is not None:
+    if signal.get('last_week_stb_rate') is not None:
+        lines.append(f"Last Week Waste-to-Markdown Ratio: {signal['last_week_stb_rate']:.1f}%")
+    if signal.get('wow_change_pp') is not None:
         lines.append(f"Week-on-Week Change: {signal['wow_change_pp']:+.1f}pp")
-    if signal.get("chain_stb_rate") is not None:
-        lines.append(f"Chain Average STB Rate: {signal['chain_stb_rate']:.1f}%")
-    if signal.get("above_chain_pp") is not None:
+    if signal.get('chain_stb_rate') is not None:
+        lines.append(f"Chain Average Waste-to-Markdown Ratio: {signal['chain_stb_rate']:.1f}%")
+    if signal.get('above_chain_pp') is not None:
         lines.append(f"Above Chain Average By: {signal['above_chain_pp']:+.1f}pp")
     dept_bdwn = facts.get("waste_dept_breakdown", [])
     if dept_bdwn:
@@ -211,7 +211,7 @@ def _build_waste_context(signal):
             lines.append(
                 f"  {item.get('dept', '?')}: {item.get('waste_qty', 0)} wasted units, "
                 f"\u00a3{item.get('waste_value', 0.0):,.2f} "
-                f"(waste rate {item.get('waste_rate_pct', 0.0):.1f}%)"
+                "at original price"
             )
     return "\n".join(lines)
 

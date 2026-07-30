@@ -1,0 +1,249 @@
+USE [EECO_Reporting]
+GO
+/****** Object:  StoredProcedure [dbo].[sp_ProductReporting]    Script Date: 28/07/2026 12:26:26 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER PROCEDURE [dbo].[sp_ProductReporting] 
+
+AS
+BEGIN
+
+
+	DECLARE @ProcedureName VARCHAR(MAX)
+	DECLARE @StartTime DATETIME
+	DECLARE @EndTime DATETIME
+	DECLARE @RunTime Time
+	DECLARE @SystemUser VARCHAR(200)
+
+	SET @ProcedureName = 'sp_ProductReporting'
+	SET @StartTime = CAST(GetDATE() AS datetime)
+	SET @SystemUser = SYSTEM_USER
+
+	
+	SET DATEFIRST 1;
+
+	IF OBJECT_ID('tempdb..#Calendar') IS NOT NULL DROP TABLE #Calendar
+	SELECT Year
+			,WeekNbr
+			,Min(CalendarDate) AS StartOfWeek
+			,Max(CalendarDate) AS EndOfWeek
+			,DENSE_RANK() OVER (ORDER BY Year DESC, WeekNbr DESC) AS WeekRank
+	INTO #Calendar
+	FROM [dbo].[Calendar]
+	WHERE CalendarDate <= GetDate() - 1
+	GROUP BY Year, WeekNbr
+	HAVING COUNT(*) = 7
+
+	-------------------------------- START DATES ----------------------------
+	DECLARE @START_DATE DATE = (SELECT StartOfWeek FROM #Calendar where WeekRank = 53)
+
+	-------------------------------- END DATES ------------------------------
+	DECLARE @END_DATE DATE = (SELECT EndOfWeek FROM #Calendar where WeekRank = 1)
+
+	--DELETE FROM dbo.product_reporting 
+
+	----------------------------------------PRODUCTS------------------------------------------------
+
+	IF OBJECT_ID('tempdb..#products') IS NOT NULL DROP TABLE #products
+	SELECT   *
+	INTO #products
+	FROM [dbo].[view_Item]
+	WHERE VMECode IS NOT NULL
+
+	----------------STORES-----------
+	IF OBJECT_ID('tempdb..#stores') IS NOT NULL DROP TABLE #stores
+	SELECT   *
+	INTO #stores
+	FROM [dbo].[view_Store]
+
+	------------------------------------------SALES-------------------------------------------------
+
+	IF OBJECT_ID('tempdb..#FPSales') IS NOT NULL DROP TABLE #FPSales
+	SELECT 
+		s.[Date] AS Date
+		,i.VMECode AS VMECode
+		,i.DepartmentName AS Department
+		,i.CategoryName AS Category
+		,i.SubCategoryName AS SubCategory
+		,i.PPGClusterID AS PPG
+		,SUM([SaleQuantity]) AS salesqty
+		,SUM([SaleValue]) AS salesval
+	INTO #FPSales
+	FROM [dbo].[Sales] s WITH (INDEX = CIX_Sales_Date_StoreID_ItemID)
+	INNER JOIN #products i on s.ItemID = i.ItemID
+	--INNER JOIN #Calendar AS DATES ON s.Date = DATES.Date
+	WHERE
+		SaleQuantity > 0
+		AND S.Date BETWEEN @Start_Date AND @End_Date
+		AND NOT (StoreID IN (502, 291) AND Date >= '2024-12-08')
+		AND NOT (StoreID IN (504) AND Date >= '2025-03-23')
+		AND NOT (s.StoreID IN (411) AND Date BETWEEN '2025-05-10' AND '2025-06-05') --Closed for refit
+		AND NOT (s.StoreID IN (421) AND Date BETWEEN '2025-05-24' AND '2025-06-11') --Closed for refit
+		AND NOT (s.StoreID = 427 AND Date >= '2025-06-17') --Closed store
+	GROUP BY
+		s.[Date]
+		,i.VMECode
+		,i.DepartmentName
+		,i.CategoryName 
+		,i.SubCategoryName 
+		,i.PPGClusterID 
+
+	------------------------------------MARKDOWN SALES--------------------------------------------
+
+	IF OBJECT_ID('tempdb..#MDSales') IS NOT NULL DROP TABLE #MDSales
+	SELECT
+		ms.[Date] AS Date
+		,i.VMECode AS VMECode
+		,i.DepartmentName AS Department
+		,i.CategoryName AS Category
+		,i.SubCategoryName AS SubCategory
+		,i.PPGClusterID AS PPG
+		,SUM(ms.MarkdownQuantity) as markdownsalesqty
+		,SUM(ms.MarkdownValue) as markdownsalesval
+		,SUM(ms.OriginalRetailPrice) as markdownsalesoriginalval
+	INTO #MDSales
+	FROM [dbo].MarkdownSales ms WITH (INDEX = CIX_MarkdownSales_Date_StoreID_ItemID)
+	INNER JOIN #products i on ms.ItemID = i.ItemID
+	--INNER JOIN #Calendar AS DATES ON ms.Date = DATES.Date
+	WHERE ms.Date BETWEEN @Start_Date AND @End_Date
+	AND NOT (StoreID IN (502, 291) AND Date >= '2024-12-08')
+	AND NOT (StoreID IN (504) AND Date >= '2025-03-23')
+	--KL Excluding Item on 12th April
+	AND NOT (Date = '2025-04-12' AND VMECode = '68410' AND ms.StoreID = 270)
+	AND NOT (ms.StoreID IN (411) AND Date BETWEEN '2025-05-10' AND '2025-06-05') --Closed for refit
+	AND NOT (ms.StoreID IN (421) AND Date BETWEEN '2025-05-24' AND '2025-06-11') --Closed for refit
+	AND NOT (ms.StoreID = 427 AND Date >= '2025-06-17') --Closed store
+	GROUP BY
+		ms.[Date]
+		,i.VMECode
+		,i.DepartmentName
+		,i.CategoryName 
+		,i.SubCategoryName 
+		,i.PPGClusterID 
+
+
+	------------------------------------WASTE OUTLIERS-------------------------------------------
+
+	IF OBJECT_ID('tempdb..#waste_outliers') IS NOT NULL DROP TABLE #waste_outliers
+			SELECT WC.Date
+				, WC.Department
+				, Section
+				, SubSection
+				, PPGClusterID
+				, WC.VMECode AS VMECode
+				, WC.WasteReason
+				, WC.OriginalPrice
+				, WC.WasteQuantity
+				, WC.WasteQuantity * WC.OriginalPrice AS WasteValue
+				, COALESCE(ABS((WC.WasteQuantity - AVG(WC.WasteQuantity) OVER (PARTITION BY WC.DEPARTMENT))
+					/ NULLIF(STDEV(WC.WasteQuantity) OVER (PARTITION BY WC.DEPARTMENT),0)),0) AS ABS_Z_SCORE
+			INTO #waste_outliers
+			FROM
+			(
+			SELECT
+				  i.DepartmentName AS Department
+				, i.CategoryName AS Section
+				, i.SubCategoryName AS SubSection
+				, i.PPGClusterID
+				, W.[ItemID] AS VMECode
+				, W.[Date]
+				, W.[WasteReason]
+				, W.[OriginalPrice]
+				, W.WasteQuantity
+				, ROW_NUMBER() OVER(PARTITION BY W.STOREID, W.DATE, W.ITEMID, W.WASTEREASON ORDER BY ABS(W.WASTEQUANTITY) ASC) AS RN
+			FROM [dbo].[Wastage] W WITH (INDEX = CIX_Wastage_Date_StoreID_ItemID)
+				INNER JOIN #products AS i ON W.ItemID = i.VMECode 
+			WHERE w.Date BETWEEN @Start_Date AND @End_Date
+			AND NOT (StoreID IN (502, 291) AND Date >= '2024-12-08')
+			AND NOT (StoreID IN (504) AND Date >= '2025-03-23')
+			AND NOT (Date = '2025-03-09' AND VMECode = '21214' AND StoreID = 409 AND Wastereason = 'OUT OF DATE')
+			--KL Excluding Item on 9th April
+			AND NOT (Date = '2025-04-09' AND VMECode = '55292' AND StoreID = 497 AND Wastereason = 'DAMAGED')
+			AND NOT (StoreID IN (411) AND Date BETWEEN '2025-05-10' AND '2025-06-05') --Closed for refit
+			AND NOT (StoreID IN (421) AND Date BETWEEN '2025-05-24' AND '2025-06-11') --Closed for refit
+			AND NOT (StoreID = 427 AND Date >= '2025-06-17') --Closed store
+			) AS WC
+			WHERE RN = 1   -- This removes any rows where there was a subsequent correction made
+
+	----------------------------------------WASTE-----------------------------------------------
+
+	IF OBJECT_ID('tempdb..#waste') IS NOT NULL DROP TABLE #waste
+
+			SELECT    WO.VMECode AS VMECode
+					, WO.Department AS Department
+					, WO.Section AS Category
+					, WO.SubSection AS SubCategory
+					, WO.PPGClusterID AS PPG
+					, WO.Date
+					, SUM(WasteQuantity) AS waste_qty
+					, SUM(WasteValue) AS waste_val
+			INTO #waste
+			FROM #waste_outliers WO
+			WHERE 1 = 1
+					AND ABS_Z_SCORE <= 3  --This removes any extreme outliers from the data
+			GROUP BY
+					  VMECode
+					, Department
+					, Section
+					, SubSection
+					, PPGClusterID
+					, WO.Date
+
+
+	---------------------------------------COMBINED----------------------------------------------
+	
+	TRUNCATE TABLE [dbo].[Product_Reporting]
+
+	INSERT INTO [dbo].[Product_Reporting] 
+
+	SELECT 
+		 COALESCE(s.DATE,M.DATE,W.DATE) AS Date
+		,CONCAT(C.Year, FORMAT(C.WeekNbr, '00')) AS Week
+		,COALESCE(S.VMECode,m.VMECode,w.VMECode) AS VMECode
+		,COALESCE(S.Department,m.Department,w.Department) AS Department
+		,COALESCE(S.Category,m.Category,w.Category) AS Category
+		,COALESCE(S.SubCategory,m.SubCategory,w.SubCategory) AS SubCategory
+		,COALESCE(S.PPG,m.PPG,w.PPG) AS PPG
+		,SUM(s.salesqty) as SalesQty
+		,SUM(s.salesval) as SalesVal
+		,SUM(m.markdownsalesqty) as MDSalesQty
+		,SUM(m.markdownsalesval) as MDSalesVal
+		,SUM(m.markdownsalesoriginalval) as MDSalesOrigVal
+		,SUM(w.waste_qty) as WasteQty
+		,SUM(w.waste_val) as WasteVal
+		,ISNULL(SUM(s.salesqty),0) + ISNULL(SUM(m.markdownsalesqty),0) AS TotalSalesQty 
+		,ISNULL(SUM(s.salesval),0) + ISNULL(SUM(m.markdownsalesval),0) AS TotalSalesVal
+		,ISNULL(SUM(m.markdownsalesoriginalval),0) + ISNULL(SUM(w.waste_val),0) AS 'Potential £ Total Waste' 
+		,(ISNULL(SUM(m.markdownsalesoriginalval),0) - ISNULL(SUM(m.markdownsalesval),0)) + ISNULL(SUM(w.waste_val),0) AS 'Actual £ Total Waste' 
+	--INTO dbo.Product_Reporting
+	FROM #FPSales s
+	FULL OUTER JOIN #MDSales m on s.Date = m.Date and s.VMECode = m.VMECode and s.Department = m.Department and s.Category = m.Category and s.SubCategory = m.SubCategory and s.PPG = m.PPG
+	FULL OUTER JOIN #waste w on s.Date = w.Date and s.VMECode = w.VMECode and s.Department = w.Department and s.Category = w.Category and s.SubCategory = w.SubCategory and s.PPG = w.PPG
+	LEFT JOIN [dbo].[Calendar] C ON COALESCE(s.DATE, M.DATE, W.DATE) = C.CalendarDate
+	GROUP BY
+		COALESCE(s.DATE,M.DATE,W.DATE)
+		,CONCAT(C.Year, FORMAT(C.WeekNbr, '00'))
+		,COALESCE(S.VMECode,m.VMECode,w.VMECode)
+		,COALESCE(S.Department,m.Department,w.Department)
+		,COALESCE(S.Category,m.Category,w.Category) 
+		,COALESCE(S.SubCategory,m.SubCategory,w.SubCategory)
+		,COALESCE(S.PPG,m.PPG,w.PPG)
+	ORDER BY
+		Date,
+		Department
+
+
+	SET @EndTime = CAST(GetDate() AS datetime)
+	SET @RunTime = CAST(@EndTime - @StartTime AS Time)
+
+	INSERT INTO [dbo].[run_time_log]
+	SELECT @ProcedureName
+		,@StartTime
+		,@EndTime
+		,@RunTime
+		,@SystemUser
+
+END

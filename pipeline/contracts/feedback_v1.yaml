@@ -1,10 +1,6 @@
 # Contract: feedback (v1)
 # ========================
-# Per-intervention feedback on previously-shipped alerts.  Used exclusively
-# by the TICK_AND_FLICK compliance detector and its breakdown gatherer.
-#
-# Today's reference: ANALYSIS.FINAL.LSM_ALERT_FEEDBACK (East of England),
-# loaded with a two-week filter in pipeline/pipeline/run_batch.py load_feedback().
+
 
 name: feedback
 version: v1
@@ -15,16 +11,31 @@ description: |
   ("tick-and-flick").
 
 grain:
-  - INTERVENTION_ID
-  - DATE
+  - ALERT_SOURCE_ID
 
 columns:
-  INTERVENTION_ID:
-    type: NUMBER
+  ALERT_SOURCE_ID:
+    type: VARCHAR
     required: true
     description: |
-      Primary key — one row per intervention.  Counted to derive ALERTS_WORKED
-      per store per week.
+      Natural key — unique per feedback row.  Format:
+      {alert_type_id}_{store_id}_{item_id}_{date}.  Used as the grain.
+
+  INTERVENTION_ID:
+    type: NUMBER
+    required: false
+    description: |
+      Intervention *type* code (1–10, e.g. 1 = "On Shelf - No action",
+      5 = "Restocked").  Categorical, not a primary key.  ~19% of rows
+      have NULL (older data loaded before the field was populated).
+
+  INTERVENTION_NAME:
+    type: VARCHAR
+    required: false
+    description: |
+      Human-readable label for the intervention type.  Values may change
+      over time (e.g. ID 1 was renamed from "No action Taken" to
+      "On Shelf - No action").  Useful for reporting.
 
   STORE_ID:
     type: NUMBER
@@ -40,13 +51,13 @@ columns:
       contract is not required for compliance alerts.
 
   ITEM_CODE:
-    type: NUMBER
+    type: VARCHAR
     required: true
     description: |
-      Item the alert intervention was about (source ITEM_ID).  Joins to
-      osa.ITEM_CODE on (STORE_ID, ITEM_CODE, DATE) so the COMPLIANCE scorer
-      can attribute the £ LOST_SALES_VALUE of the items behind tick-and-flick
-      dismissals, rather than diluting against whole-store LSV.
+      Item the alert intervention was about (source ITEM_ID, cast to VARCHAR).
+      Joins to osa.ITEM_CODE on (STORE_ID, ITEM_CODE, DATE) so the COMPLIANCE
+      scorer can attribute the £ LOST_SALES_VALUE of the items behind
+      tick-and-flick dismissals, rather than diluting against whole-store LSV.
 
   ALERT_TYPE_NAME:
     type: VARCHAR
@@ -95,6 +106,13 @@ data_quality_findings:
       historical feedback rows keep the old name unless source ETL backfills.
       Adapter authors may prefer to NULL this and rely on a join to
       store_hierarchy for current names.
+
+freshness_max_age_days: 1
+
+checks:
+  - column: TICK_AND_FLICK_FLAG
+    rule: boolean_strict
+    severity: high
 
 notes: |
   - Pipeline window is exactly two weeks; older feedback is invisible.

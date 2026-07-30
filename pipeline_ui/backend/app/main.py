@@ -51,13 +51,21 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Pipeline Experiments API", version="0.1.0")
 
 _allowed = os.getenv("ALLOWED_ORIGINS", "*").strip()
-_origins = ["*"] if _allowed == "*" else [o.strip() for o in _allowed.split(",") if o.strip()]
+if _allowed == "*":
+    _origins = ["*"]
+else:
+    _origins = [o.strip() for o in _allowed.split(",") if o.strip()]
+    # Always allow localhost variants so dev proxies (e.g. Windsurf browser preview) work.
+    for _dev in ("http://localhost:8081", "http://127.0.0.1:8081"):
+        if _dev not in _origins:
+            _origins.append(_dev)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
 )
 
 

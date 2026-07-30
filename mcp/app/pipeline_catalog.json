@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-09T15:59:20+00:00",
+  "generated_at": "2026-07-27T10:49:05+00:00",
   "pipeline_summary": "Weekly batch that detects retail availability and markdown anomalies, enriches each signal with supporting facts, generates plain-English narrative cards, and scores them so the highest-impact issues surface first.",
   "stages": {
     "1_detect": "Run lightweight statistical detectors → list of signals.",
@@ -78,7 +78,7 @@
           "problem": "One or more items in a store-department have had persistently poor availability across multiple weeks, indicating a chronic structural problem.",
           "action": "Investigate the specific repeat-offender items listed in the signal and resolve underlying causes such as chronic out-of-stocks, ordering failures, or ranging issues.",
           "baseline": "The same item in the same store-department over the rolling lookback window (default: 10 weeks).",
-          "logic": "Fires when at least min_alert_weeks calendar weeks in the lookback window have OSA below (1 - min_osa_drop) and weekly lost sales value above min_weekly_lsv for one or more items in the store-department.",
+          "logic": "Weekly OSA = actual sales volume / (actual sales volume + lost sales volume).\nAn item alert week requires OSA < (1 - min_osa_drop) and weekly lost sales value > min_weekly_lsv.\nFires when one or more items in the store-department have item alert weeks >= min_alert_weeks in the rolling lookback window.",
           "config_keys": [
             "min_alert_weeks",
             "min_osa_drop",
@@ -91,7 +91,7 @@
           "problem": "Store-department OSA is significantly below the chain-wide average, indicating structural underperformance relative to peers.",
           "action": "Review why this store is underperforming its peers in this department and address root causes such as ordering, compliance, or ranging issues.",
           "baseline": "The chain-wide average OSA for the same department this week.",
-          "logic": "Fires when the store OSA is more than min_chain_gap percentage points below the chain average for the same department, and lost sales value this week exceeds min_lost_sales_value.",
+          "logic": "OSA = actual sales volume / (actual sales volume + lost sales volume).\nChain gap = chain department OSA - store department OSA.\nFires when chain gap > min_chain_gap and this-week lost sales value > min_lost_sales_value.",
           "config_keys": [
             "min_chain_gap",
             "min_lost_sales_value"
@@ -103,7 +103,7 @@
           "problem": "Store-department OSA has dropped sharply week-on-week, indicating an acute availability deterioration.",
           "action": "Investigate what changed in the store or supply chain this week and take corrective action to restore availability.",
           "baseline": "The same store-department OSA from the previous week.",
-          "logic": "Fires when OSA has fallen by more than min_wow_drop percentage points compared to the previous week, and lost sales value this week exceeds min_lost_sales_value.",
+          "logic": "OSA = actual sales volume / (actual sales volume + lost sales volume).\nWoW drop = last-week OSA - this-week OSA.\nFires when WoW drop > min_wow_drop and this-week lost sales value > min_lost_sales_value.",
           "config_keys": [
             "min_wow_drop",
             "min_lost_sales_value"
@@ -142,6 +142,15 @@
             "repeat_item_history"
           ],
           "description": "Week-by-week OSA and LSV history per item for REPEAT signals."
+        },
+        {
+          "name": "osa_item_time_patterns",
+          "facts_keys": [
+            "day_period_pattern",
+            "worst_day_period",
+            "repeat_item_time_patterns"
+          ],
+          "description": "Day-of-week / reporting-period lost-sales patterns and repeat-offender items."
         },
         {
           "name": "osa_cost_projection",
@@ -229,7 +238,7 @@
           "problem": "A store's rate of rapidly dismissed alerts has risen week-on-week and is above the chain average, indicating poor compliance with the alerting process.",
           "action": "Review the store's alert-working behaviour with the store manager and ensure alerts are being genuinely investigated rather than dismissed.",
           "baseline": "The chain-wide tick-and-flick rate for the same week.",
-          "logic": "Fires when the store tick-and-flick rate has risen by at least min_wow_increase percentage points week-on-week, exceeds the chain average by at least min_chain_outperform percentage points, and the store has worked at least min_alerts_worked alerts this week.",
+          "logic": "Tick-and-flick rate = rapid dismissals / alerts worked.\nWoW increase = this-week rate - last-week rate.\nChain gap = store this-week rate - chain this-week rate.\nFires when WoW increase >= min_wow_increase, chain gap >= min_chain_outperform, and this-week alerts worked >= min_alerts_worked.",
           "config_keys": [
             "min_wow_increase",
             "min_chain_outperform",
@@ -243,7 +252,7 @@
           "facts_keys": [
             "tf_by_alert_type"
           ],
-          "description": "Tick-and-flick count broken down by alert type for each flagged store."
+          "description": "Alert type is the unchanged source ALERT_TYPE_NAME label: the kind of alert intervention the store actioned. It is not a department, severity, SKU grouping, or a category derived by this pipeline. For each alert type, this adds current-week interventions worked, tick-and-flicked dismissals, and tick-and-flick rate = dismissals / interventions worked."
         }
       ],
       "investigator": {
@@ -315,7 +324,7 @@
           "problem": "Store is overriding the markdown algorithm significantly more often than the chain average, indicating poor adherence to pricing guidance.",
           "action": "Follow markdown guidance unless there are exceptional circumstances. Review which departments and items are being overridden most frequently.",
           "baseline": "The chain-wide markdown override rate for the same week.",
-          "logic": "Fires when the store override rate exceeds the chain average by more than min_override_chain_gap percentage points, and the store processed at least min_total_markdowns markdowns this week.",
+          "logic": "Override rate = overridden markdown requests / all markdown requests.\nChain gap = store override rate - chain override rate.\nFires when chain gap >= min_override_chain_gap and this-week markdown requests >= min_total_markdowns.",
           "config_keys": [
             "min_override_chain_gap",
             "min_total_markdowns"
@@ -327,7 +336,7 @@
           "problem": "Store markdown override rate has risen sharply week-on-week, indicating a sudden deterioration in adherence to pricing guidance.",
           "action": "Investigate what changed this week — specific staff, departments, or items driving the spike in overrides.",
           "baseline": "The same store override rate from the previous week.",
-          "logic": "Fires when the override rate has risen by more than min_override_wow_increase percentage points compared to last week, and the store processed at least min_total_markdowns markdowns this week.",
+          "logic": "Override rate = overridden markdown requests / all markdown requests.\nWoW increase = this-week override rate - last-week override rate.\nFires when WoW increase >= min_override_wow_increase and this-week markdown requests >= min_total_markdowns.",
           "config_keys": [
             "min_override_wow_increase",
             "min_total_markdowns"
@@ -416,7 +425,7 @@
           "problem": "Store waste rate (units wasted per unit put through the markdown process) is significantly above the chain average, indicating the markdown process is not recovering stock effectively.",
           "action": "Review which departments and items are being wasted at the highest rate. Ensure markdown guidance is being applied early enough to give stock a chance to sell.",
           "baseline": "The chain-wide waste rate for the same week.",
-          "logic": "Fires when the store waste rate (WASTE_QTY / QTY_MARKDOWN) exceeds the chain average by more than min_stb_chain_gap percentage points, and the store wasted at least min_waste_qty units this week.",
+          "logic": "Waste rate = wasted units / markdown quantity.\nChain gap = store waste rate - chain waste rate.\nFires when chain gap > min_stb_chain_gap and this-week wasted units >= min_waste_qty.",
           "config_keys": [
             "min_stb_chain_gap",
             "min_waste_qty"
@@ -428,7 +437,7 @@
           "problem": "Store waste rate (units wasted per unit put through the markdown process) has risen sharply week-on-week, indicating a sudden deterioration in markdown recovery.",
           "action": "Investigate what changed this week — which departments or items are driving the sudden increase in waste relative to markdown throughput.",
           "baseline": "The same store waste rate from the previous week.",
-          "logic": "Fires when the waste rate has risen by more than min_stb_wow_increase percentage points compared to last week, and the store wasted at least min_waste_qty units this week.",
+          "logic": "Waste rate = wasted units / markdown quantity.\nWoW increase = this-week waste rate - last-week waste rate.\nFires when WoW increase > min_stb_wow_increase and this-week wasted units >= min_waste_qty.",
           "config_keys": [
             "min_stb_wow_increase",
             "min_waste_qty"
@@ -510,10 +519,10 @@
         {
           "name": "VS_CHAIN",
           "module": "vs_chain",
-          "problem": "Store markdown sell-through rate is significantly below the chain average, indicating marked-down items are not being bought by customers.",
-          "action": "Review markdown depth and product placement for items with poor sell-through. Consider whether markdowns are deep enough to drive customer uptake.",
-          "baseline": "The chain-wide markdown sell-through rate for the same week.",
-          "logic": "Fires when the store sell-through rate is more than min_sellthrough_chain_gap percentage points below the chain average, and the store processed at least min_markdown_qty markdown units this week.",
+          "problem": "A store recovers a lower share of activity through sales, rather than waste, for items that received a markdown during the week than the chain does.",
+          "action": "Review markdown depth, timing, and product placement for the departments and items with weak post-markdown recovery.",
+          "baseline": "The chain-wide post-markdown sell-through proxy for the same week and item cohort.",
+          "logic": "Cohort = each store-item with at least one markdown event in the week.\nSell-through proxy = subsequent same-store item sales / (subsequent sales + subsequent waste).\nChain gap = chain proxy - store proxy.\nFires when chain gap >= min_sellthrough_chain_gap and subsequent sales + waste >= min_markdown_qty.",
           "config_keys": [
             "min_sellthrough_chain_gap",
             "min_markdown_qty"
@@ -525,7 +534,7 @@
           "problem": "Store markdown sell-through rate has dropped sharply week-on-week, indicating a sudden deterioration in marked-down item uptake.",
           "action": "Investigate what changed this week — new items being marked down, a change in markdown depth, or a specific department driving the drop.",
           "baseline": "The same store sell-through rate from the previous week.",
-          "logic": "Fires when the sell-through rate has fallen by more than min_sellthrough_wow_drop percentage points compared to last week, and the store had at least min_markdown_qty markdown units this week.",
+          "logic": "For each week, cohort = each store-item with at least one markdown event in that week.\nSell-through proxy = subsequent same-store item sales / (subsequent sales + subsequent waste).\nWoW drop = last-week proxy - this-week proxy.\nFires when WoW drop >= min_sellthrough_wow_drop and this-week subsequent sales + waste >= min_markdown_qty.",
           "config_keys": [
             "min_sellthrough_wow_drop",
             "min_markdown_qty"
@@ -583,6 +592,10 @@
           "type": "str"
         },
         {
+          "name": "section",
+          "type": "str"
+        },
+        {
           "name": "trigger_types",
           "type": "list[str]"
         },
@@ -610,7 +623,7 @@
           "problem": "A specific item at this store is being overridden at a disproportionately high rate relative to its total markdown requests, suggesting persistent staff resistance to pricing guidance for this SKU.",
           "action": "Review why this item is being overridden so frequently. Discuss the pricing guidance with the store manager and investigate whether the algorithm recommendation is appropriate for this SKU.",
           "baseline": "The override rate (overrides / total requests) for this item at this store over the rolling window.",
-          "logic": "Fires when the item has an override rate of at least min_sku_override_rate and at least min_sku_requests total markdown requests within the lookback_weeks rolling window.",
+          "logic": "SKU override rate = overridden markdown requests / all markdown requests for the same store-item.\nFires when SKU override rate >= min_sku_override_rate and total requests in the rolling lookback_weeks window >= min_sku_requests.",
           "config_keys": [
             "lookback_weeks",
             "min_sku_override_rate",
@@ -623,7 +636,7 @@
           "problem": "A specific item at this store has been flagged for markdown repeatedly over recent weeks, indicating a chronic surplus or ordering problem.",
           "action": "Review the ordering and ranging decisions for this item. Investigate whether the root cause is over-ordering, poor demand forecasting, or a ranging issue.",
           "baseline": "The number of distinct weeks this item was marked down within the rolling lookback window.",
-          "logic": "Fires when the item has been marked down on at least min_markdown_weeks distinct weeks AND has at least min_markdown_requests total requests within the lookback_weeks rolling window.",
+          "logic": "Repeat weeks = count of distinct calendar weeks with one or more markdown requests for the same store-item.\nFires when repeat weeks >= min_markdown_weeks and total markdown requests in the rolling lookback_weeks window >= min_markdown_requests.",
           "config_keys": [
             "lookback_weeks",
             "min_markdown_weeks",
@@ -705,6 +718,30 @@
       ]
     },
     {
+      "name": "min_item_repeat_weeks",
+      "type": "int",
+      "default": 3,
+      "detectors": [
+        "OSA_RECURRING_SLOT OSA RECURRING_SLOT"
+      ]
+    },
+    {
+      "name": "min_item_pattern_lsv",
+      "type": "float",
+      "default": 100.0,
+      "detectors": [
+        "OSA_RECURRING_SLOT OSA RECURRING_SLOT"
+      ]
+    },
+    {
+      "name": "min_items",
+      "type": "int",
+      "default": 2,
+      "detectors": [
+        "OSA_RECURRING_SLOT OSA RECURRING_SLOT"
+      ]
+    },
+    {
       "name": "min_wow_increase",
       "type": "float",
       "default": 0.1,
@@ -776,6 +813,22 @@
       "detectors": [
         "WASTE VS_CHAIN",
         "WASTE WOW"
+      ]
+    },
+    {
+      "name": "min_markdown_sales_ratio",
+      "type": "float",
+      "default": 0.6,
+      "detectors": [
+        "WASTE_TRIM WASTE_TRIM"
+      ]
+    },
+    {
+      "name": "min_markdown_units",
+      "type": "int",
+      "default": 5,
+      "detectors": [
+        "WASTE_TRIM WASTE_TRIM"
       ]
     },
     {

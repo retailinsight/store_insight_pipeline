@@ -22,7 +22,8 @@ description: |
 grain:
   - STORE_ID
   - ITEM_CODE
-  - ANALYSIS_DATE
+  - DATE
+  - REPORTING_PERIOD_ID
 
 columns:
   STORE_ID:
@@ -37,7 +38,7 @@ columns:
       Item identifier as used by the OSA fact.  Joins to hierarchy.ITEM_CODE
       to pick up DEPARTMENT_NAME, SUBCLASS_NAME, PRODUCT_PROFILE_GROUP_NAME.
 
-  ANALYSIS_DATE:
+  DATE:
     type: DATE
     required: true
     description: Calendar date the row applies to.
@@ -69,6 +70,15 @@ columns:
       gatherer reads it.  Kept on the contract for forward compatibility;
       adapters that omit it will not break the pipeline.
 
+  REPORTING_PERIOD_ID:
+    type: NUMBER
+    required: true
+    description: |
+      Reporting-period identifier (e.g. 1 = morning, 2 = afternoon,
+      3 = evening).  Part of the grain — multiple reporting periods per
+      item/store/day make (STORE_ID, ITEM_CODE, DATE) non-unique.
+      Used by the `osa_item_time_patterns` fact gatherer.
+
 # Canonical joins — how the pipeline enriches this contract with related ones.
 # Used by the validator and MCP discovery tools; cardinality is declarative only
 # (we don't enforce it at runtime, but adapter authors should honour it).
@@ -99,9 +109,21 @@ data_quality_findings:
       EoE adapter selects it.  Keep it available to avoid future adapter
       churn; no need to backfill it for new customers if missing from source.
 
+freshness_max_age_days: 1
+
+checks:
+  - column: LOST_SALES_VALUE
+    rule: min_value
+    value: 0
+    severity: high
+  - column: LOST_SALES_VOLUME
+    rule: min_value
+    value: 0
+    severity: high
+
 # Free-text notes for adapter authors.  Not validated.
 notes: |
-  - Pipeline filters this contract by ANALYSIS_DATE windows of up to ~10
+  - Pipeline filters this contract by DATE windows of up to ~10
     weeks (lookback for REPEAT detectors).  Make sure the underlying source
     table is partitioned/clustered by date to keep view scans fast.
   - LOST_SALES_VALUE must be in the customer's local currency; the pipeline

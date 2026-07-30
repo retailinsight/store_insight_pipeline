@@ -171,11 +171,12 @@ def _osa_describe_perfect(_fqn):
     return [
         ('STORE_ID',            'NUMBER(38,0)'),
         ('ITEM_CODE',           'VARCHAR(16777216)'),
-        ('ANALYSIS_DATE',       'DATE'),
+        ('DATE',                'DATE'),
         ('ACTUAL_SALES_VOLUME', 'NUMBER(38,4)'),
         ('LOST_SALES_VOLUME',   'NUMBER(38,4)'),
         ('LOST_SALES_VALUE',    'NUMBER(38,4)'),
         ('DEPARTMENT_ID',       'NUMBER(38,0)'),
+        ('REPORTING_PERIOD_ID', 'NUMBER(38,0)'),
     ]
 
 

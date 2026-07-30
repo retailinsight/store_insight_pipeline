@@ -162,7 +162,7 @@ def detect_signals(
     Parameters
     ----------
     osa            : Snowpark DataFrame with columns:
-                     STORE_ID, ITEM_CODE, ANALYSIS_DATE,
+                     STORE_ID, ITEM_CODE, DATE,
                      ACTUAL_SALES_VOLUME, LOST_SALES_VOLUME,
                      LOST_SALES_VALUE, DEPARTMENT_NAME,
                      SUBCLASS_NAME, PRODUCT_PROFILE_GROUP_NAME
@@ -226,14 +226,10 @@ def detect_signals(
     if cfg:
         if isinstance(cfg, dict):
             detectors_cfg = cfg.get('detectors')
-            if detectors_cfg is not None:
-                enabled = detectors_cfg.get('enabled')
+            enabled = detectors_cfg.get('enabled') if detectors_cfg else None
         else:
-            # Pydantic model
             detectors_cfg = getattr(cfg, 'detectors', None)
-            if detectors_cfg is not None:
-                enabled = getattr(detectors_cfg, 'enabled', None)
-
+            enabled = getattr(detectors_cfg, 'enabled', None) if detectors_cfg is not None else None
         if enabled is not None:
             enabled_set = set(enabled)
             detectors = [

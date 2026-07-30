@@ -128,9 +128,12 @@ def _resolve_config(config: "DetectorConfig" = None, cfg=None) -> DetectorConfig
     if config is not None:
         return config
     if cfg is not None:
-        # Extract thresholds from detector_config
-        thresholds_dict = cfg.detector_config.thresholds.model_dump() if cfg.detector_config else {}
-        return DetectorConfig.from_config({"thresholds": thresholds_dict})
+        if isinstance(cfg, dict):
+            detector_config = cfg.get('detector_config', {})
+            thresholds = detector_config.get('thresholds', {}) if isinstance(detector_config, dict) else detector_config.thresholds.model_dump()
+        else:
+            thresholds = cfg.detector_config.thresholds.model_dump() if cfg.detector_config else {}
+        return DetectorConfig.from_config({'thresholds': thresholds})
     return DetectorConfig()
 
 
@@ -154,11 +157,6 @@ def _make_alert_id(cfg, signal: dict, analysis_date: str | None) -> str:
     if signal.get("item_id") is not None:
         parts.append(str(signal["item_id"]))
     return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
-
-
-# ---------------------------------------------------------------------------
-# Run lineage helpers
-# ---------------------------------------------------------------------------
 
 
 def _get_pipeline_version() -> str:
@@ -271,8 +269,14 @@ def _build_card(
     signal_wo_facts["signal_id"] = alert_id
 
     # Get signal type bucket from config, use default if not provided
-    signal_type_buckets = cfg.output.signal_type_buckets if cfg else None
-    default_type = "Availability"
+    default_type = 'Availability'
+    if cfg is None:
+        signal_type_buckets = None
+    elif isinstance(cfg, dict):
+        output_cfg = cfg.get('output', {})
+        signal_type_buckets = output_cfg.get('signal_type_buckets')
+    else:
+        signal_type_buckets = cfg.output.signal_type_buckets
     if signal_type_buckets:
         bucket = signal_type_buckets.get(sig["signal_type"])
         type_value = bucket.value if bucket else default_type

@@ -29,8 +29,8 @@ _DATA_SOURCE_MAP: dict[str, dict[str, str]] = {
     'markdown_log':    {'label': 'Markdown log',       'cfg_key': 'markdown_log'},
     'markdown_sales':  {'label': 'Markdown sales',     'cfg_key': 'markdown_sales'},
     'wastage':         {'label': 'Wastage',            'cfg_key': 'wastage'},
-    'item_hierarchy':  {'label': 'Item hierarchy',     'cfg_key': 'wmd_item_hierarchy'},
-    'store_hierarchy': {'label': 'Store hierarchy',    'cfg_key': 'wmd_store_hierarchy'},
+    'item_hierarchy':  {'label': 'Item hierarchy',     'cfg_key': 'wmd_hierarchy'},
+    'store_hierarchy': {'label': 'Store hierarchy',    'cfg_key': 'store_hierarchy'},
 }
 
 
@@ -106,6 +106,18 @@ def _threshold_field_meta() -> dict[str, dict[str, Any]]:
 # Detector catalog
 # ---------------------------------------------------------------------------
 
+_SIGNAL_GRANULARITIES = {
+    'OSA':                'Store × department',
+    'OSA_RECURRING_SLOT': 'Store × department × day × reporting period',
+    'COMPLIANCE':         'Store',
+    'MARKDOWN_OVERRIDE':  'Store',
+    'WASTE':              'Store',
+    'MARKDOWN_SELLTHROUGH': 'Store',
+    'MARKDOWN_SKU':       'Store × item',
+    'WASTE_TRIM':         'Store × item',
+}
+
+
 def list_detectors() -> list[dict[str, Any]]:
     """One entry per registered detector — name, signal_type, metadata, threshold field defs."""
     from store_insight.pipeline.stages._1_detect import registry as det_reg
@@ -120,9 +132,11 @@ def list_detectors() -> list[dict[str, Any]]:
             for k in config_keys
         ]
         detect_fn = getattr(mod, 'detect', None)
+        signal_type = _detector_signal_type(mod)
         out.append({
             'name':         _detector_module_name(mod),
-            'signal_type':  _detector_signal_type(mod),
+            'signal_type':  signal_type,
+            'granularity':  _SIGNAL_GRANULARITIES.get(signal_type, 'Not specified'),
             'display_name': getattr(meta, 'name', _detector_module_name(mod).upper()) if meta else None,
             'problem':      getattr(meta, 'problem', '') if meta else '',
             'action':       getattr(meta, 'action', '') if meta else '',

@@ -1,0 +1,519 @@
+USE [EECO_Reporting]
+GO
+/****** Object:  StoredProcedure [dbo].[sp_ComplianceReporting]    Script Date: 28/07/2026 12:23:28 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+ALTER PROCEDURE [dbo].[sp_ComplianceReporting]
+
+AS
+BEGIN
+
+SET NOCOUNT ON;
+
+DECLARE @ProcedureName VARCHAR(MAX)
+DECLARE @StartTime DATETIME
+DECLARE @EndTime DATETIME
+DECLARE @RunTime Time
+DECLARE @SystemUser VARCHAR(200)
+
+SET @ProcedureName = 'sp_ComplianceReporting'
+SET @StartTime = CAST(GetDATE() AS datetime)
+SET @SystemUser = SYSTEM_USER
+
+	SET DATEFIRST 1;
+	
+IF OBJECT_ID('tempdb..#Calendar') IS NOT NULL DROP TABLE #Calendar
+SELECT	WeekNbr
+		,Year
+		,RANK() OVER (ORDER BY Year DESC, WeekNbr DESC) AS WeekRank
+		,Min(CalendarDate) AS StartOfWeek
+		,Max(CalendarDate) AS EndOfWeek
+INTO #Calendar
+FROM [dbo].[Calendar]
+WHERE CalendarDate < GetDate()
+GROUP BY WeekNbr, Year
+HAVING COUNT(*) = 7
+
+DECLARE @StartDate DATE = (SELECT StartOfWeek FROM #Calendar WHERE WeekRank = 26)
+DECLARE @EndDate DATE = (SELECT EndOfWeek FROM #Calendar WHERE WeekRank = 1)
+
+
+
+--DECLARE @enddate DATE = (SELECT TOP 1 [CalendarDate] FROM [Waste_EECO].[wmd].[CalendarDate] 
+--							WHERE CalendarDATE < CAST(GETDATE() AS date) AND DayOfWeekID = 7 ORDER BY 1 DESC)
+--DECLARE @startdate DATE = DATEADD(d,1,DATEADD(week,-1,@enddate))
+--SET DATEFIRST 1;  --Makes sure the DOWID starts on a Monday = 1
+
+--SELECT @enddate, @startdate
+
+--edit products in scope
+IF OBJECT_ID('tempdb..#products1') IS NOT NULL DROP TABLE #products1
+SELECT *
+INTO #products1
+FROM dbo.view_item
+WHERE ComplianceCategories != 'HOT HOLD PRODUCTS'
+AND SubCategoryName != 'INGREDIENTS'
+
+IF OBJECT_ID('tempdb..#Stores') IS NOT NULL DROP TABLE #Stores
+SELECT *
+INTO #Stores
+FROM dbo.view_Store
+
+IF OBJECT_ID('tempdb..#rawmarkdowns1') IS NOT NULL DROP TABLE #rawmarkdowns1
+SELECT 
+	MDL.[StoreID]
+	,S.StoreName
+	,CONCAT('Week ', DATEPART(WEEK, CAST(MDL.[LocalDate] AS date)) - 34) AS TrialWeek
+	,cal.WeekNbr AS Week
+	,cal.Year AS Year
+	,CAST(MDL.[LocalDate] AS date) AS Date
+	,DATEPART(weekday, CAST(MDL.[LocalDate] AS date)) AS DoW
+	,CAST([LocalTime] AT TIME ZONE 'UTC' AT TIME ZONE 'GMT Standard Time' AS time) AS Time
+	,DATEPART(HOUR, [LocalTime] AT TIME ZONE 'UTC' AT TIME ZONE 'GMT Standard Time') AS Hour
+	,P.DepartmentName
+	,P.CategoryName
+	,P.SubCategoryName
+	,P.PPGClusterID
+	,MDL.[ItemID]
+	,P.ItemDescription
+	,P.ComplianceCategories
+	,MDL.[QtyMarkdown]
+	,MDL.[MarkdownType]
+	,MDL.[OriginalPrice]
+	,MDL.[CurrentPrice]
+	,MDL.[MarkdownPercentage]
+	,MDL.[MarkdownToPrice]
+	,S.AreaNumber
+	,CASE	WHEN OriginalPrice = CurrentPrice THEN 1
+		WHEN MarkdownIteration = 1 and OriginalPrice != CurrentPrice THEN 2
+		ELSE MarkdownIteration END AS AppMDIteration
+	,CAST(MDL.[ExpiryTime] AS date) AS ExpiryDate
+	,CAST(MDL.[SellByTime] AS time) AS SellByTime
+	,DATEDIFF(DAY,CAST(MDL.[LocalDate] AS date),CAST(MDL.[ExpiryTime] AS date)) AS DaysToExpiry
+	,MDL.[ErrorCode]
+	,MDL.[Message]
+	,CASE WHEN MDL.MarkdownType = 'ManualOverride' THEN 1 ELSE 0 END AS IsOverridden
+	,STH.StoreClose
+	,STh.StoreOpen
+INTO #rawmarkdowns1
+FROM
+	[dbo].[MarkdownLogConverted] MDL WITH (INDEX = [CIX_MarkdownLogConverted_LocalDate])
+	INNER JOIN #Stores S ON MDL.StoreID = S.StoreID
+	INNER JOIN #products1 P ON MDL.ItemID = P.ItemID
+LEFT JOIN 
+	[dbo].[StoreTradingHour] STH
+ON STH.StoreID = MDL.StoreID
+AND STH.DayOfWeekID = DATEPART(weekday, CAST(MDL.[LocalDate] AS date))
+LEFT JOIN [dbo].[Calendar] AS cal
+ON mdl.LocalDate = cal.CalendarDate
+	
+WHERE
+	LocalDate BETWEEN @startdate AND @enddate
+	--AND MDL.StoreID IN (SELECT s.StoreID FROM #TrialStores1 s)  --Pre Full Rollout
+	AND LocalTime NOT BETWEEN '2021-11-17 10:00:00' AND '2021-11-17 14:00:00'  --EXCLUDES ANY PROD TESTNG DONE DURING LIVE DOWNTIME FOR PROD DEPLOYMENT
+	AND NOT (MarkdownType = 'Short Dated' AND MarkdownIteration IS NULL)   
+	AND NOT (MarkdownType = 'Variable weight item' AND MarkdownIteration IS NULL) --REMOVES NULLS CAUSED BY DUPLICATION
+	AND NOT MDL.StoreID IN('418', '485')
+		AND NOT (mdl.StoreID IN (411) AND LocalDate BETWEEN '2025-05-10' AND '2025-06-05') --Closed for refit
+		AND NOT (mdl.StoreID IN (421) AND LocalDate BETWEEN '2025-05-24' AND '2025-06-11') --Closed for refit
+		AND NOT (mdl.StoreID = 427 AND LocalDate >= '2025-06-17') --Closed store
+
+IF OBJECT_ID('tempdb..#MARKDOWNS1') IS NOT NULL DROP TABLE #MARKDOWNS1
+SELECT
+    A.*,
+    CASE 
+		WHEN MarkdownType IN ('Short Dated', 'Variable weight item') THEN
+					CASE
+						WHEN ComplianceCategories  = 'BABY EDIBLES & MEDICINES' AND DaysToExpiry <= 42 AND AppMDIteration = 1 THEN 'Compliant'
+						WHEN ComplianceCategories  = 'BABY EDIBLES & MEDICINES' AND DaysToExpiry <= 28 AND AppMDIteration = 2 THEN 'Compliant'
+						WHEN ComplianceCategories  = 'BABY EDIBLES & MEDICINES' AND DaysToExpiry <= 21 AND AppMDIteration = 3 THEN 'Compliant'
+						WHEN ComplianceCategories = 'HOT HOLD PRODUCTS' THEN 'Compliant'
+						WHEN ComplianceCategories = 'AMBIENT / FROZEN / BWS' AND DaysToExpiry <= 21 AND AppMDIteration = 1 THEN 'Compliant'
+						WHEN ComplianceCategories = 'AMBIENT / FROZEN / BWS' AND DaysToExpiry <= 14 AND AppMDIteration = 2 THEN 'Compliant'
+						WHEN ComplianceCategories = 'AMBIENT / FROZEN / BWS' AND DaysToExpiry <= 7 AND AppMDIteration = 3 THEN 'Compliant'
+						WHEN ComplianceCategories IN ('ISB', 'ULTRA-FRESH') AND DaysToExpiry = 0 THEN 'Compliant'		
+						WHEN ComplianceCategories = 'FRESH' THEN CASE 
+																	WHEN Date < '2026-01-26' THEN	CASE 
+																										WHEN DaysToExpiry = 1 AND AppMDIteration = 1 THEN 'Compliant'
+																										WHEN DaysToExpiry = 0 AND AppMDIteration >= 2 THEN 'Compliant'
+																										ELSE 'Not Compliant'
+																									END 
+																	WHEN Date >= '2026-01-26' AND DaysToExpiry = 0 THEN 'Compliant'
+																	ELSE 'Not Compliant'
+																END
+						ELSE 'Not Compliant'
+					END
+        ELSE 'N/A'
+    END AS 'DayCompliant?'
+	,CASE 
+		WHEN MarkdownType IN ('Short Dated', 'Variable weight item') THEN
+			CASE 
+				--WHEN DATEPART(DW, Date) = 7 THEN 'Exclude'
+				WHEN ComplianceCategories = 'HOT HOLD PRODUCTS' THEN 'Compliant'
+				WHEN ComplianceCategories = 'AMBIENT / FROZEN / BWS' THEN 'Compliant'					
+				WHEN ComplianceCategories IN ('ISB') THEN
+					CASE
+						WHEN DOW = 7 THEN 'Compliant'
+						WHEN DOW != 7 AND AppMDIteration IN (1,2) THEN 
+																		CASE
+																			WHEN StoreClose IN ('19:00:00', '20:00:00') AND Time >= '16:00:00' THEN 'Compliant'
+																			WHEN StoreID IN (633, 492, 468, 638) THEN CASE 
+																														WHEN Time >= '16:00:00' THEN 'Compliant'
+																														ELSE 'Not Compliant'
+																													   END
+																			WHEN StoreClose IN ('21:00:00', '22:00:00', '23:00:00') AND Time >= '17:30:00' THEN 'Compliant'
+																			ELSE 'Not Compliant'
+																		END
+						WHEN DoW != 7 AND AppMDIteration = 3 AND Hour >= 18 THEN 'Compliant' --Do we need to do something different here?
+						ELSE 'Not Compliant'
+					END
+				 WHEN ComplianceCategories IN ('ULTRA-FRESH') THEN 
+				CASE 
+						WHEN DOW = 7 AND StoreClose <= '18:00:00' THEN
+							CASE 
+								WHEN AppMDIteration IN (1,2) AND Time BETWEEN '12:00:00' AND '13:30:00' THEN 'Compliant'
+								ELSE 'Not Compliant'
+								END
+						ELSE
+							CASE
+						WHEN AppMDIteration IN (1,2) AND Time BETWEEN '16:00:00' AND '19:00:00' THEN 'Compliant'
+						WHEN AppMDIteration = 3 AND Hour >= 18 THEN 'Compliant' 
+						ELSE 'Not Compliant'
+					END
+					END
+				WHEN ComplianceCategories = 'FRESH' THEN	CASE
+																WHEN Date < '2026-01-26' THEN 														
+																							CASE
+																								WHEN AppMDIteration = 1 AND Time BETWEEN '04:00' AND '11:30' THEN 'Compliant'
+																								WHEN AppMDIteration = 2 AND Time BETWEEN '04:00' AND '11:30' THEN 'Compliant'  
+																								WHEN DoW != 7 AND AppMDIteration = 3 AND Hour BETWEEN 18 AND 23 THEN 'Compliant'
+																								WHEN DoW = 7 AND AppMDIteration = 3 AND Hour BETWEEN 13 AND 23 THEN 'Compliant'
+																								ELSE 'Not Compliant'
+																							END
+																WHEN Date >= '2026-01-26' THEN 														
+																							CASE
+																								WHEN DOW = 7 AND StoreClose <= '18:00:00' THEN	
+																													CASE
+																														WHEN AppMDIteration = 1 AND TIME BETWEEN '05:00:00' AND '11:30:00' THEN 'Compliant'
+																														WHEN AppMDIteration >= 2 AND Time BETWEEN '13:30:00' AND '15:00:00' THEN 'Compliant'
+																														ELSE 'Not Compliant'
+																													END
+																								ELSE 
+																									CASE
+																										WHEN AppMDIteration = 1 AND TIME BETWEEN '05:00:00' AND '11:30:00' THEN 'Compliant'
+																										WHEN AppMDIteration >= 2 AND Time BETWEEN '16:00:00' AND '18:00:00' THEN 'Compliant'
+																										ELSE 'Not Compliant'
+																									END
+																							END
+															END
+				ELSE 'Not Compliant'
+			END
+		WHEN ItemID = '5080068776777' AND DaysToExpiry = 0 THEN 'Compliant'
+		ELSE 'N/A' 
+	END AS 'TimeCompliant?'
+	,CASE
+		WHEN MarkdownType IN ('Short Dated', 'Variable weight item') THEN
+			CASE 
+				WHEN ComplianceCategories  = 'BABY EDIBLES & MEDICINES' AND DaysToExpiry <= 42 AND AppMDIteration = 1 THEN 'Compliant'
+				WHEN ComplianceCategories  = 'BABY EDIBLES & MEDICINES' AND DaysToExpiry <= 28 AND AppMDIteration = 2 THEN 'Compliant'
+				WHEN ComplianceCategories  = 'BABY EDIBLES & MEDICINES' AND DaysToExpiry <= 21 AND AppMDIteration = 3 THEN 'Compliant'
+				WHEN ComplianceCategories = 'HOT HOLD PRODUCTS' THEN 'Compliant'
+				WHEN ComplianceCategories = 'AMBIENT / FROZEN / BWS' AND DaysToExpiry <= 21 AND AppMDIteration = 1 THEN 'Compliant'
+				WHEN ComplianceCategories = 'AMBIENT / FROZEN / BWS' AND DaysToExpiry <= 14 AND AppMDIteration = 2 THEN 'Compliant'
+				WHEN ComplianceCategories = 'AMBIENT / FROZEN / BWS' AND DaysToExpiry <= 7 AND AppMDIteration = 3 THEN 'Compliant'
+				WHEN ComplianceCategories IN ('ISB') AND DaysToExpiry = 0 THEN
+					CASE
+						WHEN DOW = 7 THEN 'Compliant'
+						WHEN DOW != 7 AND AppMDIteration IN (1,2) THEN 
+																		CASE
+																			WHEN StoreClose IN ('19:00:00', '20:00:00') AND Time >= '16:00:00' THEN 'Compliant'
+																			WHEN StoreID IN (633, 492, 468, 638) THEN CASE 
+																														WHEN Time >= '16:00:00' THEN 'Compliant'
+																														ELSE 'Not Compliant'
+																													   END
+																			WHEN StoreClose IN ('21:00:00', '22:00:00', '23:00:00') AND Time >= '17:30:00' THEN 'Compliant'
+																			ELSE 'Not Compliant'
+																		END
+						WHEN DoW != 7 AND AppMDIteration = 3 AND Hour >= 18 THEN 'Compliant' --Do we need to do something different here?
+						ELSE 'Not Compliant'
+					END
+				WHEN ComplianceCategories IN ('ULTRA-FRESH') AND DaysToExpiry = 0 THEN 
+					CASE
+						WHEN DOW = 7 AND StoreClose <= '18:00:00' THEN
+							CASE 
+								WHEN AppMDIteration IN (1,2) AND Time BETWEEN '12:00:00' AND '13:30:00' THEN 'Compliant'
+								ELSE 'Not Compliant'
+								END
+						ELSE
+							CASE
+						WHEN AppMDIteration IN (1,2) AND Time BETWEEN '16:00:00' AND '19:00:00' THEN 'Compliant'
+						WHEN AppMDIteration = 3 AND Hour >= 18 THEN 'Compliant' 
+						ELSE 'Not Compliant'
+					END
+					END
+				WHEN ComplianceCategories = 'FRESH' THEN CASE
+															WHEN Date < '2026-01-26' THEN
+																						CASE
+																							WHEN AppMDIteration = 1 AND DaysToExpiry >= 1 AND Time BETWEEN '04:00' AND '11:30' THEN 'Compliant'
+																							WHEN AppMDIteration = 2 AND DaysToExpiry = 0 AND Time BETWEEN '04:00' AND '11:30' THEN 'Compliant'  
+																							WHEN DoW != 7 AND AppMDIteration = 3 AND DaysToExpiry = 0 AND Hour BETWEEN 18 AND 23 THEN 'Compliant'
+																							WHEN DoW = 7 AND AppMDIteration = 3 AND DaysToExpiry = 0 AND Hour BETWEEN 13 AND 23 THEN 'Compliant'
+																							ELSE 'Not Compliant'
+																						END
+															WHEN Date >= '2026-01-26' THEN
+																						CASE
+																								WHEN DOW = 7 AND StoreClose <= '18:00:00' AND DaysToExpiry = 0 THEN	
+																													CASE
+																														WHEN AppMDIteration = 1 AND TIME BETWEEN '05:00:00' AND '11:30:00' THEN 'Compliant'
+																														WHEN AppMDIteration >= 2 AND Time BETWEEN '13:30:00' AND '15:00:00' THEN 'Compliant'
+																														ELSE 'Not Compliant'
+																													END
+																								ELSE 
+																									CASE
+																										WHEN AppMDIteration = 1 AND DaysToExpiry = 0 AND TIME BETWEEN '05:00:00' AND '11:30:00' THEN 'Compliant'
+																										WHEN AppMDIteration >= 2 AND DaysToExpiry = 0 AND Time BETWEEN '16:00:00' AND '18:00:00' THEN 'Compliant'
+																										ELSE 'Not Compliant'
+																									END
+																							END
+														END
+				ELSE 'Not Compliant'
+			END
+
+		WHEN ItemID = '5080068776777' AND DaysToExpiry = 0 THEN 'Compliant'
+		ELSE 'Not Compliant'
+	END AS 'OverallCompliant'
+		,CASE
+		WHEN MarkdownType IN ('Short Dated', 'Variable weight item') THEN
+			CASE 
+				WHEN ComplianceCategories  = 'BABY EDIBLES & MEDICINES' AND DaysToExpiry <= 42 AND AppMDIteration = 1 THEN StoreOpen
+				WHEN ComplianceCategories  = 'BABY EDIBLES & MEDICINES' AND DaysToExpiry <= 28 AND AppMDIteration = 2 THEN StoreOpen
+				WHEN ComplianceCategories  = 'BABY EDIBLES & MEDICINES' AND DaysToExpiry <= 21 AND AppMDIteration = 3 THEN StoreOpen
+				WHEN ComplianceCategories = 'HOT HOLD PRODUCTS' THEN StoreOpen
+				WHEN ComplianceCategories = 'AMBIENT / FROZEN / BWS' AND DaysToExpiry <= 21 AND AppMDIteration = 1 THEN StoreOpen
+				WHEN ComplianceCategories = 'AMBIENT / FROZEN / BWS' AND DaysToExpiry <= 14 AND AppMDIteration = 2 THEN StoreOpen
+				WHEN ComplianceCategories = 'AMBIENT / FROZEN / BWS' AND DaysToExpiry <= 7 AND AppMDIteration = 3 THEN StoreOpen
+				WHEN ComplianceCategories IN ('ISB') AND DaysToExpiry = 0 THEN
+					CASE
+						WHEN DOW = 7 THEN StoreOpen
+						WHEN DOW != 7 AND AppMDIteration IN (1,2) THEN 
+																		CASE
+																			WHEN StoreClose IN ('19:00:00', '20:00:00') THEN '16:00:00'
+																			WHEN StoreID IN (633, 492, 468, 638) THEN '16:00:00'
+																			WHEN StoreClose IN ('21:00:00', '22:00:00', '23:00:00') THEN '17:30:00'
+																			ELSE NULL
+																		END
+						WHEN DoW != 7 AND AppMDIteration = 3 THEN '18:00:00' --Do we need to do something different here?
+						ELSE NULL
+					END
+			 WHEN ComplianceCategories IN ('ULTRA-FRESH') AND DaysToExpiry = 0 THEN 
+				CASE 
+						WHEN DOW = 7 AND StoreClose <= '18:00:00' THEN '12:00:00'
+						ELSE NULL
+					END
+				ELSE
+				CASE
+						WHEN AppMDIteration IN (1,2) THEN '16:00:00'
+						WHEN AppMDIteration = 3 THEN '18:00:00'
+						ELSE NULL
+					END
+
+					END
+				WHEN ComplianceCategories = 'FRESH' THEN 
+														CASE 
+															WHEN Date < '2026-01-26' THEN
+																	CASE
+																		WHEN AppMDIteration = 1 AND DaysToExpiry >= 1  THEN '04:00:00'
+																		WHEN AppMDIteration = 2 AND DaysToExpiry = 0  THEN '04:00:00'  
+																		WHEN DoW != 7 AND AppMDIteration = 3 AND DaysToExpiry = 0 THEN '18:00:00'
+																		WHEN DoW = 7 AND AppMDIteration = 3 AND DaysToExpiry = 0 THEN '13:00:00'
+																		ELSE NULL
+																	END
+															WHEN Date >= '2026-01-26' THEN 
+																	CASE
+																		WHEN DOW = 7 AND StoreClose <= '18:00:00' AND DaysToExpiry = 0 THEN	
+																				CASE
+																					WHEN AppMDIteration = 1 THEN '05:00:00' 
+																					WHEN AppMDIteration >= 2 THEN '13:30:00' 
+																					ELSE NULL
+																	END
+																		ELSE 
+																				CASE
+																					WHEN AppMDIteration = 1 AND DaysToExpiry = 0 THEN '05:00:00' 
+																					WHEN AppMDIteration >= 2 AND DaysToExpiry = 0 THEN '16:00:00' 
+																					ELSE NULL
+																	END
+														END
+				ELSE NULL
+			END
+		WHEN ItemID = '5080068776777' AND DaysToExpiry = 0 THEN StoreOpen
+		ELSE NULL
+	END AS StartOfMarkdown
+	,CASE
+		WHEN MarkdownType IN ('Short Dated', 'Variable weight item') THEN
+			CASE 
+				WHEN ComplianceCategories  = 'BABY EDIBLES & MEDICINES' AND DaysToExpiry <= 42 AND AppMDIteration = 1 THEN StoreClose
+				WHEN ComplianceCategories  = 'BABY EDIBLES & MEDICINES' AND DaysToExpiry <= 28 AND AppMDIteration = 2 THEN StoreClose
+				WHEN ComplianceCategories  = 'BABY EDIBLES & MEDICINES' AND DaysToExpiry <= 21 AND AppMDIteration = 3 THEN StoreClose
+				WHEN ComplianceCategories = 'HOT HOLD PRODUCTS' THEN StoreClose
+				WHEN ComplianceCategories = 'AMBIENT / FROZEN / BWS' AND DaysToExpiry <= 21 AND AppMDIteration = 1 THEN StoreClose
+				WHEN ComplianceCategories = 'AMBIENT / FROZEN / BWS' AND DaysToExpiry <= 14 AND AppMDIteration = 2 THEN StoreClose
+				WHEN ComplianceCategories = 'AMBIENT / FROZEN / BWS' AND DaysToExpiry <= 7 AND AppMDIteration = 3 THEN StoreClose
+				WHEN ComplianceCategories IN ('ISB') AND DaysToExpiry = 0 THEN
+					CASE
+						WHEN DOW = 7 THEN StoreClose
+						WHEN DOW != 7 AND AppMDIteration IN (1,2) THEN 
+																		CASE
+																			WHEN StoreClose IN ('19:00:00', '20:00:00') THEN StoreClose
+																			WHEN StoreID IN (633, 492, 468, 638) THEN StoreClose
+																			WHEN StoreClose IN ('21:00:00', '22:00:00', '23:00:00') THEN StoreClose
+																			ELSE NULL
+																		END
+						WHEN DoW != 7 AND AppMDIteration = 3  THEN StoreClose --Do we need to do something different here?
+						ELSE NULL
+					END
+			 WHEN ComplianceCategories IN ('ULTRA-FRESH') AND DaysToExpiry = 0 THEN 
+				CASE 
+						WHEN DOW = 7 AND StoreClose <= '18:00:00' THEN '13:30:00'
+						ELSE NULL
+					END
+				ELSE
+				CASE
+						WHEN AppMDIteration IN (1,2) THEN  '19:00:00'
+						WHEN AppMDIteration = 3 THEN StoreClose
+						ELSE NULL
+					END
+					END
+				WHEN ComplianceCategories = 'FRESH' THEN CASE 
+															WHEN Date < '2026-01-26' THEN 
+																	CASE
+																		WHEN AppMDIteration = 1 AND DaysToExpiry >= 1 THEN '11:30:00'
+																		WHEN AppMDIteration = 2 AND DaysToExpiry = 0 THEN '11:30:00'
+																		WHEN DoW != 7 AND AppMDIteration = 3 AND DaysToExpiry = 0 THEN '23:00:00'
+																		WHEN DoW = 7 AND AppMDIteration = 3 AND DaysToExpiry = 0 THEN '23:00:00'
+																		ELSE NULL
+																	END
+															WHEN Date >= '2026-01-26' THEN 
+																	CASE
+																		WHEN DOW = 7 AND StoreClose <= '18:00:00' AND DaysToExpiry = 0 THEN	
+																				CASE
+																					WHEN AppMDIteration = 1 THEN '11:30:00' 
+																					WHEN AppMDIteration >= 2 THEN '15:00:00' 
+																					ELSE NULL
+																	END
+																		ELSE 
+																				CASE
+																					WHEN AppMDIteration = 1 AND DaysToExpiry = 0 THEN '11:30:00' 
+																					WHEN AppMDIteration = 2 AND DaysToExpiry = 0 THEN '18:00:00' 
+																					WHEN AppMDIteration = 3 AND DaysToExpiry = 0 THEN '23:00:00' 
+																					ELSE NULL
+																	END
+														END
+				ELSE NULL
+			END
+		WHEN ItemID = '5080068776777' AND DaysToExpiry = 0 THEN StoreClose
+		ELSE NULL
+	END AS EndOfMarkdown
+
+INTO #MARKDOWNS1	
+FROM #rawmarkdowns1 A
+WHERE ErrorCode IS NULL
+
+
+IF OBJECT_ID('tempdb..##MARKDOWNS2') IS NOT NULL DROP TABLE #MARKDOWNS2
+SELECT *
+		,CASE
+			WHEN Time BETWEEN StartOfMarkdown AND EndOfMarkdown THEN 0
+			WHEN Time < StartOfMarkdown THEN DateDiff(Hour, Time, StartOfMarkdown) + 1
+			WHEN Time > EndOfMarkdown THEN DATEDIFF(Hour, Time, EndOfMarkdown) - 1
+			ELSE NULL
+		END AS TimeFromMarkdownWindow
+INTO #MARKDOWNS2
+FROM #MARKDOWNS1
+
+--KL Comment 28/04/2025 Changing compliance for 1 store due to broken fridges--
+UPDATE #MARKDOWNS2
+SET [DayCompliant?] = 'Compliant', [TimeCompliant?] = 'Compliant', [OverallCompliant] = 'Compliant'
+  WHERE (Week = 13 and storeid = 422 and year = 2026 AND Date = '2025-04-26' AND ComplianceCategories = 'Fresh')  
+
+TRUNCATE TABLE [dbo].[Compliance_reporting]
+--DROP TABLE [dbo].[Compliance_reporting] 
+INSERT INTO [dbo].[Compliance_reporting] 
+
+SELECT
+	Week
+	,Year
+	,DATENAME(Weekday, Date) AS DoW
+	,M.StoreID
+	,M.StoreName
+	,DepartmentName
+	,CategoryName
+	,SubCategoryName
+	,PPGClusterID
+	,AppMDIteration
+	,[DayCompliant?]
+	,[TimeCompliant?]
+	,OverallCompliant
+	,ComplianceCategories
+	,Hour
+	,TimeFromMarkdownWindow
+	,DaysToExpiry
+	--,COUNT(*) AS 'Markdown Count'
+	,SUM(QtyMarkdown) AS 'Markdown Count'
+	,LEFT([AreaNumber],1) AS Area
+--INTO [dbo].[Compliance_reporting]
+FROM #MARKDOWNS2 AS M
+WHERE MarkdownType IN ('Short Dated','Variable weight item')
+AND ComplianceCategories IN ('FRESH','ISB','ULTRA-FRESH', 'HOT HOLD PRODUCTS') 
+AND NOT
+    (
+        (StoreID = 419 AND Date BETWEEN '2024-10-30' AND '2024-12-11')
+        AND NOT
+        (StoreID = 590 AND Date BETWEEN '2024-10-19' AND '2024-11-18')
+    )
+AND NOT (StoreID IN (502, 291) AND Date >= '2024-12-08')
+AND NOT (StoreID IN (504) AND Date >= '2025-03-23')
+-- AND StoreID NOT IN (413, 431, 438, 502)
+	--AND 
+	--	(
+	--		--(AppMDIteration = 3 
+	--		--AND 
+	--		--StoreID NOT IN (SELECT [StoreID] FROM [Waste_EECO].[wmd].[StoreClusterMapping] WHERE ClusterID = 1007))
+	--		--OR
+	--		AppMDIteration != 3
+	--	) 
+GROUP BY
+	Week
+	,Year
+	,DATENAME(Weekday, Date) 
+	,M.StoreID
+	,M.StoreName
+	,DepartmentName
+	,CategoryName
+	,SubCategoryName
+	,PPGClusterID
+	,AppMDIteration
+	,[DayCompliant?]
+	,[TimeCompliant?]
+	,OverallCompliant
+	,LEFT([AreaNumber],1) 
+	,ComplianceCategories
+	,Hour
+	,TimeFromMarkdownWindow
+	,DaysToExpiry
+
+SET @EndTime = CAST(GetDate() AS datetime)
+SET @RunTime = CAST(@EndTime - @StartTime AS Time)
+
+INSERT INTO [dbo].[run_time_log]
+SELECT @ProcedureName
+	,@StartTime
+	,@EndTime
+	,@RunTime
+	,@SystemUser
+
+
+
+END

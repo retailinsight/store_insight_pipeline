@@ -28,7 +28,7 @@ METADATA = GathererInfo(
     name         = 'tick_and_flick_breakdown',
     signal_types = ['COMPLIANCE'],
     facts_keys   = ['tf_by_alert_type'],
-    description  = 'Tick-and-flick count broken down by alert type for each flagged store.',
+    description  = 'Alert type is the unchanged source ALERT_TYPE_NAME label: the kind of alert intervention the store actioned. It is not a department, severity, SKU grouping, or a category derived by this pipeline. For each alert type, this adds current-week interventions worked, tick-and-flicked dismissals, and tick-and-flick rate = dismissals / interventions worked.',
 )
 
 

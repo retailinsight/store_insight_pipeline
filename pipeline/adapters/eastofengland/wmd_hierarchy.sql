@@ -17,6 +17,8 @@
 CREATE OR REPLACE VIEW STORE_INSIGHT_DB.PUBLIC.WMD_HIERARCHY_V1 AS
 SELECT DISTINCT
     ITEM_ID                     AS UPC,        -- UPC for WMD joins
+    EAN                         AS EAN,
+    HIERARCHY_LEVEL_1_ID         AS OSA_ITEM_CODE,
     ITEM_NAME                   AS ITEM_DESCRIPTION,
     DIVISION_ID                 AS ITEM_HIERARCHY_1,
     SECTION                     AS ITEM_HIERARCHY_2,

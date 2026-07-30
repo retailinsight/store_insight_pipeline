@@ -92,6 +92,7 @@ from store_insight.pipeline.pipeline.regression import (
     save_golden,
 )
 from store_insight.pipeline.pipeline.session import create_session, load_env
+from store_insight.pipeline.stages._5_outcomes.outcomes import measure_outcomes
 
 # ---------------------------------------------------------------------------
 # Data loading
@@ -325,6 +326,54 @@ def run_single_date(
         else:
             save_golden(stats, golden_path)
             print(f"[run_batch] --deterministic: golden snapshot created at {golden_path}")
+
+    print('[run_batch] Measuring outcomes for eligible Commitments...')
+    outcomes = measure_outcomes(session, current_run_date=run_date, cfg=cfg)
+    if outcomes:
+        _write_outcomes(session, outcomes, cfg=cfg)
+
+
+def _outcomes_table(cfg) -> str:
+    if cfg and hasattr(cfg, 'output') and hasattr(cfg.output, 'outcomes'):
+        return cfg.output.outcomes
+    return 'STORE_INSIGHT_OUTCOMES'
+
+
+def _write_outcomes(session, outcomes: list[dict], cfg=None) -> None:
+    """Append outcome dicts to STORE_INSIGHT_OUTCOMES."""
+    from snowflake.snowpark.types import (
+        BooleanType, FloatType, IntegerType,
+        StringType, StructField, StructType,
+    )
+
+    schema = StructType([
+        StructField('ALERT_ID',                   StringType()),
+        StructField('STORE_ID',                   IntegerType()),
+        StructField('SIGNAL_TYPE',                StringType()),
+        StructField('SECTION',                    StringType()),
+        StructField('CARD_RUN_DATE',              StringType()),
+        StructField('OUTCOME_RUN_DATE',           StringType()),
+        StructField('SIGNAL_RESOLVED',            BooleanType()),
+        StructField('ESTIMATED_VALUE_RECOVERED',  FloatType()),
+    ])
+
+    rows = [
+        (
+            o['alert_id'],
+            o['store_id'],
+            o['signal_type'],
+            o['section'],
+            o['card_run_date'],
+            o['outcome_run_date'],
+            o['signal_resolved'],
+            o['estimated_value_recovered'],
+        )
+        for o in outcomes
+    ]
+
+    table = _outcomes_table(cfg)
+    session.create_dataframe(rows, schema=schema).write.mode('append').save_as_table(table)
+    print(f'[outcomes] → {table} ({len(rows)} rows appended)')
 
 
 # ---------------------------------------------------------------------------

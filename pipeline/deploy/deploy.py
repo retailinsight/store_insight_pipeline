@@ -77,23 +77,25 @@ def _load_env():
 
 
 def _zip_package(dest_path: str) -> None:
-    """Zip the store_insight/pipeline/ subpackage into dest_path.
+    """Zip the full store_insight package into dest_path.
 
     Arcnames are rooted so paths inside the zip are of the form
-    ``store_insight/pipeline/...`` — matching the import path
+    ``store_insight/...`` — matching the import path
     ``store_insight.pipeline.*`` used at runtime in the SP.
+    Only pipeline/ and the top-level __init__.py are included to keep
+    the zip small; other subpackages (api, ui, etc.) are excluded.
     """
-    excludes = {"__pycache__", ".pyc", ".ipynb_checkpoints", ".env"}
-    with zipfile.ZipFile(dest_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("store_insight/__init__.py", "")
-        zf.writestr("store_insight/pipeline/deploy/__init__.py", "")
-        for path in _PKG_DIR.rglob("*"):
-            if any(ex in str(path) for ex in excludes):
+    excludes = {'__pycache__', '.pyc', '.ipynb_checkpoints', '.env',
+                'pipeline_2', 'pipeline_ui', 'api', 'api2', 'ui', 'mcp',
+                'experiments', 'docs', 'prds', '.devin', '.windsurf'}
+    with zipfile.ZipFile(dest_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for path in _SI_PKG.rglob('*'):
+            if any(ex in path.parts for ex in excludes):
                 continue
             if path.is_file():
                 arcname = path.relative_to(_ZIP_ROOT)
                 zf.write(path, arcname)
-    print(f"[deploy] Zipped store_insight/pipeline/ → {dest_path}")
+    print(f'[deploy] Zipped store_insight/ -> {dest_path}')
 
 
 def _create_session():
@@ -126,6 +128,32 @@ def _ensure_stage(session, stage: str) -> None:
     print(f"[deploy] Stage ready: {stage}")
 
 
+def _ensure_outcomes_table(session, db: str, schema: str) -> None:
+    fqn = f'{db}.{schema}.STORE_INSIGHT_OUTCOMES'
+    session.sql(f"""
+        CREATE TABLE IF NOT EXISTS {fqn} (
+            ALERT_ID                  VARCHAR     NOT NULL,
+            STORE_ID                  NUMBER      NOT NULL,
+            SIGNAL_TYPE               VARCHAR     NOT NULL,
+            SECTION                   VARCHAR,
+            CARD_RUN_DATE             DATE        NOT NULL,
+            OUTCOME_RUN_DATE          DATE        NOT NULL,
+            SIGNAL_RESOLVED           BOOLEAN     NOT NULL,
+            ESTIMATED_VALUE_RECOVERED FLOAT
+        )
+    """).collect()
+    print(f'[deploy] Outcomes table ready: {fqn}')
+
+    role = os.environ.get('SNOWFLAKE_ROLE')
+    if role:
+        try:
+            session.sql(
+                f'GRANT SELECT ON TABLE {fqn} TO ROLE {role}'
+            ).collect()
+        except Exception as exc:  # noqa: BLE001
+            print(f'[deploy] Could not grant SELECT on outcomes table ({exc})')
+
+
 def _upload_zip(session, zip_path: str, stage: str) -> None:
     file_uri = Path(zip_path).resolve().as_uri()
     session.sql(f"PUT '{file_uri}' @{stage} OVERWRITE = TRUE AUTO_COMPRESS = FALSE").collect()
@@ -155,6 +183,11 @@ EXECUTE AS CALLER
 """
     session.sql(ddl).collect()
     print(f"[deploy] Stored Procedure registered: {sp_fqn}")
+    role = os.environ.get('SNOWFLAKE_ROLE', 'PUBLIC')
+    try:
+        session.sql(f"GRANT READ ON STAGE {stage} TO ROLE {role}").collect()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[deploy] Could not grant READ on stage ({exc})")
 
 
 def _register_task(
@@ -177,12 +210,32 @@ AS
   CALL {sp_fqn}({client_arg}, NULL, FALSE, FALSE)
 """
     session.sql(ddl).collect()
+    print(f'[deploy] Task created (suspended): {task_fqn}')
 
-    # Tasks are created in suspended state by default — resume it.
-    session.sql(f"ALTER TASK {task_fqn} RESUME").collect()
-    print(f"[deploy] Task registered and resumed: {task_fqn}")
-    print(f"         Schedule: CRON {cron} {tz}")
-    print(f"         Client:   {client or 'default'}")
+    role = os.environ.get('SNOWFLAKE_ROLE', '')
+
+    # Tasks are created in suspended state by default - resume it.
+    try:
+        session.sql(f'ALTER TASK {task_fqn} RESUME').collect()
+        print(f'[deploy] Task resumed: {task_fqn}')
+        print(f'         Schedule: CRON {cron} {tz}')
+        print(f'         Client:   {client or "default"}')
+    except Exception as exc:  # noqa: BLE001
+        print('[deploy] WARNING: Task created but NOT resumed.')
+        print(f'         Reason: {exc}')
+        print('         An ACCOUNTADMIN must run the following, then resume the task:')
+        print(f'           GRANT EXECUTE TASK ON ACCOUNT TO ROLE {role or "<your_role>"};')
+        print(f'           ALTER TASK {task_fqn} RESUME;')
+        return
+
+    # Tasks require the account-level EXECUTE TASK privilege on the owner role.
+    # Attempt the grant (no-op if already granted; may fail if role lacks rights).
+    if role:
+        try:
+            session.sql(f'GRANT EXECUTE TASK ON ACCOUNT TO ROLE {role}').collect()
+            print(f'[deploy] Granted EXECUTE TASK on account to role {role}.')
+        except Exception as exc:  # noqa: BLE001
+            print(f'[deploy] Could not self-grant EXECUTE TASK ({exc}).')
 
 
 # ---------------------------------------------------------------------------
@@ -246,6 +299,7 @@ def main():
         zip_path = str(Path(tmp_dir) / _ZIP_NAME)
         _zip_package(zip_path)
         _ensure_stage(session, stage)
+        _ensure_outcomes_table(session, db, schema)
         _upload_zip(session, zip_path, stage)
         _register_sp(session, stage, warehouse)
 

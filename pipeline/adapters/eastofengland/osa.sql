@@ -8,17 +8,18 @@
 -- pipeline/pipeline/run_batch.py — this view replaces that aliasing with a
 -- one-time SQL artefact.
 --
--- Filtering by ANALYSIS_DATE happens at pipeline runtime, not in the view,
+-- Filtering by DATE happens at pipeline runtime, not in the view,
 -- so all rows are exposed.  The pipeline filters down to a ~10-week
 -- lookback window per analysis date.
 
 CREATE OR REPLACE VIEW STORE_INSIGHT_DB.PUBLIC.OSA_V1 AS
 SELECT
     SITE_ID              AS STORE_ID,
-    ITEM_ID              AS ITEM_CODE,
+    ITEM_ID::VARCHAR     AS ITEM_CODE,
     ANALYSIS_DATE        AS DATE,
     ACTUAL_SALES_VOLUME,
     LOST_SALES_VOLUME,
     LOST_SALES_VALUE,
-    DEPARTMENT_ID
+    DEPARTMENT_ID,
+    REPORTING_PERIOD_ID
 FROM ANALYSIS.FINAL.LSM_ITEM_STORE_DAY_REPORTING_PERIOD;

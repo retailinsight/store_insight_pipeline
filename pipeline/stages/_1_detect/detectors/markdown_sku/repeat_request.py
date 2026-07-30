@@ -31,7 +31,7 @@ METADATA = DetectorInfo(
     problem     = 'A specific item at this store has been flagged for markdown repeatedly over recent weeks, indicating a chronic surplus or ordering problem.',
     action      = 'Review the ordering and ranging decisions for this item. Investigate whether the root cause is over-ordering, poor demand forecasting, or a ranging issue.',
     baseline    = 'The number of distinct weeks this item was marked down within the rolling lookback window.',
-    logic       = 'Fires when the item has been marked down on at least min_markdown_weeks distinct weeks AND has at least min_markdown_requests total requests within the lookback_weeks rolling window.',
+    logic       = 'Repeat weeks = count of distinct calendar weeks with one or more markdown requests for the same store-item.\nFires when repeat weeks >= min_markdown_weeks and total markdown requests in the rolling lookback_weeks window >= min_markdown_requests.',
     config_keys = ['lookback_weeks', 'min_markdown_weeks', 'min_markdown_requests'],
 )
 

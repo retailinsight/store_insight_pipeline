@@ -41,7 +41,7 @@ def test_required_contracts_picks_up_multiple_wmd_sources():
         pass
 
     assert caps.required_contracts(gather) == {
-        'wastage', 'markdown_log', 'wmd_hierarchy',
+        'wastage', 'markdown_log', 'wmd_item_hierarchy',
     }
 
 
@@ -70,7 +70,7 @@ def test_required_contracts_handles_real_waste_dept_breakdown_gatherer():
     from store_insight.pipeline.stages._3_facts.gatherers import waste_dept_breakdown
 
     assert caps.required_contracts(waste_dept_breakdown.gather) == {
-        'wastage', 'markdown_log', 'wmd_hierarchy',
+        'wastage', 'markdown_log', 'wmd_item_hierarchy',
     }
 
 
@@ -79,12 +79,12 @@ def test_required_contracts_handles_real_waste_dept_breakdown_gatherer():
 # ---------------------------------------------------------------------------
 
 def test_discover_capabilities_for_eastofengland_returns_all_eight():
-    """EoE has all 8 contracts deployed in pipeline/adapters/eastofengland/."""
+    """EoE has 8 adapter views deployed in pipeline/adapters/eastofengland/."""
     found = caps.discover_capabilities('eastofengland')
     assert found == {
         'osa', 'hierarchy', 'feedback',
         'markdown_log', 'markdown_sales', 'wastage',
-        'store_hierarchy', 'wmd_hierarchy',
+        'wmd_store_hierarchy', 'wmd_item_hierarchy',
     }
 
 
