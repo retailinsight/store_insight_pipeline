@@ -18,6 +18,7 @@ grain:
   - STORE_ID
   - UPC
   - DATE
+  - TIME
 
 columns:
   STORE_ID:
@@ -40,12 +41,11 @@ columns:
 
   TIME:
     type: VARCHAR
-    required: false
+    required: true
     description: |
-      Sale time (HH:MM:SS).  Optional; not currently filtered on or used
-      to disambiguate rows.  Multiple sale rows for the same
-      store/item/day are aggregated together by all detectors, so TIME is
-      retained for ad-hoc queries only.
+      Sale time (HH:MM:SS).  Part of the grain — multiple sale rows per
+      store/item/day are distinguished by TIME.  Detectors aggregate
+      across TIME, so it is not used for filtering.
 
   MARKDOWN_QUANTITY:
     type: NUMBER

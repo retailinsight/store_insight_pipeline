@@ -5,16 +5,17 @@ from __future__ import annotations
 from store_insight.pipeline.qc.wmd_join_check import check_wmd_joins, report
 
 
-def test_check_wmd_joins_identifies_adapter_contract_mismatch():
+def test_check_wmd_joins_contract_matches_adapter():
     results = check_wmd_joins()
     assert results["wmd_adapter_file"].endswith("wmd_hierarchy.sql")
     assert results["osa_adapter_file"].endswith("hierarchy.sql")
     assert results["wmd_contract"]["name"] == "wmd_item_hierarchy"
     assert results["osa_contract"]["name"] == "hierarchy"
 
-    # The WMD adapter and contract disagree on column names.
-    assert results["wmd_missing_in_adapter"]
-    assert results["wmd_extra_in_adapter"]
+    # Fixed in #40 — the WMD contract was updated to match the adapter's
+    # actual column names (ITEM_ID -> UPC, DEPARTMENT -> ITEM_HIERARCHY_2).
+    assert not results["wmd_missing_in_adapter"]
+    assert not results["wmd_extra_in_adapter"]
 
 
 def test_upc_is_sourced_from_wmd_item_id():

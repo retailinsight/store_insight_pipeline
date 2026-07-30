@@ -11,16 +11,31 @@ description: |
   ("tick-and-flick").
 
 grain:
-  - INTERVENTION_ID
-  - DATE
+  - ALERT_SOURCE_ID
 
 columns:
-  INTERVENTION_ID:
-    type: NUMBER
+  ALERT_SOURCE_ID:
+    type: VARCHAR
     required: true
     description: |
-      Primary key — one row per intervention.  Counted to derive ALERTS_WORKED
-      per store per week.
+      Natural key — unique per feedback row.  Format:
+      {alert_type_id}_{store_id}_{item_id}_{date}.  Used as the grain.
+
+  INTERVENTION_ID:
+    type: NUMBER
+    required: false
+    description: |
+      Intervention *type* code (1–10, e.g. 1 = "On Shelf - No action",
+      5 = "Restocked").  Categorical, not a primary key.  ~19% of rows
+      have NULL (older data loaded before the field was populated).
+
+  INTERVENTION_NAME:
+    type: VARCHAR
+    required: false
+    description: |
+      Human-readable label for the intervention type.  Values may change
+      over time (e.g. ID 1 was renamed from "No action Taken" to
+      "On Shelf - No action").  Useful for reporting.
 
   STORE_ID:
     type: NUMBER

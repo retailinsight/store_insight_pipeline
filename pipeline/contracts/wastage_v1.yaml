@@ -18,7 +18,7 @@ description: |
 grain:
   - STORE_ID
   - UPC
-  - WASTE_DATETIME
+  - DATE
 
 columns:
   STORE_ID:
@@ -42,13 +42,6 @@ columns:
     description: |
       Waste event date (calendar day).  Aliased from WASTE_DATE in the EoE
       adapter; pipeline filters by this column.
-
-  WASTE_DATETIME:
-    type: TIMESTAMP
-    required: true
-    description: |
-      Full timestamp of the waste event.  Part of the grain because
-      multiple disposals can happen on the same item/store/day.
 
   WASTE_QUANTITY:
     type: NUMBER

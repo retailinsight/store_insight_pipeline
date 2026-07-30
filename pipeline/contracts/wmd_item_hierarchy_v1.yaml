@@ -12,29 +12,22 @@ version: v1
 
 description: |
   Item master for the WMD pipelines (markdown / waste alerts).  One row
-  per ITEM_ID after deduplication.  Distinct from the OSA-side `hierarchy`
+  per UPC after deduplication.  Distinct from the OSA-side `hierarchy`
   contract because the WMD source has a different shape and historically
   used a different join key (VME_CODE).
 
 grain:
-  - ITEM_ID
+  - UPC
 
 columns:
-  ITEM_ID:
-    type: NUMBER
-    required: true
-    description: |
-      Numeric item identifier from the WMD source.  Sourced from
-      VME_CODE in EoE; cast to NUMBER by the adapter view.
-
   UPC:
     type: NUMBER
     required: true
     description: |
-      Canonical item identifier exposed to WMD transactional tables
-      (markdown_log, markdown_sales, wastage).  The EoE adapter aliases
-      ITEM_ID to UPC; other customers may source this directly.  All
-      WMD fact joins use this column.
+      Canonical item identifier and grain column.  Sourced from
+      ITEM_ID (VME_CODE) in EoE and aliased to UPC by the adapter view.
+      All WMD fact table joins (markdown_log, markdown_sales, wastage)
+      use this column.
 
   EAN:
     type: VARCHAR
@@ -58,26 +51,32 @@ columns:
       Human-readable item name.  Used in narrative output for
       MARKDOWN_SKU and MARKDOWN_OVERRIDE alerts.
 
-  DEPARTMENT:
-    type: NUMBER
+  ITEM_HIERARCHY_2:
+    type: VARCHAR
     required: true
     description: |
-      Top-level grouping dimension for waste / markdown alerts.  Today's
-      EoE adapter sources this from HIERARCHY_LEVEL_1_ID (a numeric code,
-      not a name).  Detectors and gatherers treat it as an opaque grouping
-      key — they group by it and emit it on output but never display it.
-      Functional equivalent of DEPARTMENT_NAME on the OSA-side `hierarchy`
-      contract, but the WMD source uses a numeric code.
+      Department-level grouping dimension, aliased to DEPARTMENT by every
+      detector/gatherer that reads item_hierarchy (markdown_sku,
+      markdown_override_dept_breakdown, markdown_sellthrough_dept_breakdown,
+      waste_dept_breakdown, waste_trim).  Today's EoE adapter sources this
+      from SECTION on the WMD source table.  Treated as an opaque grouping
+      key — grouped on and displayed, never translated.
 
-  SECTION:
+  ITEM_HIERARCHY_1:
     type: VARCHAR
     required: false
-    description: Mid-level grouping; used by some breakdown gatherers.
+    description: |
+      Top-level (division) grouping.  Today's EoE adapter sources this from
+      DIVISION_ID.  Not currently read by any detector or gatherer; kept for
+      forward compatibility.
 
-  SUB_SECTION:
+  ITEM_HIERARCHY_3:
     type: VARCHAR
     required: false
-    description: Sub-departmental grouping; used in narrative breakdowns.
+    description: |
+      Sub-departmental grouping.  Today's EoE adapter sources this from
+      SUB_SECTION.  Not currently read by any detector or gatherer; kept
+      for forward compatibility.
 
 joins:
   - contract: hierarchy
@@ -89,14 +88,14 @@ joins:
       combining WMD markdown measures with OSA actual-sales measures.
 
 data_quality_findings:
-  - column: ITEM_ID
+  - column: UPC
     severity: high
     concern: |
       The EoE source stores this as VME_CODE (LONG); some other customers
       may have item IDs as VARCHAR.  Adapter views must CAST to NUMBER
       consistent with the UPC type used by markdown_log, markdown_sales
       and wastage, or joins will silently produce no rows.
-  - column: DEPARTMENT
+  - column: ITEM_HIERARCHY_2
     severity: medium
     concern: |
       Free-text field; adapter views should NOT translate values into
@@ -111,5 +110,5 @@ checks:
 notes: |
   - The EoE source is snapshot-based (multiple rows per VME_CODE differing
     only by FILE_TIMESTAMP).  The adapter view must deduplicate to the
-    latest snapshot per ITEM_ID.  See pipeline/adapters/eastofengland/
+    latest snapshot per UPC.  See pipeline/adapters/eastofengland/
     wmd_item_hierarchy.sql for the reference pattern.
