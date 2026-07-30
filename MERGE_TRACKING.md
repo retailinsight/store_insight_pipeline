@@ -99,18 +99,24 @@ Neither original branch was modified. No rebase / history rewrite.
 - [x] Task `RUN_ALERTS_PIPELINE_TASK` started, `CRON 0 6 * * * Europe/London`, calls SP with `USE_CORTEX=FALSE`.
 - [x] All 6 current adapter views exist (`OSA_V1` … `WASTAGE_V1`).
 - [ ] **TODO (next deploy):** lineage columns unpopulated on latest run (predates lineage code deploy).
-- [ ] **TODO (next deploy):** `STORE_INSIGHT_FEEDBACK` / `STORE_INSIGHT_OUTCOMES` tables missing.
+- [x] `STORE_INSIGHT_OUTCOMES` table created by the 2026-07-30 redeploy. `STORE_INSIGHT_FEEDBACK` still pending (created by the feedback adapter deploy).
 - [ ] **TODO (next deploy):** views `WMD_ITEM_HIERARCHY_V1`, `WMD_STORE_HIERARCHY_V1`, `INSIGHT_FEEDBACK_V1` (renames + new).
 - [x] **ROOT CAUSE FOUND:** daily task FAILED every day since 2026-07-22 with
   `Insert value list does not match column list expecting 27 but got 19` — the deployed zip predates
   the 27-column lineage migration (2026-07-21). The merged branch writes 27 columns and fixes this on redeploy.
   Diagnosis: `scripts/check_task_history.py`. Incident recorded in `RISK_VALIDATION.md`.
-- [ ] **ACTION:** redeploy zip/SP from `feat/ukcoop-env-scaling-merge` (also creates Stage 5 tables + renamed views).
-- [ ] **ACTION:** backfill missed `ANALYSIS_DATE`s 2026-07-22 → 2026-07-29 via manual SP calls after redeploy.
+- [x] **ACTION:** redeployed zip/SP from `feat/ukcoop-env-scaling-merge` (2026-07-30 ~15:40 BST):
+  stage `ALERTS_PIPELINE_STAGE` refreshed, SP re-registered, `STORE_INSIGHT_OUTCOMES` table created,
+  task recreated + resumed (`CRON 0 6 * * * Europe/London`, `USE_CORTEX=FALSE`).
+  Note: `EXECUTE TASK` self-grant warning is harmless — account-level grant already in place.
+- [ ] **ACTION (in progress):** backfill missed `ANALYSIS_DATE`s via manual SP calls:
+  - [x] 2026-07-22 — 1,003 cards
+  - [x] 2026-07-23 — 1,056 cards
+  - [ ] 2026-07-24 → 2026-07-29 — running sequentially (~15 min each)
 
 ### Manual / environment (to do before deploy)
 
-- [ ] Push `feat/ukcoop-env-scaling-merge` to GitHub and open a PR for Dan's review.
+- [x] Pushed `feat/ukcoop-env-scaling-merge` to GitHub (2026-07-30). PR link: https://github.com/dantretailinsight/store_insight/pull/new/feat/ukcoop-env-scaling-merge
 - [ ] UI smoke test: `ui/` builds (`npm run build`), Chat page reachable at `/chat` when `VITE_AI_CHAT` enabled, login/dashboard work with Redux auth.
 - [ ] Local pipeline run against UKCOOP Snowflake (rule-based, single store) — confirm cards written with lineage columns populated and deterministic `ALERT_ID`s.
 - [ ] Verify `STORE_INSIGHT_FEEDBACK` and `STORE_INSIGHT_OUTCOMES` DDL exists in the target schema before the UI writes commitments (review-doc risk #3).
