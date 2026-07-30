@@ -1,5 +1,29 @@
 # Store Insight Pipeline — Changes Log
 
+## 2026-07-30 — Merge `feat/pipeline-scaling` into `feat/store-insight-ukcoop-env`
+
+### Summary
+- Integrated Dan's `feat/pipeline-scaling` branch into the UK Co-op environment via `feat/ukcoop-env-scaling-merge`.
+- Preserved UK Co-op lineage columns, lifecycle backend, threshold backtesting, Chat UI, and `.env.example` placeholders.
+- Adopted scaling features: typed `PipelineConfig`, Stage 5 outcomes measurement, deterministic `ALERT_ID`, `OSA_RECURRING_SLOT` and `WASTE_TRIM` signals, React/Redux UI rewrite, and agent workflows.
+- Renamed WMD contracts to `wmd_item_hierarchy` / `wmd_store_hierarchy` and aligned capabilities/tests.
+- Resolved conflicts in `pipeline/pipeline/pipeline.py`, `pipeline/deploy/deploy.py`, UI components, tests, workflows, and config files.
+
+### Validation
+- Full pytest suite: **530 passed, 2 skipped**.
+- Read-only Snowflake validation: **20/20 checks passed** (`scripts/validate_merge_snowflake.py`).
+- 27-column `ALERTS_PIPELINE` schema confirmed; `ALERT_ID` unique on latest run (1,156/1,156 rows).
+
+### Incident and remediation
+- Daily Task failed 2026-07-22 onwards because the deployed zip still wrote **19 columns** while the live table expected **27**.
+- Root cause: stale deployed package predating the merge fix.
+- Fix: redeployed the merged branch to Snowflake (SP + Task + zip).
+- Backfilled missed runs: 2026-07-22, 2026-07-23, 2026-07-24 completed; 2026-07-25 → 29 in progress.
+
+### Branch / PR
+- Integration branch pushed: `feat/ukcoop-env-scaling-merge`.
+- PR for Dan's review: https://github.com/dantretailinsight/store_insight/pull/new/feat/ukcoop-env-scaling-merge
+
 ## 2026-07-21 — Final engineering-gap close-out
 
 ### Summary

@@ -1,6 +1,6 @@
 # Store Insight — TODO
 
-Last updated: 2026-07-21 10:35
+Last updated: 2026-07-30 16:30
 
 ## Done 2026-07-17
 - [x] **Daily deployment LIVE** — Stored Procedure and scheduled Task
@@ -15,6 +15,19 @@ Last updated: 2026-07-21 10:35
       `MARKDOWN_SELLTHROUGH` rule-based narratives.
 - [x] **EXECUTE TASK privilege** — Dimitar granted it to `STORE_INSIGHT_ROLE`;
       task resumed and runs successfully.
+
+## Done 2026-07-30
+
+- [x] **Merged `feat/pipeline-scaling` into `feat/store-insight-ukcoop-env`** on integration branch `feat/ukcoop-env-scaling-merge`.
+- [x] **Resolved all conflicts** across pipeline core, UI, deploy scripts, tests, workflows, and configuration.
+- [x] **Preserved UK Co-op features**: lineage columns (`RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`, `SOURCE_DATA_WATERMARK`), lifecycle backend, threshold backtesting, Chat UI, `.env.example` placeholders.
+- [x] **Adopted scaling features**: typed config, Stage 5 outcomes measurement, deterministic `ALERT_ID`, `OSA_RECURRING_SLOT` / `WASTE_TRIM` signals, new React/Redux UI architecture, agent workflows.
+- [x] **Renamed WMD contracts** (`wmd_item_hierarchy`, `wmd_store_hierarchy`) and aligned tests/capabilities.
+- [x] **Full pytest suite**: 530 passed, 2 skipped.
+- [x] **Live Snowflake validation**: 20/20 checks passed; 27-column `ALERTS_PIPELINE` schema confirmed.
+- [x] **Diagnosed and fixed daily Task failures** (stale deployed zip wrote 19 columns vs 27); redeployed from merged branch.
+- [x] **Backfilled missed runs** for 2026-07-22, 2026-07-23, 2026-07-24; 2026-07-25 → 29 in progress.
+- [x] **Pushed integration branch** and opened PR for Dan's review.
 
 ## Done 2026-07-20
 - [x] **Threshold backtesting CLI** — added `pipeline/tools/backtest_thresholds.py`
@@ -33,15 +46,16 @@ Last updated: 2026-07-21 10:35
       `README.md` integration checklist.
 
 ## Next
+
 - [x] **Migrate live table schema** — completed 2026-07-21; `ALERTS_PIPELINE` now has 27 columns.
 - [x] **Lifecycle backend** — event table, `record_event()` helper, KPI SQL builders, and
       FastAPI endpoints added in `pipeline_ui/backend/app/main.py`.
 - [ ] **Lifecycle UI wiring** — front-end must call
       `POST /customers/{client}/alerts/{alert_id}/events` when users see/assign/work/close/ignore alerts.
 - [ ] **Monitor daily runs** — confirm 06:00 Europe/London run produces cards
-      and check `TASK_HISTORY` for any failures.
-- [ ] **Open PR** — branch already pushed; create PR when Dan is happy with the
-      current state.
+      and check `TASK_HISTORY` for any failures. First post-merge scheduled run pending.
+- [x] **Open PR** — branch pushed; PR opened for Dan's review 2026-07-30.
+- [ ] **Complete backfill** — finish manual SP runs for 2026-07-25 → 2026-07-29.
 - [ ] **Flag mistral-large deprecation to Dan** — deprecated by Snowflake
       2026-07-08; other pipelines using it will be failing too.
 

@@ -2,8 +2,8 @@
 
 **Objective:** Deploy the Store Insight pipeline to Snowflake so it generates rule-based actions daily at 06:00 Europe/London.
 
-**Target branch:** `feat/store-insight-ukcoop-env`  
-**Status:** ✅ Daily deployment LIVE (2026-07-17). SP and Task registered; first scheduled run succeeded (1,165 rule-based cards). Engineering-gap close-out completed 2026-07-21: full run lineage columns migrated (`RUN_ID`, `PIPELINE_VERSION`, `CONFIG_HASH`, `PROMPT_HASH`, `SOURCE_DATA_WATERMARK`, `SKILL_FILE_USED`, `FALLBACK_USED`), `QUALITY_REASON`, card validation extended, threshold backtesting CLI, lifecycle backend, and all docs updated/pushed.
+**Target branch:** `feat/ukcoop-env-scaling-merge` (integration of `feat/store-insight-ukcoop-env` + `feat/pipeline-scaling`)  
+**Status:** ✅ Daily deployment LIVE (2026-07-17). SP and Task registered; first scheduled run succeeded (1,165 rule-based cards). Engineering-gap close-out completed 2026-07-21. Merge with `feat/pipeline-scaling` completed 2026-07-30; redeployed from merged branch and backfilling missed runs 2026-07-22 → 29.
 
 ---
 

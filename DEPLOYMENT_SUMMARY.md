@@ -1,13 +1,17 @@
 # Store Insight UK Coop — Deployment Summary
 
-Generated: 2026-07-21  
-Sources: `DEPLOYMENT_PLAN.md`, `CHANGES_LOG.md`, and `Store_Insight_pipeline_review_with_diagram/store_insight_engineering_system_map_with_architecture.html`.
+Generated: 2026-07-30  
+Sources: `DEPLOYMENT_PLAN.md`, `CHANGES_LOG.md`, `MERGE_TRACKING.md`, and `Store_Insight_pipeline_review_with_diagram/store_insight_engineering_system_map_with_architecture.html`.
 
 ---
 
 ## 1. Current deployment status
 
 **Daily deployment is live.**
+
+**Integration branch:** `feat/ukcoop-env-scaling-merge` (`feat/store-insight-ukcoop-env` + `feat/pipeline-scaling`)  
+**Merge completed:** 2026-07-30  
+**PR for review:** https://github.com/dantretailinsight/store_insight/pull/new/feat/ukcoop-env-scaling-merge
 
 - **Stored Procedure**: `STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE`
 - **Scheduled Task**: `STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE_TASK`
@@ -58,6 +62,8 @@ The Store Insight pipeline converts raw Co-op retail data into daily action card
 | Card validation | Shared `quality.py` validates all narratives; rule-based cards are flagged with `QUALITY_REASON` in the output table. |
 | Lifecycle foundation | Added `pipeline/lifecycle` module with event table schema, `record_event()` helper, funnel/per-store KPI SQL builders, and integration README. |
 | CI/CD | `ruff` and `pytest` gates; offline capability validation; optional Snowflake gates. |
+| Merge with `feat/pipeline-scaling` | Integrated typed config, Stage 5 outcomes, new signals, UI rewrite, agent workflows while preserving UK Co-op lineage/lifecycle features. |
+| Post-merge redeploy | Redeployed zip/SP/Task from `feat/ukcoop-env-scaling-merge` to fix 19-vs-27-column mismatch; backfilling 2026-07-22 → 29. |
 
 ---
 
@@ -181,9 +187,9 @@ python scripts/validate_daily_run.py
 
 ## 6. Tests and quality
 
-- **Full suite**: **445 tests passed** (`python -m pytest pipeline/tests/ -q`).
+- **Full suite**: **530 tests passed, 2 skipped** (`python -m pytest pipeline/tests -q`).
 - **Ruff**: check and format clean on modified files.
-- **Live validation**: migration and lineage population verified 2026-07-21 against `STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE`.
+- **Live validation**: 20/20 checks passed 2026-07-30 (`scripts/validate_merge_snowflake.py`); 27-column schema confirmed.
 
 ---
 
@@ -248,8 +254,10 @@ Use Cortex for **ad-hoc benchmarking or special requests only**. Before proposin
 
 ## 9. Next steps
 
-1. Confirm the next scheduled run (06:00 Europe/London) succeeds and produces ~1,100–1,200 rule-based cards with the new lineage columns populated.
-2. Open / update PR for `feat/store-insight-ukcoop-env` when ready.
-3. Wire the front-end to call `POST /customers/{client}/alerts/{alert_id}/events` when users see/assign/work/close/ignore alerts.
-4. Decide with Dan whether to keep the Task running (incurring daily warehouse credits), suspend it, or resize `STORE_INSIGHT_WH`.
-5. Monitor `TASK_HISTORY` and `ALERTS_PIPELINE` daily for any schema or data-quality regressions.
+1. Dan to review PR `feat/ukcoop-env-scaling-merge`.
+2. Complete backfill of missed runs for 2026-07-25 → 2026-07-29.
+3. Confirm the next scheduled run (06:00 Europe/London) succeeds and produces ~1,100–1,200 rule-based cards with lineage columns populated.
+4. Wire the front-end to call `POST /customers/{client}/alerts/{alert_id}/events` when users see/assign/work/close/ignore alerts.
+5. Decide with Dan whether to keep the Task running, suspend it, or resize `STORE_INSIGHT_WH`.
+6. Monitor `TASK_HISTORY` and `ALERTS_PIPELINE` daily for schema or data-quality regressions.
+7. Update `RISK_VALIDATION.md` after the first post-merge scheduled/production run.
