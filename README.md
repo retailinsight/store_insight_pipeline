@@ -22,7 +22,7 @@ See `DEPLOYMENT_PLAN.md` for the full deployment checklist and `DEPLOYMENT_SUMMA
 | Folder | What it contains |
 |---|---|
 | `pipeline/` | **The core alerts pipeline.** Detect → Score → Facts → Investigate stages, config, adapter views, deployment. See `pipeline/README.md`. |
-| `pipeline/tests/` | Automated **pytest unit tests** (444 tests) for pipeline logic. Run offline — no Snowflake connection needed: `python -m pytest pipeline/tests/ -q` |
+| `pipeline/tests/` | Automated **pytest unit tests** (445 tests) for pipeline logic. Run offline — no Snowflake connection needed: `python -m pytest pipeline/tests/ -q` |
 | `pipeline/qc/` | Jupyter notebooks for manual QC of pipeline outputs. |
 | `scripts/` | **Operational helper scripts** run manually against live Snowflake (connectivity check, deployment state, daily run validation, Cortex model checks). Require VPN + credentials. See `scripts/README.md`. |
 | `docs/` | Repo-level docs: Snowflake connection status, project context notes. |
@@ -87,7 +87,7 @@ Output is written to `STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE`.
 python -m pytest pipeline/tests/ -q
 ```
 
-Current status: **444 passed**.
+Current status: **445 passed**.
 
 ### Run the full pipeline locally for one date
 

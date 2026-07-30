@@ -4,7 +4,7 @@ Living document: re-validate before each deployment step and after each producti
 Validation helpers: `scripts/validate_deploy_risks.py`, `scripts/check_run_output.py`, `scripts/spot_check_cards.py`, `scripts/migrate_alerts_table_schema.py`, `scripts/validate_lineage_populated.py` (read-only except migration; VPN required).
 
 Last live-Snowflake validation: **2026-07-21 10:30** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
-Requirements/code review updated: **2026-07-21 10:35**
+Requirements/code review updated: **2026-07-30 09:50**
 
 ---
 

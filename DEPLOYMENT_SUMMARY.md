@@ -181,7 +181,7 @@ python scripts/validate_daily_run.py
 
 ## 6. Tests and quality
 
-- **Full suite**: **444 tests passed** (`python -m pytest pipeline/tests/ -q`).
+- **Full suite**: **445 tests passed** (`python -m pytest pipeline/tests/ -q`).
 - **Ruff**: check and format clean on modified files.
 - **Live validation**: migration and lineage population verified 2026-07-21 against `STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE`.
 

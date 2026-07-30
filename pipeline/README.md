@@ -179,7 +179,7 @@ The registry auto-discovers any module placed in `stages/_1_detect/detectors/` â
 
 ## Tests
 
-The pipeline has a comprehensive test suite (188 tests) covering all stages and configuration scenarios.
+The pipeline has a comprehensive test suite (445 tests) covering all stages and configuration scenarios.
 
 ```bash
 # Run all tests

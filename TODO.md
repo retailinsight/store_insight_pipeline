@@ -33,7 +33,7 @@ Last updated: 2026-07-21 10:35
       `README.md` integration checklist.
 
 ## Next
-- [x] **Migrate live table schema** — completed 2026-07-21; `ALERTS_PIPELINE` now has 25 columns.
+- [x] **Migrate live table schema** — completed 2026-07-21; `ALERTS_PIPELINE` now has 27 columns.
 - [x] **Lifecycle backend** — event table, `record_event()` helper, KPI SQL builders, and
       FastAPI endpoints added in `pipeline_ui/backend/app/main.py`.
 - [ ] **Lifecycle UI wiring** — front-end must call

@@ -128,7 +128,7 @@ python -m pytest store_insight/pipeline/tests/test_write_alerts.py -v
 ```
 
 ### Deployment Checklist
-- [ ] All 188 tests pass
+- [ ] All 445 tests pass
 - [ ] Configuration validation succeeds for target client
 - [ ] Contract files are up-to-date (`store_hierarchy`, `wmd_hierarchy`)
 - [ ] Cortex permissions granted to SP owner role
