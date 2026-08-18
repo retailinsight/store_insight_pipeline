@@ -2,17 +2,25 @@
 KPI Availability Batch Script
 ==============================
 Joins source tables, aggregates all Availability KPI metrics per store per week,
-calls Snowflake Cortex to generate key insights, and writes the result to
-SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.KPI_AVAILABILITY_SUMMARY.
+calls Snowflake Cortex to generate key insights, and writes the result to the
+table named by the KPI_OUTPUT_TABLE env var (default:
+STORE_INSIGHT_DB.PUBLIC.KPI_AVAILABILITY_SUMMARY).
 
 Run manually (from the repo root):
-    python kpi/kpi_availability_batch.py --date 2025-03-22
+    python kpi/kpi_availability_batch.py --analysis-date 2025-03-22
 
 Credentials are read from api2/.env (copy api2/.env.example to get started).
 
-The --date argument is the last day of available OSA data (typically yesterday).
-The script computes KPIs over the 7-day window ending on that date (inclusive),
-and compares against the prior 7-day window for week-on-week trends.
+NOTE: writing to STORE_INSIGHT_DB requires SNOWFLAKE_ROLE=STORE_INSIGHT_ROLE
+(the table is owned by STORE_INSIGHT_ROLE; STOREINSIGHT has DML).
+
+The --analysis-date argument is the last day of available OSA data (typically
+yesterday). The script computes KPIs over the 7-day window ending on that date
+(inclusive), and compares against the prior 7-day window for week-on-week trends.
+
+Writes are idempotent per run date: existing rows for the run date are deleted
+and the new rows appended. The table is never dropped or recreated, so columns
+maintained by other processes (waste/markdown/prompted-markdown/TOD) survive.
 """
 
 import argparse
@@ -26,7 +34,7 @@ from snowflake.snowpark import Session
 from snowflake.snowpark import functions as F
 from snowflake.snowpark.types import (
     StructType, StructField,
-    StringType, IntegerType, FloatType, DateType,
+    StringType, IntegerType, FloatType, VariantType,
 )
 
 load_dotenv(dotenv_path=Path(__file__).parent / ".env")
@@ -61,7 +69,7 @@ OSA_TABLE       = "ANALYSIS.FINAL.LSM_REPORT_ITEM_STORE_DAY_REPORTING_PERIOD"
 HIERARCHY_TABLE = "ANALYSIS.FINAL.LSM_ITEM_HIERARCHY"
 SITE_TABLE      = "ANALYSIS.FINAL.LSM_SITE_HIERARCHY"
 FEEDBACK_TABLE  = "ANALYSIS.FINAL.LSM_ALERT_FEEDBACK"
-OUTPUT_TABLE    = "SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.KPI_AVAILABILITY_SUMMARY"
+OUTPUT_TABLE    = os.getenv("KPI_OUTPUT_TABLE", "STORE_INSIGHT_DB.PUBLIC.KPI_AVAILABILITY_SUMMARY")
 
 # RAG threshold
 OSA_TARGET = 0.90
@@ -69,6 +77,11 @@ OSA_TARGET = 0.90
 # Day names in order (Snowflake DAYOFWEEK: 0=Sun … 6=Sat, DAYNAME returns e.g. "Mon")
 PERIOD_LABELS = {1: "Morning (6am-12pm)", 2: "Afternoon (12pm-6pm)", 3: "Evening (6pm-Close)"}
 DAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+DAY_FULL_NAMES = {
+    "Mon": "Monday", "Tue": "Tuesday", "Wed": "Wednesday", "Thu": "Thursday",
+    "Fri": "Friday", "Sat": "Saturday", "Sun": "Sunday",
+}
+TOD_PERIOD_KEYS = {1: "morning", 2: "afternoon", 3: "evening"}
 
 
 # ---------------------------------------------------------------------------
@@ -295,7 +308,7 @@ def _generate_key_insights(session: Session, store_id: int, facts: dict) -> list
 # Main assembly
 # ---------------------------------------------------------------------------
 
-def run_batch(analysis_date_str: str, run_date_str: str | None = None, overwrite: bool = False):
+def run_batch(analysis_date_str: str, run_date_str: str | None = None):
     if run_date_str is None:
         run_date_str = str(date.today())
 
@@ -438,6 +451,18 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None, overwrite
             if day_periods:
                 time_of_day.append({"day": day_name, "performance": day_periods})
 
+        # Time-of-day breakdown for the TIME_OF_DAY_BREAKDOWN column
+        tod_breakdown = []
+        for day_name in DAY_ORDER:
+            periods = tod_by_day.get(day_name)
+            if not periods:
+                continue
+            entry = {"day": DAY_FULL_NAMES[day_name]}
+            for pid, key in TOD_PERIOD_KEYS.items():
+                if pid in periods:
+                    entry[key] = f"{periods[pid] * 100:.1f}%"
+            tod_breakdown.append(entry)
+
         # Top underperforming depts for Cortex prompt
         underperforming = [
             cp["category"] for cp in category_perf if cp["warning"]
@@ -509,29 +534,70 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None, overwrite
             "up" if wow_pp >= 0 else "down",
             json.dumps(overall_details),
             json.dumps(availability_details),
+            # Waste / markdown / prompted-markdown metrics are not computed by
+            # this batch yet — write None so existing column data is preserved.
+            None,  # WASTE_PCT
+            None,  # WASTE_WOW_CHANGE_PP
+            None,  # WASTE_CLUSTER_PCT
+            None,  # WASTE_TREND_DIRECTION
+            None,  # WASTE_DETAILS_JSON
+            None,  # MARKDOWN_PCT
+            None,  # MARKDOWN_WOW_CHANGE_PP
+            None,  # MARKDOWN_CLUSTER_PCT
+            None,  # MARKDOWN_TREND_DIRECTION
+            None,  # MARKDOWN_DETAILS_JSON
+            None,  # PROMPTED_MARKDOWN_PCT
+            None,  # PROMPTED_MARKDOWN_WOW_CHANGE_PP
+            None,  # PROMPTED_MARKDOWN_CLUSTER_PCT
+            None,  # PROMPTED_MARKDOWN_TREND_DIRECTION
+            None,  # PROMPTED_MARKDOWN_DETAILS_JSON
+            tod_breakdown or None,  # TIME_OF_DAY_BREAKDOWN
         ))
 
     print(f"Writing {len(output_rows)} rows to {OUTPUT_TABLE}...")
 
     schema = StructType([
-        StructField("RUN_DATE",                 StringType()),
-        StructField("ANALYSIS_DATE",            StringType()),
-        StructField("STORE_ID",                 IntegerType()),
-        StructField("TW_OSA_PCT",               FloatType()),
-        StructField("LW_OSA_PCT",               FloatType()),
-        StructField("MONTH_OSA_PCT",            FloatType()),
-        StructField("YEAR_OSA_PCT",             FloatType()),
-        StructField("CLUSTER_OSA_PCT",          FloatType()),
-        StructField("WOW_CHANGE_PP",            FloatType()),
-        StructField("TREND_DIRECTION",          StringType()),
-        StructField("OVERALL_DETAILS_JSON",     StringType()),
-        StructField("AVAILABILITY_DETAILS_JSON",StringType()),
+        StructField("RUN_DATE",                          StringType()),
+        StructField("ANALYSIS_DATE",                     StringType()),
+        StructField("STORE_ID",                          IntegerType()),
+        StructField("TW_OSA_PCT",                        FloatType()),
+        StructField("LW_OSA_PCT",                        FloatType()),
+        StructField("MONTH_OSA_PCT",                     FloatType()),
+        StructField("YEAR_OSA_PCT",                      FloatType()),
+        StructField("CLUSTER_OSA_PCT",                   FloatType()),
+        StructField("WOW_CHANGE_PP",                     FloatType()),
+        StructField("TREND_DIRECTION",                   StringType()),
+        StructField("OVERALL_DETAILS_JSON",              StringType()),
+        StructField("AVAILABILITY_DETAILS_JSON",         StringType()),
+        StructField("WASTE_PCT",                         FloatType()),
+        StructField("WASTE_WOW_CHANGE_PP",               FloatType()),
+        StructField("WASTE_CLUSTER_PCT",                 FloatType()),
+        StructField("WASTE_TREND_DIRECTION",             StringType()),
+        StructField("WASTE_DETAILS_JSON",                StringType()),
+        StructField("MARKDOWN_PCT",                      FloatType()),
+        StructField("MARKDOWN_WOW_CHANGE_PP",            FloatType()),
+        StructField("MARKDOWN_CLUSTER_PCT",              FloatType()),
+        StructField("MARKDOWN_TREND_DIRECTION",          StringType()),
+        StructField("MARKDOWN_DETAILS_JSON",             StringType()),
+        StructField("PROMPTED_MARKDOWN_PCT",             FloatType()),
+        StructField("PROMPTED_MARKDOWN_WOW_CHANGE_PP",   FloatType()),
+        StructField("PROMPTED_MARKDOWN_CLUSTER_PCT",     FloatType()),
+        StructField("PROMPTED_MARKDOWN_TREND_DIRECTION", StringType()),
+        StructField("PROMPTED_MARKDOWN_DETAILS_JSON",    StringType()),
+        StructField("TIME_OF_DAY_BREAKDOWN",             VariantType()),
     ])
 
     df = session.create_dataframe(output_rows, schema=schema)
-    mode = "overwrite" if overwrite else "append"
-    df.write.mode(mode).save_as_table(OUTPUT_TABLE)
-    print(f"Done. Written to {OUTPUT_TABLE} (mode={mode}).")
+
+    # Idempotent write: delete any existing rows for this run date, then
+    # append.  NEVER use mode("overwrite") here — it drops and recreates the
+    # table, destroying columns maintained by other processes and all grants.
+    print(f"  Deleting existing rows for RUN_DATE = {run_date_str}...")
+    session.sql(
+        f"DELETE FROM {OUTPUT_TABLE} WHERE RUN_DATE = '{run_date_str}'"
+    ).collect()
+    df.write.mode("append").save_as_table(OUTPUT_TABLE)
+    print(f"Done. Written to {OUTPUT_TABLE} (delete-by-run-date + append).")
 
 
 # ---------------------------------------------------------------------------
@@ -553,10 +619,5 @@ if __name__ == "__main__":
         default=None,
         help="Date the batch was executed, YYYY-MM-DD. Defaults to today.",
     )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Overwrite the output table instead of appending",
-    )
     args = parser.parse_args()
-    run_batch(args.analysis_date, run_date_str=args.run_date, overwrite=args.overwrite)
+    run_batch(args.analysis_date, run_date_str=args.run_date)
