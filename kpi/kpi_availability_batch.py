@@ -29,7 +29,6 @@ import os
 from datetime import date, timedelta
 from pathlib import Path
 
-from dotenv import load_dotenv
 from snowflake.snowpark import Session
 from snowflake.snowpark import functions as F
 from snowflake.snowpark.types import (
@@ -37,8 +36,13 @@ from snowflake.snowpark.types import (
     StringType, IntegerType, FloatType, VariantType,
 )
 
-load_dotenv(dotenv_path=Path(__file__).parent / ".env")
-load_dotenv(dotenv_path=Path(__file__).parent.parent / "api2" / ".env")
+try:  # python-dotenv is not available inside Snowflake stored procedures
+    from dotenv import load_dotenv
+
+    load_dotenv(dotenv_path=Path(__file__).parent / ".env")
+    load_dotenv(dotenv_path=Path(__file__).parent.parent / "api2" / ".env")
+except ImportError:
+    pass
 
 _session: Session | None = None
 
@@ -599,6 +603,33 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
     ).collect()
     df.write.mode("append").save_as_table(OUTPUT_TABLE)
     print(f"Done. Written to {OUTPUT_TABLE} (delete-by-run-date + append).")
+
+
+# ---------------------------------------------------------------------------
+# Stored-procedure entry point
+# ---------------------------------------------------------------------------
+
+def run_batch_sp(
+    session: Session,
+    analysis_date_str: str | None = None,
+    run_date_str: str | None = None,
+    output_table: str | None = None,
+) -> str:
+    """Entry point for the Snowflake Python stored procedure wrapper.
+
+    Reuses the task-provided session instead of building one from env vars.
+    analysis_date defaults to yesterday (the last day with complete OSA data).
+    output_table overrides the module default so the same SP body can be
+    deployed against DEV or PROD.
+    """
+    global _session, OUTPUT_TABLE
+    _session = session
+    if output_table:
+        OUTPUT_TABLE = output_table
+    if not analysis_date_str:
+        analysis_date_str = str(date.today() - timedelta(days=1))
+    run_batch(analysis_date_str, run_date_str=run_date_str)
+    return f"OK: analysis_date={analysis_date_str} -> {OUTPUT_TABLE}"
 
 
 # ---------------------------------------------------------------------------
