@@ -25,7 +25,7 @@ from snowflake.snowpark import functions as F
 
 ALERTS_TABLE = os.getenv(
     "ALERTS_OUTPUT_TABLE",
-    "SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_PIPELINE",
+    "STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE",
 )
 
 # Columns returned for list_alerts (card-facing only).

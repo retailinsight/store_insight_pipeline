@@ -11,9 +11,9 @@ Store Insight front end. Deployed to Railway via the included `Procfile` and
 ```
 Upstream batches (run elsewhere in the repo)
   kpi/kpi_availability_batch.py                (KPI aggregation + Cortex insights)
-    └─> SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.KPI_AVAILABILITY_SUMMARY
+    └─> STORE_INSIGHT_DB.PUBLIC.KPI_AVAILABILITY_SUMMARY
   pipeline/  (stages: detect → facts → investigate → score)
-    └─> SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_PIPELINE
+    └─> STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE
 
 API (api2/, per-request)
   FastAPI + Snowpark, cached session, X-API-Key auth
@@ -184,10 +184,10 @@ Checked in this order:
 
 | Variable              | Default                             |
 |-----------------------|-------------------------------------|
-| `SNOWFLAKE_ROLE`      | `ACL_SNOWFLAKE_RI_EOE_PRD_DP_USER`  |
-| `SNOWFLAKE_WAREHOUSE` | `SNOWFLAKE_LEARNING_WH`             |
-| `SNOWFLAKE_DATABASE`  | `SNOWFLAKE_LEARNING_DB`             |
-| `SNOWFLAKE_SCHEMA`    | `STORE_INSIGHT`                     |
+| `SNOWFLAKE_ROLE`      | `STORE_INSIGHT_ROLE`                |
+| `SNOWFLAKE_WAREHOUSE` | `STORE_INSIGHT_WH`                  |
+| `SNOWFLAKE_DATABASE`  | `STORE_INSIGHT_DB`                  |
+| `SNOWFLAKE_SCHEMA`    | `PUBLIC`                            |
 | `ALLOWED_ORIGINS`     | `*` (comma-separated list or `*`)   |
 | `POC_USERNAME`        | unset — disables `/auth/login`      |
 | `POC_PASSWORD`        | unset — disables `/auth/login`      |

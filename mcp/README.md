@@ -11,7 +11,7 @@ pipeline trace behind each card.
 
 ```
 Alerts batch (pipeline/)
-  └─> writes cards to SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_PIPELINE
+  └─> writes cards to STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE
 
 MCP server (this service, deployed on Railway)
   ├─> streamable-HTTP transport at  POST /mcp
