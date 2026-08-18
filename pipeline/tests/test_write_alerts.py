@@ -31,9 +31,14 @@ def _patch_card_serialisers(monkeypatch):
     """
     monkeypatch.setattr(
         pipeline_module, '_card_to_row',
-        lambda card, run_date: ('row', run_date, card.get('alert_type', 'X')),
+        lambda card, run_date, emit_affected_products=False: (
+            'row', run_date, card.get('alert_type', 'X'),
+        ),
     )
-    monkeypatch.setattr(pipeline_module, '_card_schema', lambda: 'fake_schema')
+    monkeypatch.setattr(
+        pipeline_module, '_card_schema',
+        lambda emit_affected_products=False: 'fake_schema',
+    )
 
 
 def _make_session():
@@ -214,3 +219,85 @@ def test_target_table_works_in_append_mode_too(monkeypatch):
     session.sql.assert_not_called()
     assert record['saved_to']   == 'DB.SCHEMA.SCRATCH_ALERTS'
     assert record['write_mode'] == 'append'
+
+
+# ---------------------------------------------------------------------------
+# AFFECTED_PRODUCTS feature flag (output.emit_affected_products)
+# ---------------------------------------------------------------------------
+
+def _minimal_card(signal_json=None):
+    return {
+        'alert_type': 'OSA',
+        'store_id': 1,
+        'section': 'CHILLED',
+        'type': 'Availability',
+        'trigger_types': ['WOW'],
+        'issue': 'i',
+        'explanation': 'e',
+        'cost_if_not_fixed': 'c',
+        'recommended_action': 'r',
+        'sort_value': 1.0,
+        'signal_json': signal_json,
+    }
+
+
+def test_flag_off_schema_has_no_affected_products_column():
+    names = [f.name for f in pipeline_module._card_schema().fields]
+    assert 'AFFECTED_PRODUCTS' not in names
+
+
+def test_flag_on_schema_appends_affected_products_last():
+    off = pipeline_module._card_schema()
+    on = pipeline_module._card_schema(emit_affected_products=True)
+    assert len(on.fields) == len(off.fields) + 1
+    assert on.fields[-1].name == 'AFFECTED_PRODUCTS'
+
+
+def test_flag_off_row_length_unchanged():
+    card = _minimal_card({'item_id': 42, 'item_description': 'Milk'})
+    row_off = pipeline_module._card_to_row(card, '2026-04-21')
+    row_on = pipeline_module._card_to_row(
+        card, '2026-04-21', emit_affected_products=True,
+    )
+    assert len(row_on) == len(row_off) + 1
+
+
+def test_affected_products_item_scoped_signal():
+    products = pipeline_module._affected_products(
+        _minimal_card({'item_id': 42, 'item_description': 'Milk 1L'})
+    )
+    assert products == [
+        {'name': 'Milk 1L', 'sku': '42', 'priceHistory': None},
+    ]
+
+
+def test_affected_products_repeat_item_details_signal():
+    products = pipeline_module._affected_products(
+        _minimal_card({
+            'repeat_item_details': [
+                {'item_code': '100', 'item_description': 'Bread'},
+                {'item_code': '200'},
+            ],
+        })
+    )
+    assert products == [
+        {'name': 'Bread', 'sku': '100', 'priceHistory': None},
+        {'name': '200', 'sku': '200', 'priceHistory': None},
+    ]
+
+
+def test_affected_products_store_level_signal_is_none():
+    assert pipeline_module._affected_products(
+        _minimal_card({'this_week_stb_rate': 5.0})
+    ) is None
+    assert pipeline_module._affected_products(_minimal_card(None)) is None
+
+
+def test_emit_flag_resolution_from_cfg():
+    assert pipeline_module._emit_affected_products(None) is False
+    assert pipeline_module._emit_affected_products(
+        {'output': {'alerts': 'T'}}
+    ) is False
+    assert pipeline_module._emit_affected_products(
+        {'output': {'alerts': 'T', 'emit_affected_products': True}}
+    ) is True

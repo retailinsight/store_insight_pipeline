@@ -314,19 +314,23 @@ def _build_card(
     }
 
 
-def _card_schema():
+def _card_schema(emit_affected_products: bool = False):
     """Snowflake output-table schema. Kept adjacent to ``_card_to_row`` — if
-    you add a column, edit both."""
+    you add a column, edit both.
+
+    ``emit_affected_products`` appends the AFFECTED_PRODUCTS VARIANT column
+    (gated by ``output.emit_affected_products`` — see default.yaml for the
+    release coordination required before enabling)."""
     from snowflake.snowpark.types import (
         FloatType,
         IntegerType,
         StringType,
         StructField,
         StructType,
+        VariantType,
     )
 
-    return StructType(
-        [
+    fields = [
             StructField("RUN_DATE", StringType()),
             StructField("SIGNAL_ID", StringType()),
             StructField("ALERT_ID", StringType()),
@@ -354,8 +358,48 @@ def _card_schema():
             StructField("QUALITY_REASON", StringType()),
             StructField("SKILL_FILE_USED", StringType()),
             StructField("FALLBACK_USED", StringType()),
-        ]
-    )
+    ]
+    if emit_affected_products:
+        fields.append(StructField("AFFECTED_PRODUCTS", VariantType()))
+    return StructType(fields)
+
+
+def _affected_products(card: dict) -> list | None:
+    """Extract the affected-products list for a card from its signal payload.
+
+    Shape (per ``affected_products_schema.json`` agreed with the app side):
+    ``[{"name": str, "sku": str, "priceHistory": {...} | None}, ...]``
+
+    Item-level data varies by signal type: item-scoped signals
+    (MARKDOWN_SKU, WASTE_TRIM) carry ``item_id``/``item_description`` at the
+    top level; OSA-family signals carry a ``repeat_item_details`` list with
+    ``item_code``/``item_description``. Store-level signals have no item data
+    and yield ``None``. ``priceHistory`` is always ``None`` in v1 — no
+    unit-price source exists in the current contracts.
+    """
+    signal = card.get("signal_json") or {}
+    if not isinstance(signal, dict):
+        return None
+    products = []
+    item_id = signal.get("item_id")
+    if item_id is not None:
+        products.append({
+            "name": signal.get("item_description") or str(item_id),
+            "sku": str(item_id),
+            "priceHistory": None,
+        })
+    for item in signal.get("repeat_item_details") or []:
+        if not isinstance(item, dict):
+            continue
+        code = item.get("item_code")
+        if code is None:
+            continue
+        products.append({
+            "name": item.get("item_description") or str(code),
+            "sku": str(code),
+            "priceHistory": None,
+        })
+    return products or None
 
 
 def _json_dump(value) -> str:
@@ -493,9 +537,9 @@ def _write_investigations_debug_table(session, table_name, results, run_date, cf
     print(f"[pipeline] {len(rows)} investigations written → {table_name}")
 
 
-def _card_to_row(card: dict, run_date: str) -> tuple:
+def _card_to_row(card: dict, run_date: str, emit_affected_products: bool = False) -> tuple:
     """Serialise one card dict to a row tuple matching ``_card_schema``."""
-    return (
+    row = (
         run_date,
         card.get("signal_id"),
         card.get("alert_id"),
@@ -524,6 +568,19 @@ def _card_to_row(card: dict, run_date: str) -> tuple:
         card.get("skill_file_used", ""),
         "TRUE" if card.get("fallback_used") else "FALSE",
     )
+    if emit_affected_products:
+        row = row + (_affected_products(card),)
+    return row
+
+
+def _emit_affected_products(cfg=None) -> bool:
+    """Resolve the ``output.emit_affected_products`` flag from config."""
+    if cfg:
+        if isinstance(cfg, dict):
+            return bool(cfg.get("output", {}).get("emit_affected_products", False))
+        # Pydantic model
+        return bool(getattr(cfg.output, "emit_affected_products", False))
+    return False
 
 
 def _output_table(cfg=None) -> str:
@@ -979,9 +1036,15 @@ def write_alerts(
         print("[pipeline] No alert cards to write.")
         return
 
-    rows = [_card_to_row(c, run_date) for c in cards]
+    emit_affected_products = _emit_affected_products(cfg)
+    rows = [
+        _card_to_row(c, run_date, emit_affected_products=emit_affected_products)
+        for c in cards
+    ]
     table = target_table or _output_table(cfg)
-    df = session.create_dataframe(rows, schema=_card_schema())
+    df = session.create_dataframe(
+        rows, schema=_card_schema(emit_affected_products=emit_affected_products)
+    )
 
     if full_replace:
         df.write.mode("overwrite").save_as_table(table)

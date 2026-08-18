@@ -40,6 +40,13 @@ tables:
 output:
   alerts:              "{database}.{schema}.ALERTS_PIPELINE"
   top_n_per_store:     10   # 0 = no limit; set to e.g. 10 to cap alerts per store
+  # Emit the AFFECTED_PRODUCTS column (VARIANT JSON array of {name, sku,
+  # priceHistory}) on each card. OFF by default: the live ALERTS_PIPELINE
+  # table does not have this column yet — enabling requires a coordinated
+  # ALTER TABLE ... ADD COLUMN AFFECTED_PRODUCTS VARIANT + redeploy release
+  # (append fails on column-count mismatch otherwise). priceHistory is null
+  # in v1: no unit-price source exists in the current contracts.
+  emit_affected_products: false
   signal_type_buckets:
     OSA:                  Availability
     OSA_RECURRING_SLOT:   Availability
