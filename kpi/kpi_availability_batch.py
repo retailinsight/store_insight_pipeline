@@ -49,10 +49,10 @@ def get_session() -> Session:
         params = {
             "account":   os.environ["SNOWFLAKE_ACCOUNT"],
             "user":      os.environ["SNOWFLAKE_USER"],
-            "role":      os.getenv("SNOWFLAKE_ROLE",      "ACL_SNOWFLAKE_RI_EOE_PRD_DP_USER"),
-            "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE", "SNOWFLAKE_LEARNING_WH"),
-            "database":  os.getenv("SNOWFLAKE_DATABASE",  "SNOWFLAKE_LEARNING_DB"),
-            "schema":    os.getenv("SNOWFLAKE_SCHEMA",    "STORE_INSIGHT"),
+            "role":      os.getenv("SNOWFLAKE_ROLE",      "STORE_INSIGHT_ROLE"),
+            "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE", "STORE_INSIGHT_WH"),
+            "database":  os.getenv("SNOWFLAKE_DATABASE",  "STORE_INSIGHT_DB"),
+            "schema":    os.getenv("SNOWFLAKE_SCHEMA",    "PUBLIC"),
         }
         password = os.getenv("SNOWFLAKE_PASSWORD")
         if password:
@@ -70,6 +70,7 @@ HIERARCHY_TABLE = "ANALYSIS.FINAL.LSM_ITEM_HIERARCHY"
 SITE_TABLE      = "ANALYSIS.FINAL.LSM_SITE_HIERARCHY"
 FEEDBACK_TABLE  = "ANALYSIS.FINAL.LSM_ALERT_FEEDBACK"
 OUTPUT_TABLE    = os.getenv("KPI_OUTPUT_TABLE", "STORE_INSIGHT_DB.PUBLIC.KPI_AVAILABILITY_SUMMARY")
+CORTEX_MODEL    = os.getenv("KPI_CORTEX_MODEL", "mistral-large2")
 
 # RAG threshold
 OSA_TARGET = 0.90
@@ -271,7 +272,7 @@ def _generate_key_insights(session: Session, store_id: int, facts: dict) -> list
     try:
         escaped = prompt.replace("'", "\\'")
         result = session.sql(
-            f"SELECT SNOWFLAKE.CORTEX.COMPLETE('mistral-large', '{escaped}') AS RESPONSE"
+            f"SELECT SNOWFLAKE.CORTEX.COMPLETE('{CORTEX_MODEL}', '{escaped}') AS RESPONSE"
         ).collect()
         raw = result[0]["RESPONSE"].strip()
 

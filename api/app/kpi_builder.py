@@ -9,11 +9,15 @@ Response shape:
 """
 
 import json
+import os
 
 from snowflake.snowpark import Session
 from snowflake.snowpark import functions as F
 
-OUTPUT_TABLE = "SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.KPI_AVAILABILITY_SUMMARY"
+OUTPUT_TABLE = os.getenv(
+    "KPI_SUMMARY_TABLE",
+    "STORE_INSIGHT_DB.PUBLIC.KPI_AVAILABILITY_SUMMARY",
+)
 
 
 def _resolve_latest_row(
