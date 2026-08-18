@@ -77,6 +77,7 @@ class OutputConfig(BaseModel):
     alerts: str
     top_n_per_store: int = 0
     max_per_type_per_store: int = 0
+    emit_affected_products: bool = False
     signal_type_buckets: dict[str, AlertBucket] = {
         "OSA": AlertBucket.AVAILABILITY,
         "OSA_RECURRING_SLOT": AlertBucket.AVAILABILITY,
