@@ -26,6 +26,7 @@ from contextvars import ContextVar
 import jwt
 from dotenv import load_dotenv
 from jwt import PyJWKClient
+from mcp.server.fastmcp import FastMCP
 from starlette.applications import Starlette
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse, Response
@@ -35,7 +36,6 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from app import alerts_repo, ideas_repo, pipeline_catalog
 from app.pg_session import get_pg
 from app.snowflake_session import get_session
-from mcp.server.fastmcp import FastMCP
 
 # Holds the decoded JWT claims for the current request so MCP tools can
 # attribute writes (e.g. submit_idea) to the calling user without each
