@@ -6,8 +6,7 @@ import json
 
 import pytest
 
-from store_insight.pipeline.tools.check_health import check_health, HealthReport
-
+from store_insight.pipeline.tools.check_health import HealthReport, check_health
 
 # ---------------------------------------------------------------------------
 # Helpers: fake runner and minimal config

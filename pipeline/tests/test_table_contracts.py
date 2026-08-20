@@ -11,6 +11,7 @@ adapter view satisfies a contract happens in
 from __future__ import annotations
 
 import pytest
+
 from store_insight.pipeline.contracts import (
     all_contracts,
     list_contracts,

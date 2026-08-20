@@ -3,8 +3,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from snowflake_credentials import get_credentials
 import snowflake.connector
+
+from snowflake_credentials import get_credentials
 
 
 def main():

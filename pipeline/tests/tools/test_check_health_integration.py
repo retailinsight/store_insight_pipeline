@@ -33,6 +33,7 @@ def eoe_session_and_cfg():
 def test_check_health_runs_without_error(eoe_session_and_cfg):
     """check_health() completes without exceptions on live data."""
     import datetime
+
     from store_insight.pipeline.tools.check_health import check_health, snowflake_runner
 
     session, cfg = eoe_session_and_cfg
@@ -54,6 +55,7 @@ def test_check_health_runs_without_error(eoe_session_and_cfg):
 def test_no_high_severity_findings(eoe_session_and_cfg):
     """No high-severity findings on live data (catches real data issues)."""
     import datetime
+
     from store_insight.pipeline.tools.check_health import check_health, snowflake_runner
 
     session, cfg = eoe_session_and_cfg

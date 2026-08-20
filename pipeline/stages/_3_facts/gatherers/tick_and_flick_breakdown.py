@@ -22,6 +22,7 @@ Each item in tf_by_alert_type:
 from collections import defaultdict
 
 from snowflake.snowpark import functions as F
+
 from store_insight.pipeline.stages._3_facts.config import GathererInfo
 
 METADATA = GathererInfo(

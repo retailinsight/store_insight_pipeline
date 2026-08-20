@@ -8,6 +8,7 @@ directly testable at the unit level without any DB fakes.
 from __future__ import annotations
 
 import pytest
+
 from store_insight.pipeline.stages._3_facts.gatherers import osa_cost_projection as g
 
 

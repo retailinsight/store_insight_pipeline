@@ -32,6 +32,7 @@ Public API
 from pathlib import Path
 
 import yaml
+
 from store_insight.pipeline.stages._4_investigate import cortex, quality, rule_based
 
 _HERE = Path(__file__).parent

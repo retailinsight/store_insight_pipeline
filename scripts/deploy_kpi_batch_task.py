@@ -22,7 +22,7 @@ from snowflake.snowpark import Session
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from snowflake_credentials import get_credentials
+from snowflake_credentials import get_credentials  # noqa: E402
 
 ENVS = {
     "dev":  {"database": "STORE_INSIGHT_DEV", "table": "STORE_INSIGHT_DEV.PUBLIC.KPI_AVAILABILITY_SUMMARY"},

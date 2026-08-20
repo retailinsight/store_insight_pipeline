@@ -32,6 +32,7 @@ import pkgutil
 from pathlib import Path
 
 import yaml
+
 from store_insight.pipeline.stages._2_score.config import ScorerInfo
 from store_insight.pipeline.stages._2_score.protocols import ScorerModule
 

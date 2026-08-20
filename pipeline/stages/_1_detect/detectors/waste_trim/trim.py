@@ -76,7 +76,7 @@ def detect(
     )
 
     if store_id is not None:
-        if isinstance(store_id, (list, tuple, set)):
+        if isinstance(store_id, list | tuple | set):
             md = md.filter(F.col('STORE_ID').isin(list(store_id)))
             osa_week = osa_week.filter(F.col('STORE_ID').isin(list(store_id)))
         else:

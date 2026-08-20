@@ -76,6 +76,7 @@ import uuid
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 
 from snowflake.snowpark import functions as F
+
 from store_insight.pipeline.config.loader import load_config
 from store_insight.pipeline.pipeline.capabilities import validate as validate_capabilities
 from store_insight.pipeline.pipeline.pipeline import (
@@ -342,8 +343,12 @@ def _outcomes_table(cfg) -> str:
 def _write_outcomes(session, outcomes: list[dict], cfg=None) -> None:
     """Append outcome dicts to STORE_INSIGHT_OUTCOMES."""
     from snowflake.snowpark.types import (
-        BooleanType, FloatType, IntegerType,
-        StringType, StructField, StructType,
+        BooleanType,
+        FloatType,
+        IntegerType,
+        StringType,
+        StructField,
+        StructType,
     )
 
     schema = StructType([

@@ -9,6 +9,7 @@ alert shape and ordering.
 from __future__ import annotations
 
 import pytest
+
 from store_insight.pipeline.stages._1_detect import detect as detect_mod
 from store_insight.pipeline.stages._1_detect import registry as detect_registry
 from store_insight.pipeline.stages._1_detect.signals import (

@@ -9,6 +9,7 @@ logic without any Snowpark or real data queries.
 from __future__ import annotations
 
 import pytest
+
 from store_insight.pipeline.stages._3_facts import facts as facts_mod
 from store_insight.pipeline.stages._3_facts import registry as registry_mod
 

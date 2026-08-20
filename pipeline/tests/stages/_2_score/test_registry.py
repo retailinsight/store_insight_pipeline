@@ -67,8 +67,9 @@ def test_osa_recurring_slot_scorer_has_gather():
 
 
 def test_unknown_yaml_entry_raises_import_error(tmp_path):
-    import store_insight.pipeline.stages._2_score.registry as reg
     import yaml as _yaml
+
+    import store_insight.pipeline.stages._2_score.registry as reg
 
     yaml_file = tmp_path / 'bad.yaml'
     yaml_file.write_text(textwrap.dedent("""

@@ -36,6 +36,7 @@ import pkgutil
 from pathlib import Path
 
 import yaml
+
 from store_insight.pipeline.stages._3_facts.config import GathererInfo
 from store_insight.pipeline.stages._3_facts.protocols import GathererModule
 

@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from snowflake_credentials import get_credentials
+from snowflake_credentials import get_credentials  # noqa: E402
 
 params = get_credentials().get_connection_params()
 os.environ.setdefault("SNOWFLAKE_ACCOUNT", params["account"])
@@ -24,7 +24,7 @@ os.environ["SNOWFLAKE_SCHEMA"] = "PUBLIC"
 os.environ["KPI_OUTPUT_TABLE"] = "STORE_INSIGHT_DEV.PUBLIC.KPI_AVAILABILITY_SUMMARY"
 
 sys.path.insert(0, str(ROOT / "kpi"))
-from kpi_availability_batch import run_batch
+from kpi_availability_batch import run_batch  # noqa: E402
 
 if __name__ == "__main__":
     analysis_date = sys.argv[1] if len(sys.argv) > 1 else "2026-08-17"

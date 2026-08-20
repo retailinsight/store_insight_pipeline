@@ -33,6 +33,7 @@ Public API
 from collections import defaultdict
 
 from snowflake.snowpark import functions as F
+
 from store_insight.pipeline.pipeline._shared import build_store_dept_filter
 from store_insight.pipeline.stages._3_facts.config import GathererInfo
 
@@ -77,7 +78,7 @@ def _to_date_str(value) -> str:
     if value is None:
         return ''
     # datetime.datetime has a .date() method; datetime.date does not.
-    if hasattr(value, 'date') and callable(getattr(value, 'date')):
+    if hasattr(value, 'date') and callable(value.date):
         value = value.date()
     if hasattr(value, 'isoformat'):
         return value.isoformat()

@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime
 
 import pytest
+
 from store_insight.pipeline.stages._1_detect import detect as detect_mod
 from store_insight.pipeline.stages._1_detect import registry as registry_mod
 from store_insight.pipeline.stages._1_detect.signals import make_osa_signal

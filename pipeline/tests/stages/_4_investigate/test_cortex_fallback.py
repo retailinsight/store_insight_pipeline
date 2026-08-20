@@ -13,6 +13,7 @@ import json
 from unittest.mock import MagicMock
 
 import pytest
+
 from store_insight.pipeline.stages._4_investigate import cortex
 
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
+
 from store_insight.pipeline.stages._1_detect import registry as detect_registry
 from store_insight.pipeline.stages._1_detect.protocols import DetectorModule
 from store_insight.pipeline.stages._3_facts import registry as facts_registry

@@ -10,6 +10,7 @@ against a real Snowflake account belongs in a separate manual workflow.
 from __future__ import annotations
 
 import pytest
+
 from store_insight.pipeline.tools import deploy_views, validate_views
 
 # ---------------------------------------------------------------------------

@@ -61,10 +61,9 @@ _SYS_PATH_REPO = _REPO_ROOT.parent
 if str(_SYS_PATH_REPO) not in sys.path:
     sys.path.insert(0, str(_SYS_PATH_REPO))
 
+from pipeline_ui.backend.app.runner import run_experiment  # noqa: E402
 from store_insight.pipeline.config.loader import load_config  # noqa: E402
 from store_insight.pipeline.config.models import PipelineConfig  # noqa: E402
-
-from pipeline_ui.backend.app.runner import run_experiment  # noqa: E402
 
 _ENV_PATH = _PIPELINE_DIR / ".env"
 

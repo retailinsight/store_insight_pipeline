@@ -55,7 +55,7 @@ def _to_date_str(value) -> str:
     """Normalise a Snowpark DATE value to ISO YYYY-MM-DD."""
     if value is None:
         return ''
-    if hasattr(value, 'date') and callable(getattr(value, 'date')):
+    if hasattr(value, 'date') and callable(value.date):
         value = value.date()
     if hasattr(value, 'isoformat'):
         return value.isoformat()

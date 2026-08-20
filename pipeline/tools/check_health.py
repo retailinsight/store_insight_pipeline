@@ -22,8 +22,7 @@ import sys
 from dataclasses import dataclass, field
 from typing import Any
 
-from store_insight.pipeline.contracts import load_contract, list_contracts
-
+from store_insight.pipeline.contracts import list_contracts, load_contract
 
 # ---------------------------------------------------------------------------
 # Contract name → TablesConfig field name mapping (until rename PR lands)
@@ -159,7 +158,9 @@ def check_health(
 
     # In dry-run mode, collect SQL without executing
     if dry_run:
-        actual_runner = lambda sql: (report.sql_statements.append(sql) or [])
+        def actual_runner(sql):
+            report.sql_statements.append(sql)
+            return []
     else:
         actual_runner = runner
 
