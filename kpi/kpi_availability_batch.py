@@ -431,6 +431,13 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
                 "When":            "",
                 "trend_direction": "up" if d_delta >= 0 else "down",
                 "trend":           f"{d_delta:+.1f}pp vs LW",
+                "from":            f"{d_lw_osa:.1f}%",
+                "to":              f"{d_tw_osa:.1f}%",
+                "detail":          (
+                    f"{dname} improved {abs(d_delta):.1f}pp vs last week."
+                    if d_delta >= 0 else
+                    f"{dname} declined {abs(d_delta):.1f}pp vs last week."
+                ),
             })
 
         # Time of day analysis
