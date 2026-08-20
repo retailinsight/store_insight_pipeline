@@ -6,7 +6,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import snowflake.connector
-
 from snowflake_credentials import get_credentials
 
 TABLE = "STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE_LINEAGE_TEST"
