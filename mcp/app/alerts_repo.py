@@ -25,7 +25,7 @@ from snowflake.snowpark import functions as F
 
 ALERTS_TABLE = os.getenv(
     "ALERTS_OUTPUT_TABLE",
-    "SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_PIPELINE",
+    "STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE",
 )
 
 # Columns returned for list_alerts (card-facing only).
@@ -105,7 +105,7 @@ def _parse_alert_id(alert_id: str) -> tuple[str, int, str, str | None, str]:
 def _safe_json_loads(value: Any) -> Any:
     if value is None:
         return None
-    if isinstance(value, (dict, list)):
+    if isinstance(value, dict | list):
         return value
     try:
         return json.loads(value)

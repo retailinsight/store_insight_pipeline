@@ -83,10 +83,10 @@ def _create_session() -> Session:
     params = {
         "account":   _require("SNOWFLAKE_ACCOUNT"),
         "user":      _require("SNOWFLAKE_USER"),
-        "role":      os.getenv("SNOWFLAKE_ROLE",      "ACL_SNOWFLAKE_RI_EOE_PRD_DP_USER"),
-        "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE", "SNOWFLAKE_LEARNING_WH"),
-        "database":  os.getenv("SNOWFLAKE_DATABASE",  "SNOWFLAKE_LEARNING_DB"),
-        "schema":    os.getenv("SNOWFLAKE_SCHEMA",    "STORE_INSIGHT"),
+        "role":      os.getenv("SNOWFLAKE_ROLE",      "STORE_INSIGHT_ROLE"),
+        "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE", "STORE_INSIGHT_WH"),
+        "database":  os.getenv("SNOWFLAKE_DATABASE",  "STORE_INSIGHT_DB"),
+        "schema":    os.getenv("SNOWFLAKE_SCHEMA",    "PUBLIC"),
     }
 
     private_key_bytes = _load_private_key_bytes()

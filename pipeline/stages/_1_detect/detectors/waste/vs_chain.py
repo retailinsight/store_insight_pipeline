@@ -28,15 +28,16 @@ Public API
 """
 
 from snowflake.snowpark import functions as F
+
 from store_insight.pipeline.stages._1_detect.detector_info import DetectorInfo
 from store_insight.pipeline.stages._1_detect.signals import make_waste_signal
 
 METADATA = DetectorInfo(
     name        = 'VS_CHAIN',
-    problem     = 'Store waste rate (units wasted per unit put through the markdown process) is significantly above the chain average, indicating the markdown process is not recovering stock effectively.',
-    action      = 'Review which departments and items are being wasted at the highest rate. Ensure markdown guidance is being applied early enough to give stock a chance to sell.',
-    baseline    = 'The chain-wide waste rate for the same week.',
-    logic       = 'Fires when the store waste rate (WASTE_QTY / QTY_MARKDOWN) exceeds the chain average by more than min_stb_chain_gap percentage points, and the store wasted at least min_waste_qty units this week.',
+    problem     = 'The store has more waste relative to markdown activity than the chain average. This is a waste-to-markdown ratio, not a straight-to-bin rate: the source data cannot show whether an individual wasted unit was marked down before disposal.',
+    action      = 'Review the departments with the most waste and assess markdown timing, markdown depth, ordering, and operational handling. Treat missed markdown as a hypothesis to investigate, not a confirmed cause.',
+    baseline    = 'The chain-wide waste-to-markdown ratio for the same week: total waste units divided by total markdown units.',
+    logic       = 'Waste-to-markdown ratio = waste units / markdown units.\nChain gap = store ratio - chain ratio.\nFires when the gap is at least min_stb_chain_gap and this-week waste units are at least min_waste_qty.\nThis metric does not measure the proportion of units sent directly to bin without markdown.',
     config_keys = ['min_stb_chain_gap', 'min_waste_qty'],
 )
 

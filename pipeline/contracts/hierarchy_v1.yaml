@@ -88,6 +88,11 @@ data_quality_findings:
       should ensure non-saleable / archived items are the only ones with
       NULL here, otherwise live items will be invisible to alerts.
 
+checks:
+  - column: ITEM_HIERARCHY_2
+    rule: no_nulls
+    severity: high
+
 notes: |
   - Pipeline applies .distinct() at load time, so duplicate ITEM_CODE rows
     in the source view are tolerated but wasteful — adapters should

@@ -7,7 +7,7 @@
 # -------
 # rule_based : Deterministic string templates. No external dependencies.
 #              Always produces output, never fails. Default.
-# cortex     : Snowflake Cortex LLM (mistral-large). Requires a Snowpark
+# cortex     : Snowflake Cortex LLM (mistral-large2). Requires a Snowpark
 #              session. Falls back to rule_based on any failure.
 #
 # skill_file : Path (relative to this file's directory) to the investigation
@@ -22,6 +22,11 @@ OSA:
   engine: rule_based
   skill_file: skills/osa_investigation_skill.md
   description: OSA availability alerts — WOW, VS_CHAIN, and REPEAT triggers
+
+OSA_RECURRING_SLOT:
+  engine: rule_based
+  skill_file: skills/osa_recurring_slot_investigation_skill.md
+  description: Recurring OSA lost-sales alerts for specific day-of-week + reporting-period slots
 
 COMPLIANCE:
   engine: rule_based
@@ -38,6 +43,11 @@ WASTE:
   skill_file: skills/waste_investigation_skill.md
   description: Straight-to-bin waste rate alerts — VS_CHAIN and WOW triggers
 
+WASTE_TRIM:
+  engine: rule_based
+  skill_file: skills/waste_trim_investigation_skill.md
+  description: Store-item markdown dependency alerts where markdown sales exceed the configured ratio of total sales
+
 MARKDOWN_SELLTHROUGH:
   engine: rule_based
   skill_file: skills/markdown_sellthrough_investigation_skill.md
@@ -47,3 +57,4 @@ MARKDOWN_SKU:
   engine: rule_based
   skill_file: skills/markdown_sku_investigation_skill.md
   description: SKU-level markdown alerts — REPEAT_REQUEST and EXCESSIVE_OVERRIDE triggers
+

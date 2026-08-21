@@ -50,7 +50,7 @@
 
 ## Output Table
 
-### `SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_PIPELINE` — *Alert cards*
+### `STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE` — *Alert cards*
 
 | Column | Type | Description |
 |---|---|---|

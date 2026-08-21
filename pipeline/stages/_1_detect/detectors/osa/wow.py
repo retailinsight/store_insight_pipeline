@@ -21,6 +21,7 @@ Public API
 """
 
 from snowflake.snowpark import functions as F
+
 from store_insight.pipeline.pipeline._shared import weekly_dept_scores
 from store_insight.pipeline.stages._1_detect.detector_info import DetectorInfo
 from store_insight.pipeline.stages._1_detect.signals import make_osa_signal
@@ -30,7 +31,7 @@ METADATA = DetectorInfo(
     problem     = 'Store-department OSA has dropped sharply week-on-week, indicating an acute availability deterioration.',
     action      = 'Investigate what changed in the store or supply chain this week and take corrective action to restore availability.',
     baseline    = 'The same store-department OSA from the previous week.',
-    logic       = 'Fires when OSA has fallen by more than min_wow_drop percentage points compared to the previous week, and lost sales value this week exceeds min_lost_sales_value.',
+    logic       = 'OSA = actual sales volume / (actual sales volume + lost sales volume).\nWoW drop = last-week OSA - this-week OSA.\nFires when WoW drop > min_wow_drop and this-week lost sales value > min_lost_sales_value.',
     config_keys = ['min_wow_drop', 'min_lost_sales_value'],
 )
 

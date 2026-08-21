@@ -11,7 +11,7 @@ pipeline trace behind each card.
 
 ```
 Alerts batch (pipeline/)
-  └─> writes cards to SNOWFLAKE_LEARNING_DB.STORE_INSIGHT.ALERTS_PIPELINE
+  └─> writes cards to STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE
 
 MCP server (this service, deployed on Railway)
   ├─> streamable-HTTP transport at  POST /mcp
@@ -44,10 +44,21 @@ Resources
 
 ## Local development
 
+First-time setup (use a dedicated venv — this service's deps conflict with
+`pipeline_ui/backend` and other services in the repo):
+
 ```powershell
-pip install -r requirements.txt
+cd mcp
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 copy .env.example .env   # then edit Snowflake + API-key values
-uvicorn app.server:app --reload --port 8001
+```
+
+Run:
+
+```powershell
+cd mcp
+.\.venv\Scripts\python.exe -m uvicorn app.server:app --reload --port 8001
 ```
 
 Quick sanity check:

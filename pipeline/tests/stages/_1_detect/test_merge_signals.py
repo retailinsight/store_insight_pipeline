@@ -91,15 +91,11 @@ def test_later_non_none_value_overwrites_earlier_value():
     assert merged[0]['this_week_osa'] == 91.0
 
 
-def test_this_week_lsv_current_behaviour_last_non_none_wins():
+def test_this_week_lsv_takes_maximum_across_signals():
     """
-    Regression guard: `_merge_signals` has two separate update passes that
-    touch `this_week_lsv` — the unconditional field-loop (later wins) and a
-    conditional max-check that only triggers when the *new* signal's lsv
-    exceeds the existing one.  Because the field loop runs first, the net
-    effect is "last non-None signal wins", not "max across signals".
-    If this test fails because the behaviour was intentionally fixed, delete
-    it and replace with `test_this_week_lsv_takes_maximum_across_signals`.
+    ``this_week_lsv`` is the main driver of OSA scoring, so merging WOW,
+    VS_CHAIN and REPEAT signals must keep the largest lost-sales value, not
+    the value from the last detector.
     """
     small = make_osa_signal(
         store_id=1, department='D', trigger_types=['WOW'], this_week_lsv=100.0,
@@ -111,7 +107,22 @@ def test_this_week_lsv_current_behaviour_last_non_none_wins():
         store_id=1, department='D', trigger_types=['REPEAT'], this_week_lsv=50.0,
     )
     merged = _merge_signals([small, big, smaller_after_big])
-    assert merged[0]['this_week_lsv'] == 50.0
+    assert merged[0]['this_week_lsv'] == 500.0
+
+
+def test_this_week_lsv_maximum_handles_zeros():
+    """Zero LSV is a valid value and must not be treated as "missing"."""
+    zero = make_osa_signal(
+        store_id=1, department='D', trigger_types=['WOW'], this_week_lsv=0.0,
+    )
+    bigger = make_osa_signal(
+        store_id=1, department='D', trigger_types=['VS_CHAIN'], this_week_lsv=300.0,
+    )
+    merged = _merge_signals([zero, bigger])
+    assert merged[0]['this_week_lsv'] == 300.0
+
+    merged_zero_only = _merge_signals([zero])
+    assert merged_zero_only[0]['this_week_lsv'] == 0.0
 
 
 def test_this_week_lsv_none_does_not_overwrite_existing():

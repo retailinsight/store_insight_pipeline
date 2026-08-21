@@ -78,8 +78,11 @@ def build_store_dept_filter(signals, dept_col='DEPARTMENT_NAME'):
     -------
     Snowpark Column (combined OR condition), or None if signals is empty
     """
-    conditions = None
-    for sig in signals:
-        cond = (F.col('STORE_ID') == sig['store_id']) & (F.col(dept_col) == sig['department'])
-        conditions = cond if conditions is None else conditions | cond
-    return conditions
+    if not signals:
+        return None
+    # A flat (STORE_ID, dept) IN ((...), (...)) predicate instead of a chained
+    # OR expression — chained ORs build a left-deep expression tree that
+    # overflows Python's recursion limit in Snowpark's analyzer once the
+    # signal count reaches ~1000.
+    pairs = [[sig['store_id'], sig['department']] for sig in signals]
+    return F.in_([F.col('STORE_ID'), F.col(dept_col)], pairs)

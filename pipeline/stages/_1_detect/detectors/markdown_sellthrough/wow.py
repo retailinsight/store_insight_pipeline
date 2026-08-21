@@ -8,21 +8,23 @@ had at least ``min_markdown_qty`` marked-down units this week.
 This catches acute deterioration — stores where sell-through was acceptable
 last week but has suddenly worsened.
 
-Sell-through rate = SUM(MARKDOWN_QUANTITY sold) / SUM(MARKDOWN_QUANTITY + WASTE_QUANTITY).
+Sell-through proxy = subsequent sales / (subsequent sales + subsequent waste)
+for store-items that received a markdown in each measurement week.
 
-Data sources: SOURCE_WMD_MARKDOWN_SALES (sold qty/value) joined to
-SOURCE_WMD_WASTAGE (wasted qty) and SOURCE_WMD_STORE_HIERARCHY for store name.
+Data sources: markdown events, WMD sales, WMD wastage, and store hierarchy.
 
 Public API
 ----------
-    detect(markdown_sales, wastage, store_hierarchy,
+    detect(markdown_log, markdown_sales, wastage, store_hierarchy,
            last_week_start, last_week_end, this_week_start, this_week_end,
            min_sellthrough_wow_drop, min_markdown_qty, store_id)
     -> list[signal]
 """
 
 from snowflake.snowpark import functions as F
+
 from store_insight.pipeline.stages._1_detect.detector_info import DetectorInfo
+from store_insight.pipeline.stages._1_detect.detectors.markdown_sellthrough import cohort
 from store_insight.pipeline.stages._1_detect.signals import make_markdown_sellthrough_signal
 
 METADATA = DetectorInfo(
@@ -30,69 +32,13 @@ METADATA = DetectorInfo(
     problem     = 'Store markdown sell-through rate has dropped sharply week-on-week, indicating a sudden deterioration in marked-down item uptake.',
     action      = 'Investigate what changed this week — new items being marked down, a change in markdown depth, or a specific department driving the drop.',
     baseline    = 'The same store sell-through rate from the previous week.',
-    logic       = 'Fires when the sell-through rate has fallen by more than min_sellthrough_wow_drop percentage points compared to last week, and the store had at least min_markdown_qty markdown units this week.',
+    logic       = 'For each week, cohort = each store-item with at least one markdown event in that week.\nSell-through proxy = subsequent same-store item sales / (subsequent sales + subsequent waste).\nWoW drop = last-week proxy - this-week proxy.\nFires when WoW drop >= min_sellthrough_wow_drop and this-week subsequent sales + waste >= min_markdown_qty.',
     config_keys = ['min_sellthrough_wow_drop', 'min_markdown_qty'],
 )
 
 
-def _weekly_store_sellthrough(markdown_sales, wastage, week_start, week_end, prefix):
-    """Compute sell-through rate per store for a given week.
-
-    rate = SUM(MARKDOWN_QUANTITY) / SUM(MARKDOWN_QUANTITY + WASTE_QUANTITY)
-    """
-    sold = (
-        markdown_sales
-        .filter(
-            (F.col('DATE') >= week_start) &
-            (F.col('DATE') <= week_end)
-        )
-        .group_by('STORE_ID')
-        .agg(
-            F.sum('MARKDOWN_QUANTITY').alias(f'{prefix}_SOLD_QTY'),
-            F.sum('MARKDOWN_VALUE').alias(f'{prefix}_MARKDOWN_VALUE'),
-        )
-    )
-    wasted = (
-        wastage
-        .filter(
-            (F.col('DATE') >= week_start) &
-            (F.col('DATE') <= week_end)
-        )
-        .group_by('STORE_ID')
-        .agg(
-            F.sum('WASTE_QUANTITY').alias(f'{prefix}_WASTE_QTY'),
-        )
-    )
-    return (
-        sold
-        .join(wasted, on='STORE_ID', how='outer')
-        .with_column(
-            f'{prefix}_SOLD_QTY',
-            F.coalesce(F.col(f'{prefix}_SOLD_QTY'), F.lit(0))
-        )
-        .with_column(
-            f'{prefix}_WASTE_QTY',
-            F.coalesce(F.col(f'{prefix}_WASTE_QTY'), F.lit(0))
-        )
-        .with_column(
-            f'{prefix}_MARKDOWN_VALUE',
-            F.coalesce(F.col(f'{prefix}_MARKDOWN_VALUE'), F.lit(0))
-        )
-        .with_column(
-            f'{prefix}_TOTAL_QTY',
-            F.col(f'{prefix}_SOLD_QTY') + F.col(f'{prefix}_WASTE_QTY')
-        )
-        .with_column(
-            f'{prefix}_SELLTHROUGH_RATE',
-            F.when(
-                F.col(f'{prefix}_TOTAL_QTY') > 0,
-                F.col(f'{prefix}_SOLD_QTY') / F.col(f'{prefix}_TOTAL_QTY'),
-            ).otherwise(F.lit(0))
-        )
-    )
-
-
 def detect(
+    markdown_log,
     markdown_sales,
     wastage,
     store_hierarchy,
@@ -109,27 +55,31 @@ def detect(
 
     Parameters
     ----------
+    markdown_log             : Snowpark DataFrame — SOURCE_WMD_MARKDOWN_LOG_CONVERTED
     markdown_sales           : Snowpark DataFrame — SOURCE_WMD_MARKDOWN_SALES
     wastage                  : Snowpark DataFrame — SOURCE_WMD_WASTAGE
     store_hierarchy          : Snowpark DataFrame — SOURCE_WMD_STORE_HIERARCHY
     last_week_start/end      : date strings (YYYY-MM-DD) for the previous week
     this_week_start/end      : date strings for the current week
     min_sellthrough_wow_drop : minimum pp drop to fire (default: 0.05 = 5pp)
-    min_markdown_qty         : minimum total markdown units (sold + wasted) this week (default: 10)
+    min_markdown_qty         : minimum total sales-recovery units this week (default: 10)
     store_id                 : optional int — restrict to a single store
 
     Returns
     -------
     list of signal dicts
     """
-    sales_data = markdown_sales
-    waste_data = wastage
+    last = cohort.weekly_store_rates(
+        markdown_log, markdown_sales, wastage,
+        last_week_start, last_week_end, 'LAST_WEEK',
+    )
+    this = cohort.weekly_store_rates(
+        markdown_log, markdown_sales, wastage,
+        this_week_start, this_week_end, 'THIS_WEEK',
+    )
     if store_id is not None:
-        sales_data = sales_data.filter(F.col('STORE_ID').isin(store_id))
-        waste_data = waste_data.filter(F.col('STORE_ID').isin(store_id))
-
-    last = _weekly_store_sellthrough(sales_data, waste_data, last_week_start, last_week_end, 'LAST_WEEK')
-    this = _weekly_store_sellthrough(sales_data, waste_data, this_week_start, this_week_end, 'THIS_WEEK')
+        last = last.filter(F.col('STORE_ID').isin(store_id))
+        this = this.filter(F.col('STORE_ID').isin(store_id))
 
     stores = store_hierarchy.select('STORE_ID', F.col('STORE_NAME').alias('SITE_NAME')).distinct()
 

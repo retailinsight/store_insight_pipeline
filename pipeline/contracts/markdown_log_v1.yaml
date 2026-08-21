@@ -29,7 +29,7 @@ columns:
     type: NUMBER
     required: true
     description: |
-      Item identifier (UPC).  Joins many-to-one to wmd_hierarchy.UPC for
+      Item identifier (UPC).  Joins many-to-one to wmd_item_hierarchy.UPC for
       department names and item descriptions.
 
   DATE:
@@ -84,14 +84,14 @@ columns:
       Not currently filtered on; useful for future segmentation.
 
 joins:
-  - contract: wmd_hierarchy
+  - contract: wmd_item_hierarchy
     cardinality: many_to_one
     match:
       UPC: UPC
     purpose: |
       Resolve ITEM_DESCRIPTION and DEPARTMENT for narrative output and
       department-level breakdowns.
-  - contract: store_hierarchy
+  - contract: wmd_store_hierarchy
     cardinality: many_to_one
     match:
       STORE_ID: STORE_ID
@@ -111,6 +111,18 @@ data_quality_findings:
       Expected as a number (e.g. 25, not 0.25 and not '25%').  Some raw
       sources store this as text or as a decimal fraction; adapter views
       must normalise to whole-percent integers.
+
+freshness_max_age_days: 1
+
+checks:
+  - column: IS_OVERRIDDEN
+    rule: boolean_strict
+    severity: high
+  - column: MARKDOWN_PERCENTAGE
+    rule: range
+    min: 0
+    max: 100
+    severity: medium
 
 notes: |
   - The pipeline's load_wmd applies a 4-week lookback filter.  Adapter

@@ -22,6 +22,7 @@ Public API
 """
 
 from snowflake.snowpark import functions as F
+
 from store_insight.pipeline.stages._3_facts.config import GathererInfo
 
 METADATA = GathererInfo(

@@ -191,11 +191,15 @@ export default function Workbench({ client }: { client: string }) {
 
           {selectedType && (() => {
             const th = themeFor(selectedType);
+            const granularity = typeDetectors[0]?.granularity ?? "Not specified";
             return (
             <>
               <div className={`rounded-xl border ${th.border} ${th.softBg} px-5 py-3 flex items-center gap-3`}>
                 <div className={`h-2.5 w-2.5 rounded-full bg-gradient-to-r ${th.gradient}`} />
                 <div className={`font-semibold ${th.text}`}>{selectedType}</div>
+                <div className="text-xs text-muted">
+                  Signal grain: {granularity}
+                </div>
                 <div className="text-xs text-muted">
                   {(enabledByType[selectedType] ?? 0)}/{(detectorsByType[selectedType]?.length ?? 0)} detectors enabled
                 </div>

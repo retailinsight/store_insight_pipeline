@@ -24,6 +24,7 @@ import os
 from pathlib import Path
 
 import yaml
+
 from store_insight.pipeline.config.models import PipelineConfig
 
 _HERE       = Path(__file__).parent

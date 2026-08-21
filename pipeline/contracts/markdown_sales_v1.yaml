@@ -18,6 +18,7 @@ grain:
   - STORE_ID
   - UPC
   - DATE
+  - TIME
 
 columns:
   STORE_ID:
@@ -28,7 +29,7 @@ columns:
   UPC:
     type: NUMBER
     required: true
-    description: Item sold (UPC); joins to wmd_hierarchy.
+    description: Item sold (UPC); joins to wmd_item_hierarchy.
 
   DATE:
     type: DATE
@@ -40,12 +41,11 @@ columns:
 
   TIME:
     type: VARCHAR
-    required: false
+    required: true
     description: |
-      Sale time (HH:MM:SS).  Optional; not currently filtered on or used
-      to disambiguate rows.  Multiple sale rows for the same
-      store/item/day are aggregated together by all detectors, so TIME is
-      retained for ad-hoc queries only.
+      Sale time (HH:MM:SS).  Part of the grain — multiple sale rows per
+      store/item/day are distinguished by TIME.  Detectors aggregate
+      across TIME, so it is not used for filtering.
 
   MARKDOWN_QUANTITY:
     type: NUMBER
@@ -62,12 +62,12 @@ columns:
       today's load_wmd() — see the SQL view for the alias.
 
 joins:
-  - contract: wmd_hierarchy
+  - contract: wmd_item_hierarchy
     cardinality: many_to_one
     match:
       UPC: UPC
     purpose: Resolve item name and department for narrative output.
-  - contract: store_hierarchy
+  - contract: wmd_store_hierarchy
     cardinality: many_to_one
     match:
       STORE_ID: STORE_ID
@@ -87,8 +87,23 @@ data_quality_findings:
       authors should always quote it ("DATE") in their view DDL to avoid
       ambiguity.
 
+freshness_max_age_days: 1
+
+checks:
+  - column: MARKDOWN_QUANTITY
+    rule: positive
+    severity: medium
+
 notes: |
   - Pipeline applies the same 4-week lookback as markdown_log.
+  - To combine markdown sales with OSA actual sales, join through the WMD
+    hierarchy crosswalk: markdown_sales.UPC -> wmd_item_hierarchy.UPC ->
+    wmd_item_hierarchy.OSA_ITEM_CODE -> osa.ITEM_CODE.  Do not join UPC
+    directly to osa.ITEM_CODE.
+  - The crosswalk is many-to-one: each WMD UPC has one OSA item code, but an
+    OSA item code can represent multiple WMD UPCs.  Aggregate markdown
+    quantities and values to STORE_ID, DATE, OSA_ITEM_CODE before joining OSA
+    facts; joining OSA facts back to individual UPCs duplicates OSA measures.
   - SELLTHROUGH = SUM(MARKDOWN_QUANTITY) / SUM(QTY_MARKDOWN)  — the
     denominator comes from the markdown_log contract, NOT from this one.
   - There is intentionally no ORIGINAL_RETAIL_PRICE column on this

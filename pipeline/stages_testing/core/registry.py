@@ -42,6 +42,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
+
 from store_insight.pipeline.stages_testing.core import detect_generic
 from store_insight.pipeline.stages_testing.core.formula import FormulaScorer
 

@@ -30,6 +30,7 @@ class AlertBucket(StrEnum):
     COMPLIANCE = "Compliance"
     MARKDOWN = "Markdown"
     WASTE = "Waste"
+    WASTE_TRIM = "WASTE_TRIM"
 
 
 class ConnectionConfig(BaseModel):
@@ -76,13 +77,16 @@ class OutputConfig(BaseModel):
     alerts: str
     top_n_per_store: int = 0
     max_per_type_per_store: int = 0
+    emit_affected_products: bool = False
     signal_type_buckets: dict[str, AlertBucket] = {
         "OSA": AlertBucket.AVAILABILITY,
+        "OSA_RECURRING_SLOT": AlertBucket.AVAILABILITY,
         "COMPLIANCE": AlertBucket.COMPLIANCE,
         "MARKDOWN_OVERRIDE": AlertBucket.MARKDOWN,
         "MARKDOWN_SELLTHROUGH": AlertBucket.MARKDOWN,
         "MARKDOWN_SKU": AlertBucket.MARKDOWN,
         "WASTE": AlertBucket.WASTE,
+        "WASTE_TRIM": AlertBucket.WASTE_TRIM,
     }
 
     # Interpolation context - set during PipelineConfig validation
@@ -120,8 +124,10 @@ class ThresholdsConfig(BaseModel):
 
     shared: dict[str, Any] = {}
     OSA: dict[str, Any] = {}
+    OSA_RECURRING_SLOT: dict[str, Any] = {}
     COMPLIANCE: dict[str, Any] = {}
     MARKDOWN_OVERRIDE: dict[str, Any] = {}
+    WASTE_TRIM: dict[str, Any] = {}
     WASTE: dict[str, Any] = {}
     MARKDOWN_SELLTHROUGH: dict[str, Any] = {}
     MARKDOWN_SKU: dict[str, Any] = {}
@@ -176,6 +182,22 @@ class ThresholdsConfig(BaseModel):
                 )
         return v
 
+    @field_validator("WASTE_TRIM")
+    @classmethod
+    def validate_waste_trim_thresholds(cls, v: dict[str, Any]) -> dict[str, Any]:
+        """Validate WASTE_TRIM threshold ranges."""
+        if "min_markdown_sales_ratio" in v:
+            if not 0.0 <= v["min_markdown_sales_ratio"] <= 1.0:
+                raise ValueError(
+                    f"WASTE_TRIM.min_markdown_sales_ratio must be between 0.0 and 1.0, got {v['min_markdown_sales_ratio']}"
+                )
+        if "min_markdown_units" in v:
+            if not isinstance(v["min_markdown_units"], int) or v["min_markdown_units"] < 0:
+                raise ValueError(
+                    f"WASTE_TRIM.min_markdown_units must be a non-negative integer, got {v['min_markdown_units']}"
+                )
+        return v
+
     @field_validator("WASTE")
     @classmethod
     def validate_waste_thresholds(cls, v: dict[str, Any]) -> dict[str, Any]:
@@ -221,6 +243,27 @@ class ThresholdsConfig(BaseModel):
                 )
         return v
 
+    @field_validator("OSA_RECURRING_SLOT")
+    @classmethod
+    def validate_osa_recurring_slot_thresholds(cls, v: dict[str, Any]) -> dict[str, Any]:
+        """Validate OSA_RECURRING_SLOT threshold ranges."""
+        if "min_item_repeat_weeks" in v:
+            if not isinstance(v["min_item_repeat_weeks"], int) or v["min_item_repeat_weeks"] < 1:
+                raise ValueError(
+                    f"OSA_RECURRING_SLOT.min_item_repeat_weeks must be a positive integer, got {v['min_item_repeat_weeks']}"
+                )
+        if "min_item_pattern_lsv" in v:
+            if v["min_item_pattern_lsv"] < 0:
+                raise ValueError(
+                    f"OSA_RECURRING_SLOT.min_item_pattern_lsv must be non-negative, got {v['min_item_pattern_lsv']}"
+                )
+        if "min_items" in v:
+            if not isinstance(v["min_items"], int) or v["min_items"] < 1:
+                raise ValueError(
+                    f"OSA_RECURRING_SLOT.min_items must be a positive integer, got {v['min_items']}"
+                )
+        return v
+
 
 class DetectorConfigConfig(BaseModel):
     """Detector configuration grouping thresholds and lookback windows."""
@@ -254,9 +297,11 @@ class GatherersConfig(BaseModel):
     """Gatherer configuration per signal type."""
 
     OSA: list[str] = []
+    OSA_RECURRING_SLOT: list[str] = []
     COMPLIANCE: list[str] = []
     MARKDOWN_OVERRIDE: list[str] = []
     WASTE: list[str] = []
+    WASTE_TRIM: list[str] = []
     MARKDOWN_SELLTHROUGH: list[str] = []
     MARKDOWN_SKU: list[str] = []
 
@@ -264,7 +309,7 @@ class GatherersConfig(BaseModel):
     @classmethod
     def validate_gatherer_names(cls, v: list[str], info) -> list[str]:
         """Validate that all gatherer names exist in the gatherer registry."""
-        if info.field_name in ["OSA", "COMPLIANCE", "MARKDOWN_OVERRIDE", "WASTE", "MARKDOWN_SELLTHROUGH", "MARKDOWN_SKU"]:
+        if info.field_name in ["OSA", "OSA_RECURRING_SLOT", "COMPLIANCE", "MARKDOWN_OVERRIDE", "WASTE", "WASTE_TRIM", "MARKDOWN_SELLTHROUGH", "MARKDOWN_SKU"]:
             known_gatherers = {mod.__name__.split(".")[-1] for mod in gatherer_registry.ALL_GATHERERS}
             unknown = set(v) - known_gatherers
             if unknown:
@@ -279,9 +324,11 @@ class InvestigationConfig(BaseModel):
     """Investigation engine configuration per signal type."""
 
     OSA: dict[str, Any] = {}
+    OSA_RECURRING_SLOT: dict[str, Any] = {}
     COMPLIANCE: dict[str, Any] = {}
     MARKDOWN_OVERRIDE: dict[str, Any] = {}
     WASTE: dict[str, Any] = {}
+    WASTE_TRIM: dict[str, Any] = {}
     MARKDOWN_SELLTHROUGH: dict[str, Any] = {}
     MARKDOWN_SKU: dict[str, Any] = {}
     max_workers: int = 8

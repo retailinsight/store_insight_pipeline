@@ -1,5 +1,5 @@
 # Contract: wmd_store_hierarchy (v1)
-# ===================================
+# ======================================
 # Store master for the WMD pipelines.  Joined into markdown_log,
 # markdown_sales, and wastage to resolve store names for narrative output.
 #
@@ -53,6 +53,11 @@ data_quality_findings:
       Must not be NULL — narratives will render literal "None" if the
       store name is missing.  Adapter views should COALESCE to a
       sensible fallback (e.g. 'Store ' || STORE_ID::VARCHAR).
+
+checks:
+  - column: STORE_NAME
+    rule: no_nulls
+    severity: medium
 
 notes: |
   - This contract intentionally keeps the column set narrow — fields like

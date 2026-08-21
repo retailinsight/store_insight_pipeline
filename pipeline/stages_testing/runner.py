@@ -67,7 +67,7 @@ def detect_signals(
 
     if store_id is None:
         store_ids = None
-    elif isinstance(store_id, (list, tuple, set)):
+    elif isinstance(store_id, list | tuple | set):
         store_ids = [int(s) for s in store_id]
     else:
         store_ids = [int(store_id)]

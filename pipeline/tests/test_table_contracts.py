@@ -11,6 +11,7 @@ adapter view satisfies a contract happens in
 from __future__ import annotations
 
 import pytest
+
 from store_insight.pipeline.contracts import (
     all_contracts,
     list_contracts,
@@ -183,6 +184,72 @@ def test_contract_data_quality_findings_well_formed_if_present(name):
         assert isinstance(concern, str) and concern.strip(), (
             f'{prefix}: "concern" must be a non-empty string'
         )
+
+
+# ---------------------------------------------------------------------------
+# Optional block: checks (machine-readable health-check rules)
+# ---------------------------------------------------------------------------
+
+ALLOWED_RULES = {
+    'min_value', 'max_value', 'range',
+    'no_nulls', 'no_empty_strings', 'positive', 'boolean_strict',
+}
+
+# Rules that require specific params beyond column/rule/severity.
+RULE_REQUIRED_PARAMS = {
+    'min_value': {'value'},
+    'max_value': {'value'},
+    'range': {'min', 'max'},
+}
+
+
+@pytest.mark.parametrize('name', list_contracts())
+def test_contract_checks_well_formed_if_present(name):
+    """
+    ``checks:`` is optional.  Each entry must:
+      - reference a column that exists on this contract
+      - use a known rule type
+      - declare a valid severity (low|medium|high)
+      - include rule-specific params where required
+    """
+    c = load_contract(name)
+    checks = c.get('checks')
+    if checks is None:
+        return
+    assert isinstance(checks, list), f"{name}.checks must be a list"
+    own_columns = set(c['columns'].keys())
+    for i, chk in enumerate(checks):
+        prefix = f"{name}.checks[{i}]"
+        assert isinstance(chk, dict), f'{prefix}: entry must be a mapping'
+        assert chk.get('column') in own_columns, (
+            f"{prefix}: column '{chk.get('column')}' is not defined on '{name}'"
+        )
+        assert chk.get('rule') in ALLOWED_RULES, (
+            f"{prefix}: rule '{chk.get('rule')}' not in {sorted(ALLOWED_RULES)}"
+        )
+        assert chk.get('severity') in ALLOWED_SEVERITIES, (
+            f"{prefix}: severity must be one of {sorted(ALLOWED_SEVERITIES)}"
+        )
+        # Rule-specific params
+        required_params = RULE_REQUIRED_PARAMS.get(chk['rule'], set())
+        for param in required_params:
+            assert param in chk, (
+                f"{prefix}: rule '{chk['rule']}' requires param '{param}'"
+            )
+
+
+@pytest.mark.parametrize('name', list_contracts())
+def test_contract_freshness_max_age_days_well_formed_if_present(name):
+    """
+    ``freshness_max_age_days:`` is optional.  When present, must be a positive integer.
+    """
+    c = load_contract(name)
+    value = c.get('freshness_max_age_days')
+    if value is None:
+        return
+    assert isinstance(value, int) and value > 0, (
+        f"{name}.freshness_max_age_days must be a positive integer, got {value!r}"
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
+
 from store_insight.pipeline.stages._1_detect import registry as detect_registry
 from store_insight.pipeline.stages._1_detect.protocols import DetectorModule
 from store_insight.pipeline.stages._3_facts import registry as facts_registry
@@ -102,8 +103,8 @@ def test_investigator_yaml_skill_files_exist_on_disk():
 # ---------------------------------------------------------------------------
 
 KNOWN_SIGNAL_TYPES = {
-    'OSA', 'COMPLIANCE', 'MARKDOWN_OVERRIDE',
-    'WASTE', 'MARKDOWN_SELLTHROUGH', 'MARKDOWN_SKU',
+    'OSA', 'OSA_RECURRING_SLOT', 'COMPLIANCE', 'MARKDOWN_OVERRIDE',
+    'WASTE', 'WASTE_TRIM', 'MARKDOWN_SELLTHROUGH', 'MARKDOWN_SKU',
 }
 
 

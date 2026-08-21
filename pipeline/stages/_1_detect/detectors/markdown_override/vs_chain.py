@@ -16,6 +16,7 @@ Public API
 """
 
 from snowflake.snowpark import functions as F
+
 from store_insight.pipeline.stages._1_detect.detector_info import DetectorInfo
 from store_insight.pipeline.stages._1_detect.signals import make_markdown_override_signal
 
@@ -24,7 +25,7 @@ METADATA = DetectorInfo(
     problem     = 'Store is overriding the markdown algorithm significantly more often than the chain average, indicating poor adherence to pricing guidance.',
     action      = 'Follow markdown guidance unless there are exceptional circumstances. Review which departments and items are being overridden most frequently.',
     baseline    = 'The chain-wide markdown override rate for the same week.',
-    logic       = 'Fires when the store override rate exceeds the chain average by more than min_override_chain_gap percentage points, and the store processed at least min_total_markdowns markdowns this week.',
+    logic       = 'Override rate = overridden markdown requests / all markdown requests.\nChain gap = store override rate - chain override rate.\nFires when chain gap >= min_override_chain_gap and this-week markdown requests >= min_total_markdowns.',
     config_keys = ['min_override_chain_gap', 'min_total_markdowns'],
 )
 

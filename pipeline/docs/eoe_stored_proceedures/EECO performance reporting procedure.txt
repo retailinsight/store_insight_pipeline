@@ -1,0 +1,330 @@
+USE [EECO_Reporting]
+GO
+/****** Object:  StoredProcedure [dbo].[spPerformanceReporting]    Script Date: 28/07/2026 12:28:05 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+	ALTER PROCEDURE [dbo].[spPerformanceReporting]
+	AS
+	BEGIN
+	
+	SET NOCOUNT ON;
+
+
+	DECLARE @ProcedureName VARCHAR(MAX)
+	DECLARE @StartTime DATETIME
+	DECLARE @EndTime DATETIME
+	DECLARE @RunTime Time
+	DECLARE @SystemUser VARCHAR(200)
+
+	SET @ProcedureName = 'spPerformanceReporting'
+	SET @StartTime = CAST(GetDATE() AS datetime)
+	SET @SystemUser = SYSTEM_USER
+
+	--DECLARE @StartDate DATE = DATEADD(d,-14,DATEADD(d,1,@last_week_end))
+	----DECLARE @insert_end DATE = '2023-08-15'
+	--DECLARE @EndDate DATE = DATEADD(d,-1,GETDATE()) 
+
+	--IF OBJECT_ID('tempdb..#Calendar') IS NOT NULL DROP TABLE #Calendar
+	--SELECT Year
+	--		,WeekNbr
+	--		,Min(CalendarDate) AS StartOfWeek
+	--		,Max(CalendarDate) AS EndOfWeek
+	--		,DENSE_RANK() OVER (ORDER BY Year DESC, WeekNbr DESC) AS WeekRank
+	----INTO #Calendar
+	--FROM [dbo].[Calendar]
+	--WHERE CalendarDate <= GetDate() - 1
+	--GROUP BY Year, WeekNbr
+	--HAVING COUNT(*) = 7
+
+	DECLARE @StartDate DATE = DATEADD(DAY, 1,(SELECT MAX(Date) FROM [dbo].[performance_reporting]))
+	DECLARE @EndDate DATE = DATEADD(DAY,-1, GETDATE())
+
+	SELECT @StartDate, @EndDate
+
+	SET DATEFIRST 1;  --Makes sure the DOWID starts on a Monday = 1
+
+	-----------------------------------------STORES-------------------------------------------------
+
+	IF OBJECT_ID('tempdb..#AllStores') IS NOT NULL DROP TABLE #AllStores;
+	SELECT
+	s.StoreID,
+	s.StoreName
+	INTO #AllStores
+	FROM dbo.view_Store AS s
+
+	----------------------------------------PRODUCTS------------------------------------------------
+
+	IF OBJECT_ID('tempdb..#products') IS NOT NULL DROP TABLE #products
+	SELECT	ItemID
+			,VMECode
+			,ItemDescription
+			,DepartmentName
+			,CategoryName
+			,SubCategoryName
+			,PPGClusterID
+		INTO #products
+		FROM dbo.view_Item AS i
+		WHERE Loose_FruitAndVeg = 'N'
+
+	------------------------------------------SALES-------------------------------------------------
+
+	IF OBJECT_ID('tempdb..#FPSales') IS NOT NULL DROP TABLE #FPSales
+	SELECT s.[StoreID]
+		,tcs.StoreName
+		,[Date]
+		,i.DepartmentName AS Department
+		,i.CategoryName AS Category
+		,i.SubCategoryName AS SubCategory
+		,i.PPGClusterID AS PPG
+		,SUM([SaleQuantity]) as salesqty
+		,SUM([SaleValue]) as salesval
+	INTO #FPSales 
+	FROM dbo.Sales s WITH (INDEX = CIX_Sales_Date_StoreID_ItemID)
+	INNER JOIN #products i on s.ItemID = i.ItemID
+	INNER JOIN #AllStores tcs on s.StoreID = tcs.StoreID
+	WHERE
+		Date BETWEEN @StartDate AND @EndDate --@EndDate
+		--Date BETWEEN @TESTING AND @last_week_end
+		AND SaleQuantity > 0
+		AND NOT (s.StoreID IN (502, 291) AND Date >= '2024-12-08')
+		AND NOT (s.StoreID IN (504) AND Date >= '2025-03-23')
+		AND NOT (s.StoreID IN (411) AND Date BETWEEN '2025-05-10' AND '2025-06-05') --Closed for refit
+		AND NOT (s.StoreID IN (421) AND Date BETWEEN '2025-05-24' AND '2025-06-11') --Closed for refit
+		AND NOT (s.StoreID = 427 AND Date >= '2025-06-17') --Closed store
+		AND NOT (s.StoreID = 505 AND s.ItemID = '5060192670042' AND Date = '2026-01-17') -- olu 22/01/2026 remove meat&poultry item
+	GROUP BY
+		s.[StoreID]
+		,tcs.StoreName
+		,[Date]
+		,i.DepartmentName
+		,i.CategoryName 
+		,i.SubCategoryName 
+		,i.PPGClusterID 
+
+	------------------------------------MARKDOWN SALES--------------------------------------------
+
+	IF OBJECT_ID('tempdb..#MDSales') IS NOT NULL DROP TABLE #MDSales
+	SELECT
+		ms.[StoreID]
+		,tcs.StoreName
+		,[Date]
+		,i.DepartmentName AS Department
+		,i.CategoryName AS Category
+		,i.SubCategoryName AS SubCategory
+		,i.PPGClusterID AS PPG
+		,SUM(ms.MarkdownQuantity) as markdownsalesqty
+		,SUM(ms.MarkdownValue) as markdownsalesval
+		,SUM(ms.OriginalRetailPrice) as markdownsalesoriginalval
+	INTO #MDSales
+	FROM [dbo].MarkdownSales ms WITH (INDEX = CIX_MarkdownSales_Date_StoreID_ItemID)
+	INNER JOIN #products i on ms.ItemID = i.ItemID
+	INNER JOIN #AllStores tcs on ms.StoreID = tcs.StoreID
+	--WHERE Date BETWEEN @TESTING AND @last_week_end
+	WHERE Date BETWEEN @StartDate AND @EndDate
+	AND NOT (ms.StoreID IN (502, 291) AND Date >= '2024-12-08')
+	AND NOT (ms.StoreID IN (504) AND Date >= '2025-03-23')
+	--KL Excluding Item on 12th April
+	AND NOT (Date = '2025-04-12' AND VMECode = '68410' AND ms.StoreID = 270 AND PPGClusterID = 60012)
+	AND NOT (ms.StoreID = 518 AND VMECode = '48744' AND Date = '2025-05-05')
+	AND NOT (ms.StoreID IN (411) AND Date BETWEEN '2025-05-10' AND '2025-06-05') --Closed for refit
+	AND NOT (ms.StoreID IN (421) AND Date BETWEEN '2025-05-24' AND '2025-06-11') --Closed for refit
+	AND NOT (ms.StoreID = 427 AND Date >= '2025-06-17') --Closed store
+	AND NOT (ms.StoreID = 505 AND ms.ItemID = '5060192670042' AND Date = '2026-01-17')  -- olu 22/01/2026 remove meat&poultry item
+	GROUP BY
+		ms.[StoreID]
+		,tcs.StoreName
+		,[Date]
+		,i.DepartmentName
+		,i.CategoryName 
+		,i.SubCategoryName 
+		,i.PPGClusterID 
+
+	------------------------------------WASTE OUTLIERS-------------------------------------------
+
+	IF OBJECT_ID('tempdb..#waste_outliers') IS NOT NULL DROP TABLE #waste_outliers
+			SELECT WC.Date
+				, WC.StoreID
+				, WC.Department
+				, Category
+				, SubCategory
+				, PPGClusterID
+				, WC.ItemID
+				, WC.WasteReason
+				, WC.OriginalPrice
+				, CASE
+					WHEN WC.[WasteReason] = 'Too Good To Go' THEN WC.WasteQuantity
+					ELSE 0
+				  END AS WasteQuantityTGTG
+				, CASE
+					WHEN WC.[WasteReason] = 'Too Good To Go' THEN WC.WasteQuantity * WC.OriginalPrice
+					ELSE 0
+				  END AS WasteValueTGTG
+				, WC.WasteQuantity
+				, WC.WasteQuantity * WC.OriginalPrice AS WasteValue
+				, COALESCE(ABS((WC.WasteQuantity - AVG(WC.WasteQuantity) OVER (PARTITION BY WC.DEPARTMENT))
+					/ NULLIF(STDEV(WC.WasteQuantity) OVER (PARTITION BY WC.DEPARTMENT),0)),0) AS ABS_Z_SCORE
+			INTO #waste_outliers
+			FROM
+			(
+					SELECT W.[StoreID]
+						,i.DepartmentName AS Department
+						,i.CategoryName AS Category
+						,i.SubCategoryName AS SubCategory
+						, i.PPGClusterID
+						, W.[ItemID]
+						, W.[Date]
+						, W.[WasteReason]
+						, W.[OriginalPrice]
+						, W.WasteQuantity
+						, ROW_NUMBER() OVER(PARTITION BY W.STOREID, W.DATE, W.ITEMID, W.WASTEREASON ORDER BY ABS(W.WASTEQUANTITY) ASC) AS RN
+					FROM dbo.Wastage W WITH (INDEX = CIX_Wastage_Date_StoreID_ItemID)
+						INNER JOIN 
+							#products i 
+							on W.EAN = i.ItemID
+					WHERE
+						--W.Date BETWEEN @TESTING AND @last_week_end
+						W.Date BETWEEN @StartDate AND @EndDate
+						AND Date >= '2023-01-01'
+					 
+			UNION 
+		
+					SELECT W.[StoreID]
+						,i.DepartmentName AS Department
+						,i.CategoryName AS Category
+						,i.SubCategoryName AS SubCategory
+						, i.PPGClusterID
+						, W.[ItemID]
+						, W.[Date]
+						, W.[WasteReason]
+						, W.[OriginalPrice]
+						, W.WasteQuantity
+						, ROW_NUMBER() OVER(PARTITION BY W.STOREID, W.DATE, W.ITEMID, W.WASTEREASON ORDER BY ABS(W.WASTEQUANTITY) ASC) AS RN
+					FROM dbo.Wastage W
+						INNER JOIN 
+							#products i 
+							on W.itemID = i.VMECode
+					WHERE
+						--W.Date BETWEEN @TESTING AND @last_week_end
+						W.Date BETWEEN @StartDate AND @EndDate
+						AND Date < '2023-01-01'	
+			) AS WC
+			WHERE RN = 1   -- This removes any rows where there was a subsequent correction made
+			AND NOT (StoreID IN (502, 291) AND Date >= '2024-12-08')
+			AND NOT (StoreID IN (504) AND Date >= '2025-03-23')
+			AND NOT (StoreID = 490 AND ItemID = 38214 AND Date = '2025-04-14')
+			AND NOT (StoreID = 517 AND ItemID = 63884 AND Date = '2025-04-30')
+			AND NOT (StoreID = 518 AND ItemID = 48744 AND Date = '2025-05-05')
+			AND NOT (StoreID IN (411) AND Date BETWEEN '2025-05-10' AND '2025-06-05') --Closed for refit
+			AND NOT (StoreID IN (421) AND Date BETWEEN '2025-05-24' AND '2025-06-11') --Closed for refit
+			AND NOT (StoreID = 427 AND Date >= '2025-06-17') --Closed store
+			AND NOT (StoreID = 505 AND ItemID = '5060192670042' AND Date = '2026-01-17') -- olu 22/01/2026 remove meat&poultry item
+
+
+
+
+
+
+
+	----------------------------------------WASTE-----------------------------------------------
+
+	IF OBJECT_ID('tempdb..#waste') IS NOT NULL DROP TABLE #waste
+			SELECT    WO.StoreID
+					, s.StoreName
+					, WO.Department AS Department
+					, WO.Category
+					, WO.SubCategory
+					, WO.PPGClusterID AS PPG
+					, WO.Date
+
+					, SUM(WasteQuantity) AS waste_qty
+					, SUM(WasteValue) AS waste_val
+					, SUM(WasteQuantityTGTG) AS waste_qty_tgtg
+					, SUM(WasteValueTGTG) AS waste_val_tgtg
+			INTO #waste
+			FROM #waste_outliers WO
+			INNER JOIN #AllStores s ON s.StoreID = WO.StoreID 
+			WHERE 1 = 1
+									--KL excluding item on 9th June
+						AND NOT (Date = '2024-06-09' AND ItemID = '29464' AND WO.StoreID = 217)	
+						--KL Excluding Item on 10th March
+						AND NOT (Date = '2025-03-09' AND ItemID = '21214' AND WO.StoreID = 409 AND Wastereason = 'OUT OF DATE')
+						--KL Excluding Item on 9th April
+						AND NOT (Date = '2025-04-09' AND ItemID = '55292' AND WO.StoreID = 497 AND Wastereason = 'DAMAGED')
+					--AND ABS_Z_SCORE <= 3  --This removes any extreme outliers from the data
+			GROUP BY
+					WO.StoreID
+					, S.StoreName
+					, Department
+					, Category
+					, SubCategory
+					, PPGClusterID
+					, WO.Date
+
+	---------------------------------------COMBINED----------------------------------------------
+
+	DELETE FROM dbo.performance_reporting WHERE Date BETWEEN @StartDate AND @EndDate
+
+	INSERT INTO dbo.performance_reporting 
+
+	SELECT 
+		COALESCE(s.[StoreID],M.STOREID,W.STOREID) AS StoreID
+		,COALESCE(s.StoreName,M.StoreName,W.StoreName) AS StoreName
+		,COALESCE(s.DaTE,M.DATE,W.DATE) AS Date
+		,COALESCE(S.Department,m.Department,w.Department) AS Department
+		,COALESCE(S.Category,m.Category,w.Category) AS Category
+		,COALESCE(S.SubCategory,m.SubCategory,w.SubCategory) AS SubCategory
+		,COALESCE(S.PPG,m.PPG,w.PPG) AS PPG
+		,SUM(s.salesqty) as SalesQty
+		,SUM(s.salesval) as SalesVal
+		,SUM(m.markdownsalesqty) as MDSalesQty
+		,SUM(m.markdownsalesval) as MDSalesVal
+		,SUM(m.markdownsalesoriginalval) as MDSalesOrigVal
+		,SUM(w.waste_qty) as WasteQty
+		,SUM(w.waste_val) as WasteVal
+		,ISNULL(SUM(s.salesqty),0) + ISNULL(SUM(m.markdownsalesqty),0) AS TotalSalesQty 
+		,ISNULL(SUM(s.salesval),0) + ISNULL(SUM(m.markdownsalesval),0) AS TotalSalesVal
+		,ISNULL(SUM(m.markdownsalesoriginalval),0) + ISNULL(SUM(w.waste_val),0) AS 'Potential £ Total Waste' 
+		,(ISNULL(SUM(m.markdownsalesoriginalval),0) - ISNULL(SUM(m.markdownsalesval),0)) + ISNULL(SUM(w.waste_val),0) AS 'Actual £ Total Waste' 
+		,SUM(w.waste_qty_tgtg) as WasteQtyTGTG
+		,SUM(w.waste_val_tgtg) as WasteValTGTG
+
+	FROM #FPSales s
+	FULL OUTER JOIN #MDSales m on s.Date = m.Date and s.StoreID = m.StoreID and s.StoreName = m.StoreName and s.Department = m.Department and s.Category = m.Category and s.SubCategory = m.SubCategory and s.PPG = m.PPG
+	FULL OUTER JOIN #waste w on s.Date = w.Date and s.StoreID = w.StoreID and s.StoreName = w.StoreName and s.Department = w.Department and s.Category = w.Category and s.SubCategory = w.SubCategory and s.PPG = w.PPG
+	WHERE 1=1
+	GROUP BY
+		COALESCE(s.[StoreID],M.STOREID,W.STOREID)
+		,COALESCE(s.StoreName,M.StoreName,W.StoreName)
+		,COALESCE(s.DATE,M.DATE,W.DATE)
+		,COALESCE(S.Department,m.Department,w.Department)
+		,COALESCE(S.Category,m.Category,w.Category) 
+		,COALESCE(S.SubCategory,m.SubCategory,w.SubCategory)
+		,COALESCE(S.PPG,m.PPG,w.PPG)
+	order by
+		StoreID, Date, Department
+
+
+ ---remove skewed aggregated row  -- 22/01/2026
+    DELETE FROM dbo.performance_reporting
+    WHERE StoreID = 505
+    AND Date = '2026-01-17'
+    AND Department = 'MEAT & POULTRY'
+    AND Category = 'FRESH MEAT SAUSAGE'
+    AND SubCategory = 'PREMIUM';
+
+
+
+	SET @EndTime = CAST(GetDate() AS datetime)
+	SET @RunTime = CAST(@EndTime - @StartTime AS Time)
+
+	INSERT INTO [dbo].[run_time_log]
+	SELECT @ProcedureName
+		,@StartTime
+		,@EndTime
+		,@RunTime
+		,@SystemUser
+
+END

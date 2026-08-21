@@ -21,6 +21,7 @@ Public API
 """
 
 from snowflake.snowpark import functions as F
+
 from store_insight.pipeline.pipeline._shared import osa_score_col, weekly_dept_scores
 from store_insight.pipeline.stages._1_detect.detector_info import DetectorInfo
 from store_insight.pipeline.stages._1_detect.signals import make_osa_signal
@@ -30,7 +31,7 @@ METADATA = DetectorInfo(
     problem     = 'Store-department OSA is significantly below the chain-wide average, indicating structural underperformance relative to peers.',
     action      = 'Review why this store is underperforming its peers in this department and address root causes such as ordering, compliance, or ranging issues.',
     baseline    = 'The chain-wide average OSA for the same department this week.',
-    logic       = 'Fires when the store OSA is more than min_chain_gap percentage points below the chain average for the same department, and lost sales value this week exceeds min_lost_sales_value.',
+    logic       = 'OSA = actual sales volume / (actual sales volume + lost sales volume).\nChain gap = chain department OSA - store department OSA.\nFires when chain gap > min_chain_gap and this-week lost sales value > min_lost_sales_value.',
     config_keys = ['min_chain_gap', 'min_lost_sales_value'],
 )
 

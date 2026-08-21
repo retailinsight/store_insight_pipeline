@@ -60,6 +60,13 @@ def _detector_module_name(mod) -> str:
 # Signal merging
 # ---------------------------------------------------------------------------
 
+# Fields that should take the *maximum* value when merging signals of a
+# given type.  All other fields use "last non-None wins" semantics.
+_MERGE_MAX_FIELDS: dict[str, set[str]] = {
+    'OSA': {'this_week_lsv'},
+}
+
+
 def _merge_signals(all_signals):
     """
     Collapse a flat list of signals into one signal per ``merge_key``.
@@ -67,11 +74,12 @@ def _merge_signals(all_signals):
     Signals with the same ``merge_key`` are merged together; signals with
     unique keys (e.g. COMPLIANCE) pass through untouched.
 
-    OSA merge rules:
+    Merge rules:
     - ``trigger_types`` lists are combined and deduped (order preserved)
-    - Numeric fields take the non-None value; where both have a value the
-      later signal wins (resolution order: WOW → VS_CHAIN → REPEAT)
-    - ``this_week_lsv`` takes the maximum across all signals
+    - Most numeric fields take the non-None value; where both have a value
+      the later signal wins (resolution order: WOW → VS_CHAIN → REPEAT)
+    - Fields listed in ``_MERGE_MAX_FIELDS`` take the *maximum* across all
+      signals (currently ``this_week_lsv`` for OSA)
     - Repeat item fields are preserved from the REPEAT detector
     """
     groups = {}
@@ -84,6 +92,8 @@ def _merge_signals(all_signals):
             existing['trigger_types'] = list(
                 dict.fromkeys(existing['trigger_types'] + sig['trigger_types'])
             )
+            signal_type = sig.get('signal_type', '')
+            max_fields = _MERGE_MAX_FIELDS.get(signal_type, set())
             for field in (
                 # OSA fields
                 'last_week_osa', 'this_week_osa', 'wow_drift_pp',
@@ -94,24 +104,26 @@ def _merge_signals(all_signals):
                 'chain_stb_rate', 'above_chain_pp',
                 # MARKDOWN_OVERRIDE fields
                 'last_week_override_rate', 'this_week_override_rate',
-                'chain_override_rate', 'above_chain_pp',
+                'wow_change_pp', 'chain_override_rate', 'above_chain_pp',
                 # MARKDOWN_SELLTHROUGH fields
                 'last_week_sellthrough_rate', 'this_week_sellthrough_rate',
-                'chain_sellthrough_rate', 'below_chain_pp',
+                'wow_change_pp', 'chain_sellthrough_rate', 'below_chain_pp',
                 # COMPLIANCE fields
                 'last_week_tf_rate', 'this_week_tf_rate', 'tf_rate_change',
                 'chain_tf_rate', 'above_chain_by',
             ):
-                if sig.get(field) is not None:
+                if sig.get(field) is None:
+                    continue
+                if field in max_fields:
+                    existing[field] = max(
+                        existing.get(field) if existing.get(field) is not None else 0,
+                        sig[field],
+                    )
+                else:
                     existing[field] = sig[field]
             if sig.get('repeat_item_count') is not None:
                 existing['repeat_item_count'] = sig['repeat_item_count']
                 existing['repeat_item_details'] = sig['repeat_item_details']
-            if sig.get('this_week_lsv') and (
-                not existing.get('this_week_lsv') or
-                sig['this_week_lsv'] > existing['this_week_lsv']
-            ):
-                existing['this_week_lsv'] = sig['this_week_lsv']
     return list(groups.values())
 
 
@@ -150,7 +162,7 @@ def detect_signals(
     Parameters
     ----------
     osa            : Snowpark DataFrame with columns:
-                     STORE_ID, ITEM_CODE, ANALYSIS_DATE,
+                     STORE_ID, ITEM_CODE, DATE,
                      ACTUAL_SALES_VOLUME, LOST_SALES_VOLUME,
                      LOST_SALES_VALUE, DEPARTMENT_NAME,
                      SUBCLASS_NAME, PRODUCT_PROFILE_GROUP_NAME
@@ -182,7 +194,7 @@ def detect_signals(
     # uniformly use `.isin(store_id)` without branching on type.
     if store_id is None:
         store_ids = None
-    elif isinstance(store_id, (list, tuple, set)):
+    elif isinstance(store_id, list | tuple | set):
         store_ids = [int(s) for s in store_id]
     else:
         store_ids = [int(store_id)]
@@ -212,15 +224,18 @@ def detect_signals(
     # ── Filter detectors by config ──────────────────────────────────────────
     detectors = _registry.ALL_DETECTORS
     if cfg:
-        detectors_cfg = getattr(cfg, 'detectors', None)
-        if detectors_cfg is not None:
-            enabled = getattr(detectors_cfg, 'enabled', None)
-            if enabled is not None:
-                enabled_set = set(enabled)
-                detectors = [
-                    d for d in detectors
-                    if _detector_module_name(d) in enabled_set
-                ]
+        if isinstance(cfg, dict):
+            detectors_cfg = cfg.get('detectors')
+            enabled = detectors_cfg.get('enabled') if detectors_cfg else None
+        else:
+            detectors_cfg = getattr(cfg, 'detectors', None)
+            enabled = getattr(detectors_cfg, 'enabled', None) if detectors_cfg is not None else None
+        if enabled is not None:
+            enabled_set = set(enabled)
+            detectors = [
+                d for d in detectors
+                if _detector_module_name(d) in enabled_set
+            ]
 
     all_signals = []
     counts = {}

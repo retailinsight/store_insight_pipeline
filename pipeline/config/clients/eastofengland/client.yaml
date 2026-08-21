@@ -6,30 +6,31 @@
 client_name: eastofengland
 
 connection:
-  database: SNOWFLAKE_LEARNING_DB
-  schema:   STORE_INSIGHT
-  role:     SNOWFLAKE_LEARNING_ROLE
+  database:  STORE_INSIGHT_DB
+  schema:    PUBLIC
+  role:      STORE_INSIGHT_ROLE
+  warehouse: STORE_INSIGHT_WH
 
 output:
   top_n_per_store: 10
 
 investigation:
   OSA:
-    engine: cortex
+    engine: rule_based
     skill_file: skills/osa_investigation_skill.md
   COMPLIANCE:
-    engine: cortex
+    engine: rule_based
     skill_file: skills/compliance_investigation_skill.md
   MARKDOWN_OVERRIDE:
-    engine: cortex
+    engine: rule_based
     skill_file: skills/markdown_override_investigation_skill.md
   WASTE:
-    engine: cortex
+    engine: rule_based
     skill_file: skills/waste_investigation_skill.md
   MARKDOWN_SELLTHROUGH:
-    engine: cortex
+    engine: rule_based
     skill_file: skills/markdown_sellthrough_investigation_skill.md
   MARKDOWN_SKU:
-    engine: cortex
+    engine: rule_based
     skill_file: skills/markdown_sku_investigation_skill.md
 

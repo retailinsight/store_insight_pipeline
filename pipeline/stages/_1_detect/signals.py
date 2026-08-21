@@ -111,6 +111,24 @@ class MarkdownSellthroughSignal(TypedDict):
     this_week_markdown_value:   float
 
 
+class OsaRecurringSlotSignal(TypedDict):
+    """Typed shape for a recurring OSA slot detection signal."""
+    signal_type:            str                              # always 'OSA_RECURRING_SLOT'
+    merge_key:              tuple[str, int, str, int, int]   # (type, store_id, department, dow, period_id)
+    store_id:               int
+    department:             str
+    section:                str                              # encoded alert section, e.g. 'Produce|Monday|Morning'
+    trigger_types:          list[str]
+    dow:                    int
+    dow_name:               str
+    period_id:              int
+    period_label:           str
+    repeat_item_count:      int
+    repeat_item_details:    list[dict]
+    total_lsv:              float
+    avg_weekly_lsv:         float
+
+
 class MarkdownSkuSignal(TypedDict):
     """Typed shape for a SKU-level markdown detection signal."""
     signal_type:            str                        # always 'MARKDOWN_SKU'
@@ -120,6 +138,7 @@ class MarkdownSkuSignal(TypedDict):
     item_id:                int
     item_description:       str
     department:             str
+    section:                str                        # encoded alert section, e.g. 'Produce|12345'
     trigger_types:          list[str]
     markdown_request_count: int | None
     override_count:         int | None
@@ -127,13 +146,32 @@ class MarkdownSkuSignal(TypedDict):
     avg_markdown_pct:       float | None
 
 
+class WasteTrimSignal(TypedDict):
+    """Typed shape for a waste-trim detection signal."""
+    signal_type:      str                      # always 'WASTE_TRIM'
+    merge_key:        tuple[str, int, int]     # ('WASTE_TRIM', store_id, item_id)
+    store_id:         int
+    site_name:        str
+    item_id:          int
+    item_description: str
+    department:       str
+    section:          str                    # encoded alert section, e.g. 'Produce|12345'
+    trigger_types:    list[str]
+    markdown_units:   int
+    total_units:      int
+    markdown_ratio:   float
+    markdown_value:   float
+
+
 Signal = (
     OsaSignal
+    | OsaRecurringSlotSignal
     | ComplianceSignal
     | MarkdownOverrideSignal
     | WasteSignal
     | MarkdownSellthroughSignal
     | MarkdownSkuSignal
+    | WasteTrimSignal
 )
 
 
@@ -188,6 +226,55 @@ def make_osa_signal(
         'chain_wow_drift_pp':  chain_wow_drift_pp,
         'repeat_item_count':   repeat_item_count,
         'repeat_item_details': repeat_item_details if repeat_item_details is not None else [],
+    }
+
+
+def make_osa_recurring_slot_signal(
+    store_id: int,
+    department: str,
+    dow: int,
+    dow_name: str,
+    period_id: int,
+    period_label: str,
+    repeat_item_count: int,
+    repeat_item_details: list[dict],
+    total_lsv: float,
+    avg_weekly_lsv: float,
+    trigger_types: list[str] | None = None,
+) -> OsaRecurringSlotSignal:
+    """
+    Build a signal dict for an OSA recurring-slot alert.
+
+    Parameters
+    ----------
+    store_id             : int
+    department           : str — e.g. 'CHILLED'
+    dow                  : int — 1=Sunday … 7=Saturday
+    dow_name             : str — e.g. 'Monday'
+    period_id            : int — reporting period id
+    period_label         : str — e.g. 'Morning (6am-12pm)'
+    repeat_item_count    : int — number of repeat-offender items in this slot
+    repeat_item_details  : list — per-item detail dicts for this slot
+    total_lsv            : float — total £ lost sales across matched items and weeks
+    avg_weekly_lsv       : float — average weekly £ lost sales for this slot
+    trigger_types        : list[str] — defaults to ['RECURRING_SLOT']
+    """
+    section = f'{department}|{dow_name}|{period_label}'
+    return {
+        'signal_type':         'OSA_RECURRING_SLOT',
+        'merge_key':           ('OSA_RECURRING_SLOT', store_id, department, dow, period_id),
+        'store_id':            store_id,
+        'department':          department,
+        'section':             section,
+        'trigger_types':       list(trigger_types or ['RECURRING_SLOT']),
+        'dow':                 dow,
+        'dow_name':            dow_name,
+        'period_id':           period_id,
+        'period_label':        period_label,
+        'repeat_item_count':   repeat_item_count,
+        'repeat_item_details': repeat_item_details,
+        'total_lsv':           total_lsv,
+        'avg_weekly_lsv':      avg_weekly_lsv,
     }
 
 
@@ -362,6 +449,7 @@ def make_markdown_sku_signal(
         'item_id':                item_id,
         'item_description':       item_description,
         'department':             department,
+        'section':                f'{department}|{item_id}',
         'trigger_types':          list(trigger_types),
         'markdown_request_count': markdown_request_count,
         'override_count':         override_count,
@@ -417,4 +505,48 @@ def make_compliance_signal(
         'tf_rate_change':    tf_rate_change,
         'chain_tf_rate':     chain_tf_rate,
         'above_chain_by':    above_chain_by,
+    }
+
+
+def make_waste_trim_signal(
+    store_id: int,
+    item_id: int,
+    trigger_types: list[str],
+    site_name: str | None = None,
+    item_description: str = '',
+    department: str = '',
+    markdown_units: int = 0,
+    total_units: int = 0,
+    markdown_value: float = 0.0,
+) -> WasteTrimSignal:
+    """
+    Build a signal dict for a waste-trim alert.
+
+    Parameters
+    ----------
+    store_id         : int
+    item_id          : int — UPC / WMD item identifier
+    trigger_types    : list[str] — e.g. ['WASTE_TRIM']
+    site_name        : str | None — human-readable store name
+    item_description : str — human-readable item name
+    department       : str — department name
+    markdown_units   : int — units sold at markdown this week
+    total_units      : int — total units sold this week (markdown + full-price)
+    markdown_value   : float — £ value of markdown sales this week
+    """
+    markdown_ratio = round(markdown_units / total_units, 4) if total_units else 0.0
+    return {
+        'signal_type':      'WASTE_TRIM',
+        'merge_key':        ('WASTE_TRIM', store_id, item_id),
+        'store_id':         store_id,
+        'site_name':        site_name or f'Store {store_id}',
+        'item_id':          item_id,
+        'item_description': item_description,
+        'department':       department,
+        'section':          f'{department}|{item_id}',
+        'trigger_types':    list(trigger_types),
+        'markdown_units':   markdown_units,
+        'total_units':      total_units,
+        'markdown_ratio':   markdown_ratio,
+        'markdown_value':   markdown_value,
     }

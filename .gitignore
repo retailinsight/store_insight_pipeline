@@ -2,6 +2,10 @@
 .env
 .env.*
 !.env.example
+snowflake_credentials.py
+.local/
+working_snowflake_config.env
+*_token*.txt
 # Claude Desktop MCP config staged locally — contains API keys
 claude_desktop_config.json
 congig.json
@@ -66,3 +70,14 @@ api/.env
 
 # Local scratch / spike work — not part of the shipped pipeline
 experiments/
+
+# One-off debug scripts and message drafts — kept locally, not shipped
+archive/
+
+# Pipeline run output logs
+run_log.txt
+
+# Local virtualenv
+venv_store_insight/
+.venv-store-insight/
+store_insight.egg-info/

@@ -72,17 +72,27 @@ def create_session(cfg=None):
     """
     from snowflake.snowpark import Session
 
-    conn = cfg.connection if cfg else {}
+    if cfg is None:
+        conn = {}
+    elif isinstance(cfg, dict):
+        conn = cfg.get('connection', {}) or {}
+    else:
+        conn = getattr(cfg, 'connection', None) or {}
+
+    def _get(name, default=None):
+        if isinstance(conn, dict):
+            return conn.get(name, default) or default
+        return getattr(conn, name, default) or default
 
     password = os.environ.get('SNOWFLAKE_PASSWORD')
 
     params = {
         'account':   os.environ['SNOWFLAKE_ACCOUNT'],
         'user':      os.environ['SNOWFLAKE_USER'],
-        'role':      conn.role or os.environ.get('SNOWFLAKE_ROLE'),
-        'warehouse': conn.warehouse or os.environ.get('SNOWFLAKE_WAREHOUSE'),
-        'database':  conn.database or os.environ.get('SNOWFLAKE_DATABASE'),
-        'schema':    conn.schema_name or os.environ.get('SNOWFLAKE_SCHEMA'),
+        'role':      _get('role', os.environ.get('SNOWFLAKE_ROLE')),
+        'warehouse': _get('warehouse', os.environ.get('SNOWFLAKE_WAREHOUSE')),
+        'database':  _get('database', os.environ.get('SNOWFLAKE_DATABASE')),
+        'schema':    _get('schema_name', os.environ.get('SNOWFLAKE_SCHEMA')),
     }
 
     if password:

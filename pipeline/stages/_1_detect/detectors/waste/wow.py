@@ -25,15 +25,16 @@ Public API
 """
 
 from snowflake.snowpark import functions as F
+
 from store_insight.pipeline.stages._1_detect.detector_info import DetectorInfo
 from store_insight.pipeline.stages._1_detect.signals import make_waste_signal
 
 METADATA = DetectorInfo(
     name        = 'WOW',
-    problem     = 'Store waste rate (units wasted per unit put through the markdown process) has risen sharply week-on-week, indicating a sudden deterioration in markdown recovery.',
-    action      = 'Investigate what changed this week — which departments or items are driving the sudden increase in waste relative to markdown throughput.',
-    baseline    = 'The same store waste rate from the previous week.',
-    logic       = 'Fires when the waste rate has risen by more than min_stb_wow_increase percentage points compared to last week, and the store wasted at least min_waste_qty units this week.',
+    problem     = 'The store has more waste relative to markdown activity than in the prior week. This is a waste-to-markdown ratio, not a straight-to-bin rate: the source data cannot show whether an individual wasted unit was marked down before disposal.',
+    action      = 'Investigate which departments or items drove the change in waste relative to markdown activity. Assess markdown timing, markdown depth, ordering, and operational handling without assuming a specific cause.',
+    baseline    = 'The same store\'s waste-to-markdown ratio from the previous week: waste units divided by markdown units.',
+    logic       = 'Waste-to-markdown ratio = waste units / markdown units.\nWoW increase = this-week ratio - last-week ratio.\nFires when the increase is at least min_stb_wow_increase and this-week waste units are at least min_waste_qty.\nThis metric does not measure the proportion of units sent directly to bin without markdown.',
     config_keys = ['min_stb_wow_increase', 'min_waste_qty'],
 )
 

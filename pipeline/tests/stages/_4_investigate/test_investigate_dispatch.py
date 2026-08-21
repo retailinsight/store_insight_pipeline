@@ -76,7 +76,7 @@ def test_cortex_engine_with_session_calls_cortex(monkeypatch):
     cortex_called = {}
     import store_insight.pipeline.stages._4_investigate.cortex as cortex
 
-    def cortex_gen(s, sess):
+    def cortex_gen(s, sess, **kwargs):
         cortex_called['hit'] = True
         return {k: 'c' for k in REQUIRED_KEYS}
 
@@ -106,8 +106,8 @@ def test_cortex_engine_without_session_falls_back_to_rule_based(monkeypatch):
 
 def test_yaml_map_contains_all_expected_signal_types():
     assert set(inv_mod.SIGNAL_TYPE_MAP.keys()) == {
-        'OSA', 'COMPLIANCE', 'MARKDOWN_OVERRIDE',
-        'WASTE', 'MARKDOWN_SELLTHROUGH', 'MARKDOWN_SKU',
+        'OSA', 'OSA_RECURRING_SLOT', 'COMPLIANCE', 'MARKDOWN_OVERRIDE',
+        'WASTE', 'WASTE_TRIM', 'MARKDOWN_SELLTHROUGH', 'MARKDOWN_SKU',
     }
 
 

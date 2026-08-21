@@ -74,6 +74,7 @@ logger = logging.getLogger(__name__)
 _AUTHKIT_DOMAIN = os.getenv("WORKOS_AUTHKIT_DOMAIN", "").rstrip("/")
 _WORKOS_CLIENT_ID = os.getenv("WORKOS_CLIENT_ID", "").strip()
 _RESOURCE_URL = os.getenv("MCP_RESOURCE_URL", "").rstrip("/")
+_DEV_MODE = os.getenv("DEV_MODE", "").lower() in ("1", "true", "yes")
 
 _JWKS_CLIENT: PyJWKClient | None = None
 
@@ -450,6 +451,9 @@ class JwtMiddleware:
     RFC 9728 + the MCP auth spec.
 
     Fails closed (503) if ``WORKOS_AUTHKIT_DOMAIN`` is unset.
+
+    Dev bypass: set ``DEV_MODE=true`` in the environment (e.g. in
+    ``.env.local``) to skip all JWT validation. Never use in production.
     """
 
     def __init__(
@@ -468,6 +472,10 @@ class JwtMiddleware:
 
         path = scope.get("path", "")
         if path in self.exempt_paths or path.startswith("/.well-known/"):
+            await self.app(scope, receive, send)
+            return
+
+        if _DEV_MODE:
             await self.app(scope, receive, send)
             return
 
