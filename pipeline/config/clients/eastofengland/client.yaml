@@ -13,6 +13,12 @@ connection:
 
 output:
   top_n_per_store: 10
+  # Variety cap agreed with Daniel (21 Aug): at most 2 alerts of one signal
+  # type per store per day, so MARKDOWN_SKU cannot fill every slot. The cap
+  # is broken only when a store has no other signal types to fill top_n
+  # (see apply_top_n_filter). Target of 3 alerts/store/day awaits Dave's
+  # sign-off; top_n_per_store stays at 10 until then.
+  max_per_type_per_store: 2
 
 investigation:
   OSA:

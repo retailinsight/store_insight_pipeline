@@ -61,10 +61,12 @@ Fact gathered from `tick_and_flick_breakdown`:
 
 ### 4. Consider the downstream impact
 - Tick-and-flick dismissals mean availability alerts go unresolved.
-- The commercial cost is indirect but real: unaddressed OSA alerts translate to
-  ongoing lost sales across the affected departments.
-- The cost panel should reflect this qualitatively (no £ projection is available
-  for compliance signals — do not invent one).
+- The commercial cost is measured, not estimated: the scorer sums the
+  `LOST_SALES_VALUE` of the exact item-days this store tick-and-flicked this
+  week (`projected_cost` on the signal). It is the observed alert-day loss on
+  dismissed alerts — a floor for what carelessness cost, not a future forecast.
+- The cost panel should present this £ figure as measured lost sales tied to
+  dismissed alerts. Do not extend it into a projection of future loss.
 
 ---
 
@@ -89,16 +91,19 @@ Fact gathered from `tick_and_flick_breakdown`:
 - Do not suggest punitive language — frame as coaching and process improvement.
 
 ### Cost if Not Fixed slot
-- No £ projection is available for compliance signals.
-- Use a qualitative statement instead:
-  `"Unresolved alerts mean availability issues go unaddressed, increasing the risk of lost sales across affected departments."`
-- Do not attempt to calculate or fabricate a £ figure.
+- Use the signal's `projected_cost`: the summed `LOST_SALES_VALUE` of the items
+  this store tick-and-flicked this week.
+- Frame it as measured, not predicted: e.g.
+  `"£X of lost sales this week sat behind alerts that were dismissed without investigation."`
+- If `projected_cost` is £0 (no matching OSA facts), fall back to the qualitative
+  statement: `"Unresolved alerts mean availability issues go unaddressed, increasing the risk of lost sales across affected departments."`
+- Do not calculate any figure beyond the supplied `projected_cost`.
 
 ---
 
 ## What NOT to Do
 
 - Do not reference `TICK_AND_FLICK` as a technical term in the card — use plain English ("dismissed without investigation", "tick-and-flick").
-- Do not invent a £ projection — compliance signals do not have `this_week_lsv`.
+- Do not invent any £ beyond the supplied `projected_cost` — compliance signals do not have `this_week_lsv`.
 - Do not name alert types not present in `tf_by_alert_type`.
 - Do not use vague language — always state the rate and the comparison (vs chain, vs last week).

@@ -166,16 +166,31 @@ def apply_top_n_filter(
     store_counts: dict[int, int] = {}
     store_type_counts: dict[tuple, int] = {}
     result = []
+    skipped_by_type_cap = []
     for sig in sorted(signals, key=lambda s: s.get('score', 0), reverse=True):
         sid   = sig['store_id']
         stype = sig.get('signal_type', '')
         if top_n and store_counts.get(sid, 0) >= top_n:
             continue
         if max_per_type and store_type_counts.get((sid, stype), 0) >= max_per_type:
+            skipped_by_type_cap.append(sig)
             continue
         result.append(sig)
         store_counts[sid] = store_counts.get(sid, 0) + 1
         store_type_counts[(sid, stype)] = store_type_counts.get((sid, stype), 0) + 1
+    # Let-out agreed with Daniel (2026-08-21): if a store cannot fill top_n
+    # because the per-type cap excluded its only remaining candidates, break
+    # the cap and send more of the same type rather than send fewer alerts.
+    # Only applies when both limits are set; without top_n there is no
+    # shortfall to fill.
+    if top_n and max_per_type and skipped_by_type_cap:
+        for sig in skipped_by_type_cap:
+            sid = sig['store_id']
+            if store_counts.get(sid, 0) >= top_n:
+                continue
+            result.append(sig)
+            store_counts[sid] = store_counts.get(sid, 0) + 1
+        result.sort(key=lambda s: s.get('score', 0), reverse=True)
     return result
 
 

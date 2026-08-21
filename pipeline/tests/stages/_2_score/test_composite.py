@@ -256,6 +256,39 @@ def test_apply_top_n_filter_top_n_limits_per_store():
     assert len(store2) == 1
 
 
+def test_apply_top_n_filter_breaks_type_cap_when_store_cannot_fill_top_n():
+    """Daniel's let-out (21 Aug): if a store has no other signal types to
+    fill top_n, send more of the same type rather than fewer alerts."""
+    from store_insight.pipeline.stages._2_score.score import apply_top_n_filter
+    signals = [
+        {'store_id': 1, 'signal_type': 'MARKDOWN_SKU', 'score': 4.0},
+        {'store_id': 1, 'signal_type': 'MARKDOWN_SKU', 'score': 3.0},
+        {'store_id': 1, 'signal_type': 'MARKDOWN_SKU', 'score': 2.0},
+        {'store_id': 1, 'signal_type': 'MARKDOWN_SKU', 'score': 1.0},
+    ]
+    result = apply_top_n_filter(signals, top_n=3, max_per_type=2)
+    assert len(result) == 3
+    scores = [s['score'] for s in result]
+    assert scores == [4.0, 3.0, 2.0]
+
+
+def test_apply_top_n_filter_keeps_type_cap_when_other_types_fill_top_n():
+    """The cap holds when the store has enough variety to fill top_n."""
+    from store_insight.pipeline.stages._2_score.score import apply_top_n_filter
+    signals = [
+        {'store_id': 1, 'signal_type': 'MARKDOWN_SKU', 'score': 5.0},
+        {'store_id': 1, 'signal_type': 'MARKDOWN_SKU', 'score': 4.0},
+        {'store_id': 1, 'signal_type': 'MARKDOWN_SKU', 'score': 3.0},
+        {'store_id': 1, 'signal_type': 'OSA',          'score': 2.0},
+        {'store_id': 1, 'signal_type': 'WASTE',        'score': 1.0},
+    ]
+    result = apply_top_n_filter(signals, top_n=3, max_per_type=2)
+    types = [s['signal_type'] for s in result]
+    assert len(result) == 3
+    assert types.count('MARKDOWN_SKU') == 2
+    assert types.count('OSA') == 1
+
+
 def test_apply_top_n_filter_zero_means_no_constraint():
     from store_insight.pipeline.stages._2_score.score import apply_top_n_filter
     signals = [
