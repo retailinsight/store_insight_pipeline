@@ -1,0 +1,157 @@
+"""Tests for the warn-only pre-run source-volume check."""
+
+import datetime
+
+from store_insight.pipeline.tools.source_volume_check import (
+    baseline_dates,
+    build_email,
+    check_source,
+    classify,
+    run_check,
+    write_log,
+)
+
+MONDAY = datetime.date(2026, 8, 3)
+
+
+def _runner_with_counts(counts_by_date):
+    """Fake runner answering the volume query from a {date_str: count} dict."""
+    def runner(sql):
+        return [{'DATE': d, 'ROW_COUNT': c} for d, c in counts_by_date.items()]
+    return runner
+
+
+# ---------------------------------------------------------------------------
+# classify
+# ---------------------------------------------------------------------------
+
+def test_classify_ok_at_or_above_suspect_cutoff():
+    assert classify(75, 100.0) == 'OK'
+    assert classify(100, 100.0) == 'OK'
+
+
+def test_classify_suspect_between_cutoffs():
+    assert classify(74, 100.0) == 'SUSPECT'
+    assert classify(50, 100.0) == 'SUSPECT'
+
+
+def test_classify_failed_below_half():
+    assert classify(49, 100.0) == 'FAILED'
+    assert classify(0, 100.0) == 'FAILED'
+
+
+def test_classify_unknown_without_baseline():
+    assert classify(100, None) == 'UNKNOWN'
+    assert classify(100, 0.0) == 'UNKNOWN'
+
+
+# ---------------------------------------------------------------------------
+# baseline
+# ---------------------------------------------------------------------------
+
+def test_baseline_dates_are_same_weekday_previous_four_weeks():
+    dates = baseline_dates(MONDAY)
+    assert len(dates) == 4
+    assert all(d.weekday() == MONDAY.weekday() for d in dates)
+    assert dates[0] == MONDAY - datetime.timedelta(days=7)
+    assert dates[3] == MONDAY - datetime.timedelta(days=28)
+
+
+# ---------------------------------------------------------------------------
+# check_source
+# ---------------------------------------------------------------------------
+
+def test_aug_4_outage_shape_is_failed():
+    """Regression: the 4 Aug OSA outage (~95% drop) must classify FAILED."""
+    check_date = datetime.date(2026, 8, 4)
+    counts = {str(check_date): 140_000}
+    for d in baseline_dates(check_date):
+        counts[str(d)] = 1_160_000
+    result = check_source(_runner_with_counts(counts), 'osa', 'DB.S.OSA', check_date)
+    assert result['status'] == 'FAILED'
+    assert result['row_count'] == 140_000
+    assert result['baseline_rows'] == 1_160_000
+
+
+def test_bank_holiday_dip_is_suspect_not_failed():
+    """A −30% day warns at most; it must never classify FAILED."""
+    counts = {str(MONDAY): 70}
+    for d in baseline_dates(MONDAY):
+        counts[str(d)] = 100
+    result = check_source(_runner_with_counts(counts), 'osa', 'DB.S.OSA', MONDAY)
+    assert result['status'] == 'SUSPECT'
+
+
+def test_missing_day_counts_as_zero_and_fails():
+    counts = {str(d): 100 for d in baseline_dates(MONDAY)}
+    result = check_source(_runner_with_counts(counts), 'osa', 'DB.S.OSA', MONDAY)
+    assert result['row_count'] == 0
+    assert result['status'] == 'FAILED'
+
+
+def test_no_history_is_unknown():
+    counts = {str(MONDAY): 100}
+    result = check_source(_runner_with_counts(counts), 'osa', 'DB.S.OSA', MONDAY)
+    assert result['status'] == 'UNKNOWN'
+
+
+def test_baseline_is_median_of_available_weeks():
+    counts = {str(MONDAY): 90}
+    history = [80, 100, 120]  # only 3 of 4 weeks present; median = 100
+    for d, c in zip(baseline_dates(MONDAY)[:3], history, strict=True):
+        counts[str(d)] = c
+    result = check_source(_runner_with_counts(counts), 'osa', 'DB.S.OSA', MONDAY)
+    assert result['baseline_rows'] == 100.0
+    assert result['status'] == 'OK'
+
+
+# ---------------------------------------------------------------------------
+# run_check / write_log / build_email
+# ---------------------------------------------------------------------------
+
+def test_run_check_covers_every_source():
+    counts = {str(MONDAY): 100}
+    for d in baseline_dates(MONDAY):
+        counts[str(d)] = 100
+    sources = {'osa': 'DB.S.OSA', 'wastage': 'DB.S.WASTAGE'}
+    results = run_check(_runner_with_counts(counts), sources, MONDAY)
+    assert [r['source_name'] for r in results] == ['osa', 'wastage']
+    assert all(r['status'] == 'OK' for r in results)
+
+
+def test_write_log_marks_only_ok_as_none():
+    statements = []
+    results = [
+        {'source_name': 'osa', 'table_fqn': 'T', 'check_date': str(MONDAY),
+         'row_count': 100, 'baseline_rows': 100.0, 'status': 'OK'},
+        {'source_name': 'wastage', 'table_fqn': 'T', 'check_date': str(MONDAY),
+         'row_count': 10, 'baseline_rows': 100.0, 'status': 'FAILED'},
+        {'source_name': 'feedback', 'table_fqn': 'T', 'check_date': str(MONDAY),
+         'row_count': 10, 'baseline_rows': None, 'status': 'UNKNOWN'},
+    ]
+    write_log(statements.append, results, 'DB.S.DATA_QUALITY_LOG', run_date=MONDAY)
+    assert len(statements) == 3
+    assert "'NONE'" in statements[0]
+    assert "'WARNED'" in statements[1]
+    assert 'NULL' in statements[2] and "'WARNED'" in statements[2]
+
+
+def test_build_email_none_when_all_ok():
+    results = [{'source_name': 'osa', 'table_fqn': 'T', 'check_date': str(MONDAY),
+                'row_count': 100, 'baseline_rows': 100.0, 'status': 'OK'}]
+    assert build_email(results, MONDAY) is None
+
+
+def test_build_email_groups_all_bad_sources():
+    results = [
+        {'source_name': 'osa', 'table_fqn': 'T1', 'check_date': str(MONDAY),
+         'row_count': 10, 'baseline_rows': 100.0, 'status': 'FAILED'},
+        {'source_name': 'wastage', 'table_fqn': 'T2', 'check_date': str(MONDAY),
+         'row_count': 60, 'baseline_rows': 100.0, 'status': 'SUSPECT'},
+        {'source_name': 'feedback', 'table_fqn': 'T3', 'check_date': str(MONDAY),
+         'row_count': 100, 'baseline_rows': 100.0, 'status': 'OK'},
+    ]
+    subject, body = build_email(results, MONDAY)
+    assert 'osa FAILED' in subject and 'wastage SUSPECT' in subject
+    assert 'feedback' not in subject
+    assert 'does not stop the 06:00 alerts run' in body
