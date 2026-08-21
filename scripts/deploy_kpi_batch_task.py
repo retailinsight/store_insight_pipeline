@@ -1,8 +1,12 @@
 """Deploy the KPI availability batch as a Snowflake stored procedure + daily task.
 
-Option B scheduling (independent cron): registers SP_KPI_AVAILABILITY_BATCH
-from kpi/kpi_availability_batch.py and creates KPI_AVAILABILITY_BATCH_TASK on
-a 06:30 UTC daily cron, decoupled from the alerts-pipeline task.
+Option A scheduling (chained, agreed with Daniel 2026-08-21): in prod the task
+runs AFTER RUN_ALERTS_PIPELINE_TASK, so it starts when the alerts pipeline
+finishes rather than at a guessed fixed time. Dev has no alerts task, so the
+dev task keeps an independent 06:30 UTC cron.
+
+Adding a child task requires briefly suspending the parent task; the script
+restores the parent's previous state afterwards.
 
 Usage (from repo root):
     python scripts/deploy_kpi_batch_task.py --env dev            # deploy to STORE_INSIGHT_DEV, task left SUSPENDED
@@ -25,8 +29,10 @@ sys.path.insert(0, str(ROOT))
 from snowflake_credentials import get_credentials  # noqa: E402
 
 ENVS = {
-    "dev":  {"database": "STORE_INSIGHT_DEV", "table": "STORE_INSIGHT_DEV.PUBLIC.KPI_AVAILABILITY_SUMMARY"},
-    "prod": {"database": "STORE_INSIGHT_DB",  "table": "STORE_INSIGHT_DB.PUBLIC.KPI_AVAILABILITY_SUMMARY"},
+    "dev":  {"database": "STORE_INSIGHT_DEV", "table": "STORE_INSIGHT_DEV.PUBLIC.KPI_AVAILABILITY_SUMMARY",
+             "parent_task": None},
+    "prod": {"database": "STORE_INSIGHT_DB",  "table": "STORE_INSIGHT_DB.PUBLIC.KPI_AVAILABILITY_SUMMARY",
+             "parent_task": "STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE_TASK"},
 }
 
 SP_NAME = "SP_KPI_AVAILABILITY_BATCH"
@@ -85,22 +91,47 @@ def main() -> None:
         comment="Daily KPI availability batch (28-col schema, delete-by-run-date + append). Source: kpi/kpi_availability_batch.py",
     )
 
-    print(f"  Creating task {fq_task} (suspended)...")
-    session.sql(f"""
-        CREATE OR REPLACE TASK {fq_task}
-          WAREHOUSE = STORE_INSIGHT_WH
-          SCHEDULE = '{CRON}'
-          COMMENT = 'Daily KPI availability batch at 06:30 UTC (independent of alerts pipeline task)'
-        AS
-          CALL {fq_sp}(NULL, NULL, '{table}')
-    """).collect()
+    parent = env["parent_task"]
+    if parent:
+        # Chained (Option A): the parent must be suspended while a child task
+        # is added. Remember its state and restore it afterwards.
+        parent_state = session.sql(f"SHOW TASKS LIKE '{parent.split('.')[-1]}' IN SCHEMA {db}.PUBLIC").collect()
+        parent_was_started = bool(parent_state) and parent_state[0]["state"] == "started"
+        print(f"  Suspending parent task {parent} (was {'started' if parent_was_started else 'suspended'})...")
+        session.sql(f"ALTER TASK IF EXISTS {parent} SUSPEND").collect()
+
+        print(f"  Creating task {fq_task} (suspended, AFTER {parent})...")
+        session.sql(f"""
+            CREATE OR REPLACE TASK {fq_task}
+              WAREHOUSE = STORE_INSIGHT_WH
+              COMMENT = 'Daily KPI availability batch; runs when the alerts pipeline task finishes (Option A, agreed 2026-08-21)'
+              AFTER {parent}
+            AS
+              CALL {fq_sp}(NULL, NULL, '{table}')
+        """).collect()
+        schedule_desc = f"chained AFTER {parent}"
+    else:
+        print(f"  Creating task {fq_task} (suspended, cron)...")
+        session.sql(f"""
+            CREATE OR REPLACE TASK {fq_task}
+              WAREHOUSE = STORE_INSIGHT_WH
+              SCHEDULE = '{CRON}'
+              COMMENT = 'Daily KPI availability batch at 06:30 UTC (dev has no alerts task to chain after)'
+            AS
+              CALL {fq_sp}(NULL, NULL, '{table}')
+        """).collect()
+        schedule_desc = "daily 06:30 UTC"
 
     if args.resume:
         print(f"  Resuming task {fq_task}...")
         session.sql(f"ALTER TASK {fq_task} RESUME").collect()
-        state = "STARTED (runs daily 06:30 UTC)"
+        state = f"STARTED ({schedule_desc})"
     else:
         state = "SUSPENDED (run ALTER TASK ... RESUME or redeploy with --resume to enable)"
+
+    if parent and parent_was_started:
+        print(f"  Restoring parent task {parent} to started...")
+        session.sql(f"ALTER TASK {parent} RESUME").collect()
 
     print(f"Done. Task state: {state}")
     print(f"Manual test: CALL {fq_sp}(NULL, NULL, '{table}');")
