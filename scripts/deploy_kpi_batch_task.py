@@ -100,22 +100,39 @@ def main() -> None:
     parent = env["parent_task"]
     if parent:
         # Chained (Option A): the parent must be suspended while a child task
-        # is added. Remember its state and restore it afterwards.
+        # is added. Remember its state and restore it afterwards — in a
+        # finally block, so a failed deploy can never leave the alerts
+        # pipeline silently suspended.
         parent_state = session.sql(f"SHOW TASKS LIKE '{parent.split('.')[-1]}' IN SCHEMA {db}.PUBLIC").collect()
         parent_was_started = bool(parent_state) and parent_state[0]["state"] == "started"
         print(f"  Suspending parent task {parent} (was {'started' if parent_was_started else 'suspended'})...")
         session.sql(f"ALTER TASK IF EXISTS {parent} SUSPEND").collect()
 
-        print(f"  Creating task {fq_task} (suspended, AFTER {parent})...")
-        session.sql(f"""
-            CREATE OR REPLACE TASK {fq_task}
-              WAREHOUSE = STORE_INSIGHT_WH
-              COMMENT = 'Daily KPI availability batch; runs when the alerts pipeline task finishes (Option A, agreed 2026-08-21)'
-              AFTER {parent}
-            AS
-              CALL {fq_sp}(NULL, NULL, '{table}')
-        """).collect()
-        schedule_desc = f"chained AFTER {parent}"
+        try:
+            print(f"  Creating task {fq_task} (suspended, AFTER {parent})...")
+            session.sql(f"""
+                CREATE OR REPLACE TASK {fq_task}
+                  WAREHOUSE = STORE_INSIGHT_WH
+                  COMMENT = 'Daily KPI availability batch; runs when the alerts pipeline task finishes (Option A, agreed 2026-08-21)'
+                  AFTER {parent}
+                AS
+                  CALL {fq_sp}(NULL, NULL, '{table}')
+            """).collect()
+            schedule_desc = f"chained AFTER {parent}"
+
+            # A child task can only be altered while the root is suspended,
+            # so --resume must happen inside this window, before the parent
+            # is restored.
+            if args.resume:
+                print(f"  Resuming task {fq_task}...")
+                session.sql(f"ALTER TASK {fq_task} RESUME").collect()
+                state = f"STARTED ({schedule_desc})"
+            else:
+                state = "SUSPENDED (run ALTER TASK ... RESUME or redeploy with --resume to enable)"
+        finally:
+            if parent_was_started:
+                print(f"  Restoring parent task {parent} to started...")
+                session.sql(f"ALTER TASK {parent} RESUME").collect()
     else:
         print(f"  Creating task {fq_task} (suspended, cron)...")
         session.sql(f"""
@@ -128,16 +145,12 @@ def main() -> None:
         """).collect()
         schedule_desc = "daily 06:30 UTC"
 
-    if args.resume:
-        print(f"  Resuming task {fq_task}...")
-        session.sql(f"ALTER TASK {fq_task} RESUME").collect()
-        state = f"STARTED ({schedule_desc})"
-    else:
-        state = "SUSPENDED (run ALTER TASK ... RESUME or redeploy with --resume to enable)"
-
-    if parent and parent_was_started:
-        print(f"  Restoring parent task {parent} to started...")
-        session.sql(f"ALTER TASK {parent} RESUME").collect()
+        if args.resume:
+            print(f"  Resuming task {fq_task}...")
+            session.sql(f"ALTER TASK {fq_task} RESUME").collect()
+            state = f"STARTED ({schedule_desc})"
+        else:
+            state = "SUSPENDED (run ALTER TASK ... RESUME or redeploy with --resume to enable)"
 
     print(f"Done. Task state: {state}")
     print(f"Manual test: CALL {fq_sp}(NULL, NULL, '{table}');")
