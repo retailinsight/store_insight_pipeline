@@ -609,6 +609,34 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
         f"DELETE FROM {OUTPUT_TABLE} WHERE RUN_DATE = '{run_date_str}'"
     ).collect()
     df.write.mode("append").save_as_table(OUTPUT_TABLE)
+
+    # Carry forward markdown / prompted-markdown placeholder values from each
+    # store's most recent prior row (Cornelious, 24 Aug: "keep the placeholder
+    # for now"). Without this, new run dates have NULL markdown columns and
+    # the API drops those tiles. Remove once the batch computes real values.
+    md_cols = [
+        "MARKDOWN_PCT", "MARKDOWN_WOW_CHANGE_PP", "MARKDOWN_CLUSTER_PCT",
+        "MARKDOWN_TREND_DIRECTION", "MARKDOWN_DETAILS_JSON",
+        "PROMPTED_MARKDOWN_PCT", "PROMPTED_MARKDOWN_WOW_CHANGE_PP",
+        "PROMPTED_MARKDOWN_CLUSTER_PCT", "PROMPTED_MARKDOWN_TREND_DIRECTION",
+        "PROMPTED_MARKDOWN_DETAILS_JSON",
+    ]
+    set_clause = ", ".join(f"{c} = s.{c}" for c in md_cols)
+    print("  Carrying forward markdown placeholder values from prior rows...")
+    session.sql(f"""
+        UPDATE {OUTPUT_TABLE} t
+        SET {set_clause}
+        FROM (
+            SELECT STORE_ID, {', '.join(md_cols)}
+            FROM {OUTPUT_TABLE}
+            WHERE RUN_DATE <> '{run_date_str}' AND MARKDOWN_PCT IS NOT NULL
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY STORE_ID ORDER BY RUN_DATE DESC) = 1
+        ) s
+        WHERE t.STORE_ID = s.STORE_ID
+          AND t.RUN_DATE = '{run_date_str}'
+          AND t.MARKDOWN_PCT IS NULL
+    """).collect()
     print(f"Done. Written to {OUTPUT_TABLE} (delete-by-run-date + append).")
 
 
