@@ -77,6 +77,12 @@ def main() -> None:
     print(f"  Creating stage {fq_stage} if missing...")
     session.sql(f"CREATE STAGE IF NOT EXISTS {fq_stage}").collect()
 
+    # Clear previous import uploads: Snowpark does not overwrite an existing
+    # staged import file, so without this a redeploy can silently keep
+    # running old code (seen 2026-08-24: dev SP still ran the 18 Aug zip).
+    print(f"  Clearing stale imports from {fq_stage}...")
+    session.sql(f"REMOVE @{fq_stage}").collect()
+
     print(f"  Registering stored procedure {fq_sp}...")
     session.sproc.register(
         func=_sp_handler,

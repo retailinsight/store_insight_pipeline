@@ -430,7 +430,7 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
                 "Subcategory":     "",
                 "When":            "",
                 "trend_direction": "up" if d_delta >= 0 else "down",
-                "trend":           f"{d_delta:+.1f}pp vs LW",
+                "trend":           f"{d_delta:+.1f}% vs LW",
                 "from":            f"{d_lw_osa:.1f}%",
                 "to":              f"{d_tw_osa:.1f}%",
                 "detail":          (
@@ -505,12 +505,12 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
             "target": {
                 "value":           "90%",
                 "trend_direction": "down" if tw_osa * 100 < 90 else "up",
-                "trend":           f"{tw_osa*100 - 90:+.1f}pp vs target",
+                "trend":           f"{tw_osa*100 - 90:+.1f}% vs target",
             },
             "previous_average": {
                 "value":           f"{lw_osa*100:.1f}%",
                 "trend_direction": "up" if wow_pp >= 0 else "down",
-                "trend":           f"{wow_pp:+.1f}pp improvement" if wow_pp >= 0 else f"{wow_pp:.1f}pp decline",
+                "trend":           f"{wow_pp:+.1f}% improvement" if wow_pp >= 0 else f"{wow_pp:.1f}% decline",
             },
             "performance_breakdown": {
                 "current_week":  f"{tw_osa*100:.1f}%",
