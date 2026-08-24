@@ -118,11 +118,21 @@ def main() -> None:
                 AS
                   CALL {fq_sp}(NULL, NULL, '{table}')
             """).collect()
+            schedule_desc = f"chained AFTER {parent}"
+
+            # A child task can only be altered while the root is suspended,
+            # so --resume must happen inside this window, before the parent
+            # is restored.
+            if args.resume:
+                print(f"  Resuming task {fq_task}...")
+                session.sql(f"ALTER TASK {fq_task} RESUME").collect()
+                state = f"STARTED ({schedule_desc})"
+            else:
+                state = "SUSPENDED (run ALTER TASK ... RESUME or redeploy with --resume to enable)"
         finally:
             if parent_was_started:
                 print(f"  Restoring parent task {parent} to started...")
                 session.sql(f"ALTER TASK {parent} RESUME").collect()
-        schedule_desc = f"chained AFTER {parent}"
     else:
         print(f"  Creating task {fq_task} (suspended, cron)...")
         session.sql(f"""
@@ -135,12 +145,12 @@ def main() -> None:
         """).collect()
         schedule_desc = "daily 06:30 UTC"
 
-    if args.resume:
-        print(f"  Resuming task {fq_task}...")
-        session.sql(f"ALTER TASK {fq_task} RESUME").collect()
-        state = f"STARTED ({schedule_desc})"
-    else:
-        state = "SUSPENDED (run ALTER TASK ... RESUME or redeploy with --resume to enable)"
+        if args.resume:
+            print(f"  Resuming task {fq_task}...")
+            session.sql(f"ALTER TASK {fq_task} RESUME").collect()
+            state = f"STARTED ({schedule_desc})"
+        else:
+            state = "SUSPENDED (run ALTER TASK ... RESUME or redeploy with --resume to enable)"
 
     print(f"Done. Task state: {state}")
     print(f"Manual test: CALL {fq_sp}(NULL, NULL, '{table}');")
