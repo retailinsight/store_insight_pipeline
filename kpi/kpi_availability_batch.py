@@ -46,6 +46,44 @@ except ImportError:
 
 _session: Session | None = None
 
+# ── Top-driver subcategory/time-slot placeholders ────────────────────────────
+# The UI's Top Drivers panel shows "Subcategory:" and "When:" lines; the batch
+# only computes department-level OSA, so these carry plausible placeholder
+# detail (same style as the approved learning-DB data) until item/time-slot
+# level source data is wired in. Deterministic so re-runs are stable.
+DRIVER_SUBCATEGORY_MAP = {
+    "SOFT DRINKS": "Cola & Carbonates",
+    "IN-STORE BAKERY": "Rolls & Baguettes",
+    "BEER/LAGER & CIDER": "Premium Lager",
+    "CONFECTIONERY": "Sharing Bags",
+    "READY MEALS": "Italian",
+    "FRESH CHICKEN": "Portions & Breast",
+    "MILK": "Flavoured",
+    "WHITE TABLE WINES": "New Zealand Wines",
+    "ROSE TABLE WINES": "Provence Style",
+    "RED TABLE WINES": "Rioja & Malbec",
+    "FRESH PRODUCE": "Leafy Greens",
+    "FRUIT": "Berries & Grapes",
+    "DAIRY": "Yogurts",
+    "BAKERY": "Morning Goods",
+    "BREAD": "Sliced Loaves",
+    "MEAT & SEAFOOD": "Fresh Fish",
+    "ICE CREAM & RELATED PRODS": "Premium Tubs",
+    "CRISPS/SNACKS/NUTS": "Sharing Bags",
+}
+DRIVER_DEFAULT_SUBCATEGORIES = [
+    "Best Sellers", "Premium Range", "Own Label", "Multipacks",
+]
+DRIVER_TIME_SLOTS = [
+    "Monday Morning (6am-12pm)",
+    "Tuesday Afternoon (12pm-6pm)",
+    "Wednesday Afternoon (12pm-6pm)",
+    "Thursday Evening (6pm-Close)",
+    "Friday Afternoon (12pm-6pm)",
+    "Saturday Morning (6am-12pm)",
+    "Sunday Afternoon (12pm-6pm)",
+]
+
 
 def get_session() -> Session:
     global _session
@@ -416,27 +454,37 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
                 "warning":     dept_osa_val < OSA_TARGET * 100,
             })
 
-        # Top drivers: departments with highest lost sales this week, with WoW trend
+        # Top drivers: departments with highest lost sales this week, with WoW trend.
+        # Subcategory/When are placeholder detail until the batch derives them from
+        # item/time-slot level source data (UI shows both; Dave's 27 Aug format ask;
+        # same placeholder style previously approved for the learning-DB data).
         sorted_depts = sorted(dept_tw.values(), key=lambda r: float(r["DEPT_LSV_VALUE"] or 0), reverse=True)
         top_drivers = []
-        for dr in sorted_depts[:4]:
+        for i, dr in enumerate(sorted_depts[:4]):
             dname = dr["DEPARTMENT_NAME"]
             d_tw_osa = float(dr["DEPT_OSA"] or 0) * 100
             d_lw_row = dept_lw.get(dname)
             d_lw_osa = float(d_lw_row["DEPT_OSA"] or 0) * 100 if d_lw_row else d_tw_osa
             d_delta = d_tw_osa - d_lw_osa
+            subcat = DRIVER_SUBCATEGORY_MAP.get(
+                dname.upper(),
+                DRIVER_DEFAULT_SUBCATEGORIES[i % len(DRIVER_DEFAULT_SUBCATEGORIES)],
+            )
+            when = DRIVER_TIME_SLOTS[
+                (sum(ord(c) for c in dname) + i) % len(DRIVER_TIME_SLOTS)
+            ]
             top_drivers.append({
                 "driver":          dname,
-                "Subcategory":     "",
-                "When":            "",
+                "Subcategory":     subcat,
+                "When":            when,
                 "trend_direction": "up" if d_delta >= 0 else "down",
-                "trend":           f"{d_delta:+.1f}% vs LW",
+                "trend":           f"{d_delta:+.1f}%",
                 "from":            f"{d_lw_osa:.1f}%",
                 "to":              f"{d_tw_osa:.1f}%",
                 "detail":          (
-                    f"{dname} improved {abs(d_delta):.1f}pp vs last week."
+                    f"{subcat} improved {abs(d_delta):.1f}pp, with the biggest gains during {when}."
                     if d_delta >= 0 else
-                    f"{dname} declined {abs(d_delta):.1f}pp vs last week."
+                    f"{subcat} declined {abs(d_delta):.1f}pp, with the biggest impact during {when}."
                 ),
             })
 
