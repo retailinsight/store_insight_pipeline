@@ -1,9 +1,14 @@
 """Deploy the pre-run source-volume check as a Snowflake SP + daily task.
 
 Warn-only interim measure from prds/prd-source-data-quality-gate.md: runs at
-05:30 UK, before the 06:00 alerts pipeline, and warns when a source's
+11:30 UK, just after the daily ~11:00 feed load (verified 2026-08-25:
+all five feeds land in one batch ~11:00 on X+1), and warns when a source's
 latest-day row count is far below its 28-day same-weekday median. It never
 blocks the alerts run.
+
+Note the timing trade-off: the check no longer runs before the 06:00 alerts
+pipeline — it validates the load that TOMORROW's 06:00 run will use, and a
+warning arrives with enough working-day left to chase the feed owner.
 
 Creates (idempotent):
   - DATA_QUALITY_LOG table (if missing)
@@ -41,7 +46,7 @@ SP_NAME = "SP_SOURCE_VOLUME_CHECK"
 TASK_NAME = "SOURCE_VOLUME_CHECK_TASK"
 STAGE_NAME = "SOURCE_CHECK_CODE_STAGE"
 LOG_TABLE = "DATA_QUALITY_LOG"
-CRON = "USING CRON 30 5 * * * Europe/London"  # 05:30 UK, before the 06:00 alerts task
+CRON = "USING CRON 30 11 * * * Europe/London"  # 11:30 UK, after the ~11:00 daily feed load
 
 LOG_DDL = """
 CREATE TABLE IF NOT EXISTS {fq_log} (
@@ -135,7 +140,7 @@ def main() -> None:
         CREATE OR REPLACE TASK {fq_task}
           WAREHOUSE = STORE_INSIGHT_WH
           SCHEDULE = '{CRON}'
-          COMMENT = 'Warn-only source-volume check at 05:30 UK, before the 06:00 alerts task'
+          COMMENT = 'Warn-only source-volume check at 11:30 UK, after the ~11:00 daily feed load (validates the data tomorrow''s 06:00 run will use)'
         AS
           CALL {fq_sp}('{sources_json}', NULL, '{fq_log}',
                        '{args.email_integration}', '{args.email_recipients}')
@@ -144,7 +149,7 @@ def main() -> None:
     if args.resume:
         print(f"  Resuming task {fq_task}...")
         session.sql(f"ALTER TASK {fq_task} RESUME").collect()
-        state = "STARTED (daily 05:30 UK)"
+        state = "STARTED (daily 11:30 UK)"
     else:
         state = "SUSPENDED (redeploy with --resume to enable)"
 
