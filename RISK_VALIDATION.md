@@ -3,8 +3,8 @@
 Living document: re-validate before each deployment step and after each production run.
 Validation helpers: `scripts/validate_deploy_risks.py`, `scripts/check_run_output.py`, `scripts/spot_check_cards.py`, `scripts/migrate_alerts_table_schema.py`, `scripts/validate_lineage_populated.py`, `scripts/validate_merge_snowflake.py`, `scripts/check_task_history.py` (read-only except migration; VPN required).
 
-Last live-Snowflake validation: **2026-08-25 (watched first runs after 24 Aug deploys)** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
-Requirements/code review updated: **2026-08-25**
+Last live-Snowflake validation: **2026-08-26 (source-volume check redeploy to 11:30 UK)** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
+Requirements/code review updated: **2026-08-26**
 
 ---
 
@@ -20,9 +20,17 @@ Results posted to Slack 11:10, Dan + Dave tagged.
 | KPI chain | ✅ KPI batch ran after the 06:00 pipeline and wrote fresh rows to prod `KPI_AVAILABILITY_SUMMARY` |
 | Source-volume check | ⚠️ Ran at 05:30 but **false-failed all five feeds** — feeds are healthy; day-X data lands ~11:00 on X+1, so at 06:00 the pipeline first sees day-X data on X+2 |
 
-Open decisions (Dan deferred to 26 Aug session): (a) source check — expect
-day-2 data vs move the check after 11:00; (b) Dave — is X+2 freshness
+Open decisions (Dan deferred to 26 Aug session): (b) Dave — is X+2 freshness
 acceptable per alert type (`ALERT_DATA_AGE_REVIEW.md` prepared for the review).
+
+---
+
+## ✅ Source check timing fix — 2026-08-26
+
+- **Decision (Dan 26 Aug):** `fix/source-check-after-1100` (PR #53) merged to `main`.
+- **Change:** `SOURCE_VOLUME_CHECK_TASK` rescheduled from 05:30 to 11:30 UK, after the daily feeds have loaded.
+- **Deploy:** `SP_SOURCE_VOLUME_CHECK` and `SOURCE_VOLUME_CHECK_TASK` redeployed to prod and resumed.
+- **Next check:** 2026-08-27 11:30 UK; `DATA_QUALITY_LOG` should show the previous day without false failures.
 
 ---
 

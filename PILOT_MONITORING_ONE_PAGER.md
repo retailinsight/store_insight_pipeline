@@ -7,7 +7,7 @@
 
 | # | What | How (today) | Named owner | Status |
 |---|---|---|---|---|
-| 1 | Source feeds (OSA, feedback, markdown log/sales, wastage) | `SOURCE_VOLUME_CHECK_TASK` daily, 28-day same-weekday median, writes `DATA_QUALITY_LOG`. Interim, warn-only — the real protection is the per-alert-type auto-skip gate (`prd-source-data-quality-gate.md`, **pending Dan's sign-off**) | Elaheh (build) → feed owner (respond — **owner TBC, Dan chasing**) | **LIVE** (log-only; timing fix pending Dan's 26 Aug choice) |
+| 1 | Source feeds (OSA, feedback, markdown log/sales, wastage) | `SOURCE_VOLUME_CHECK_TASK` daily, 28-day same-weekday median, writes `DATA_QUALITY_LOG`. Interim, warn-only — the real protection is the per-alert-type auto-skip gate (`prd-source-data-quality-gate.md`, **pending Dan's sign-off**) | Elaheh (build) → feed owner (respond — **owner TBC, Dan chasing**) | **LIVE** (log-only; after 11:30 UK, deployed 26 Aug) |
 | 2 | Alerts pipeline ran + wrote rows | `TASK_HISTORY` for `RUN_ALERTS_PIPELINE_TASK` (06:00 UK) + row count for today's `RUN_DATE` | Dan | Manual query (`scripts/check_task_status.py`); automate pre-pilot |
 | 3 | Alert volume/mix sanity | Compare totals + per-`TYPE` counts vs trailing baseline (cap of 2/type/store now live: normal ≈ 585/day) | Dan / Bryan | Manual; automate pre-pilot |
 | 4 | KPI batch ran + output complete | Chained `KPI_AVAILABILITY_BATCH_TASK`; 28-col schema incl. `TIME_OF_DAY_BREAKDOWN` | Elaheh | **LIVE** (chained); output check manual, automate pre-pilot |
@@ -39,7 +39,7 @@
 
 1. **Cornelious:** .NET liveness endpoint URL for the probe (row 5).
 2. **Snowflake admin (ACCOUNTADMIN):** notification integration for warning emails.
-3. **Dan (26 Aug):** source-check timing choice — branches `fix/source-check-expect-day2` / `fix/source-check-after-1100` both ready.
+3. ~~**Dan (26 Aug):** source-check timing choice — branches `fix/source-check-expect-day2` / `fix/source-check-after-1100` both ready.~~ **DECIDED 26 Aug: merged `fix/source-check-after-1100` (11:30 UK, deployed).**
 4. **Dave:** pilot contact route for store-facing messages; stale-data visibility policy ("Data as of…" vs hide).
 5. **Dan/Dave:** feed-load owner named for row 1 responses.
 6. **Dave/Victoria:** help-desk vs product-team issue boundaries (26 Aug: still open).

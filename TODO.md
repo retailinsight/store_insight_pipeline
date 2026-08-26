@@ -151,6 +151,8 @@ on small feature branches off the merged `main` — no more stacking on the inte
          tomorrow's 06:00 pipeline run.
       6. [x] **Prod:** source-volume check deployed 2026-08-22; **RESUMED 2026-08-24**
          (daily 05:30 UK, log-only until the email integration exists).
+         **Redeployed 2026-08-26** from PR #53 with 11:30 UK cron
+         (`SOURCE_VOLUME_CHECK_TASK` resumed; `check_prod_task_states.py` added).
 - [x] **D. Watched first runs — verified 25 Aug (Slack update sent 11:10):**
       (1) cap worked — total alerts 1,209 → 585, WASTE_TRIM 755 → 88, other
       types at normal levels, ~5 alerts/store avg; recorded in
