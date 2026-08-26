@@ -3,14 +3,32 @@
 Living document: re-validate before each deployment step and after each production run.
 Validation helpers: `scripts/validate_deploy_risks.py`, `scripts/check_run_output.py`, `scripts/spot_check_cards.py`, `scripts/migrate_alerts_table_schema.py`, `scripts/validate_lineage_populated.py`, `scripts/validate_merge_snowflake.py`, `scripts/check_task_history.py` (read-only except migration; VPN required).
 
-Last live-Snowflake validation: **2026-07-30 15:05** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
-Requirements/code review updated: **2026-07-30 15:10**
+Last live-Snowflake validation: **2026-08-25 (watched first runs after 24 Aug deploys)** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
+Requirements/code review updated: **2026-08-25**
 
 ---
 
-## ⚠️ ACTIVE INCIDENT — daily task failing since 2026-07-22
+## ✅ Watched first runs — 2026-08-25 (cap + KPI chain + source check)
 
-**Status: ROOT CAUSE IDENTIFIED, FIX MERGED, REDEPLOY PENDING.**
+First production run after the 24 Aug deploys (alert cap `max_per_type_per_store=2`,
+KPI batch task chained after the pipeline, source-volume check resumed).
+Results posted to Slack 11:10, Dan + Dave tagged.
+
+| Check | Result |
+|---|---|
+| Alert cap effect | ✅ Total alerts **1,209 → 585**; `WASTE_TRIM` **755 → 88**; other alert types at normal levels; ~5 alerts/store average |
+| KPI chain | ✅ KPI batch ran after the 06:00 pipeline and wrote fresh rows to prod `KPI_AVAILABILITY_SUMMARY` |
+| Source-volume check | ⚠️ Ran at 05:30 but **false-failed all five feeds** — feeds are healthy; day-X data lands ~11:00 on X+1, so at 06:00 the pipeline first sees day-X data on X+2 |
+
+Open decisions (Dan deferred to 26 Aug session): (a) source check — expect
+day-2 data vs move the check after 11:00; (b) Dave — is X+2 freshness
+acceptable per alert type (`ALERT_DATA_AGE_REVIEW.md` prepared for the review).
+
+---
+
+## RESOLVED INCIDENT (July) — daily task failing 2026-07-22 → 2026-07-30
+
+**Status: RESOLVED — redeployed from merged branch, backfill completed.**
 
 - `TASK_HISTORY` shows `RUN_ALERTS_PIPELINE_TASK` FAILED every day 2026-07-24 → 2026-07-30
   (window limit 7 days; last successful write was `RUN_DATE=2026-07-21`).
