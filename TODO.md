@@ -151,12 +151,17 @@ on small feature branches off the merged `main` — no more stacking on the inte
          tomorrow's 06:00 pipeline run.
       6. [x] **Prod:** source-volume check deployed 2026-08-22; **RESUMED 2026-08-24**
          (daily 05:30 UK, log-only until the email integration exists).
-- [ ] **D. Watched first runs — TOMORROW MORNING (25 Aug, after 06:00):**
-      everything is now live, so check: (1) alert counts — cap should clamp
-      WASTE_TRIM from ~750 to ≤2/store; record before/after mix in
-      `RISK_VALIDATION.md`; (2) KPI_AVAILABILITY_SUMMARY got prod rows from
-      the chained task (28 cols, markdown placeholders carried forward);
-      (3) DATA_QUALITY_LOG 05:30 entry (feeds still landing 08:30–08:40?).
+- [x] **D. Watched first runs — verified 25 Aug (Slack update sent 11:10):**
+      (1) cap worked — total alerts 1,209 → 585, WASTE_TRIM 755 → 88, other
+      types at normal levels, ~5 alerts/store avg; recorded in
+      `RISK_VALIDATION.md`; (2) KPI chain worked — KPI batch ran after the
+      06:00 pipeline and wrote fresh prod rows; (3) source check ran but
+      **false-failed all five feeds at 05:30** — feeds are healthy; closer
+      probe shows day-X data lands ~11:00 on X+1, so the 06:00 pipeline first
+      sees it on X+2. Two questions posted (Dan: expect day-2 data vs move
+      check after 11:00; Dave: is X+2 fresh enough per alert type —
+      `ALERT_DATA_AGE_REVIEW.md` ready). **Dan 25 Aug: tackling both together
+      tomorrow.**
 - [ ] **E. Answer Dave's test-store follow-ups** — store IDs posted (470 main,
       441/490 back-ups); support the automated-testing items 7–9 as they come up.
 
