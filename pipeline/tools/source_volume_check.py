@@ -35,6 +35,28 @@ BASELINE_WEEKS = 4
 # Hierarchies are dimension-like (no daily volume) and are out of scope here.
 DAILY_SOURCES = ['osa', 'feedback', 'markdown_log', 'markdown_sales', 'wastage']
 
+# Expected lag (days behind today) of each source's latest complete day.
+# Observed at the first 11:30 check on 2026-08-27: osa/markdown_log land at
+# X+1 (~11:00), but feedback was one day further behind and
+# markdown_sales/wastage two days further behind. PROVISIONAL until the
+# 2026-08-28 run confirms the pattern is structural rather than a late load.
+DEFAULT_LAG_DAYS = 1
+SOURCE_LAG_DAYS = {
+    'osa': 1,
+    'markdown_log': 1,
+    'feedback': 2,
+    'markdown_sales': 3,
+    'wastage': 3,
+}
+
+
+def check_dates_for(sources: dict[str, str], base_date: datetime.date,
+                    lag_days: dict[str, int] | None = None) -> dict[str, datetime.date]:
+    """Per-source check date: base_date minus that source's expected lag."""
+    lags = {**SOURCE_LAG_DAYS, **(lag_days or {})}
+    return {name: base_date - datetime.timedelta(days=lags.get(name, DEFAULT_LAG_DAYS))
+            for name in sources}
+
 
 def classify(observed: int, baseline: float,
              suspect_fraction: float = SUSPECT_FRACTION,
@@ -86,12 +108,19 @@ def check_source(runner, source_name: str, table_fqn: str, check_date: datetime.
     }
 
 
-def run_check(runner, sources: dict[str, str], check_date: datetime.date,
+def run_check(runner, sources: dict[str, str], check_date: datetime.date | None,
               suspect_fraction: float = SUSPECT_FRACTION,
-              failed_fraction: float = FAILED_FRACTION) -> list[dict]:
-    """Check every source. sources maps source_name -> table FQN."""
+              failed_fraction: float = FAILED_FRACTION,
+              check_dates: dict[str, datetime.date] | None = None) -> list[dict]:
+    """Check every source. sources maps source_name -> table FQN.
+
+    check_date applies to every source (manual override); a per-source
+    check_dates mapping wins over it when provided.
+    """
+    dates = check_dates or {}
     return [
-        check_source(runner, name, fqn, check_date, suspect_fraction, failed_fraction)
+        check_source(runner, name, fqn, dates.get(name, check_date),
+                     suspect_fraction, failed_fraction)
         for name, fqn in sources.items()
     ]
 
@@ -119,14 +148,14 @@ def build_email(results: list[dict], check_date: datetime.date) -> tuple[str, st
         f"{r['source_name']} {r['status']}" for r in bad
     )
     lines = [
-        f'Source volume check for {check_date} found problems.',
+        f'Source volume check run {check_date} found problems.',
         'This check warns only. It does not stop the 06:00 alerts run.',
         '',
     ]
     for r in bad:
         base = 'no baseline' if r['baseline_rows'] is None else f"baseline {r['baseline_rows']:.0f}"
-        lines.append(f"- {r['source_name']}: {r['status']} — {r['row_count']} rows vs {base}"
-                     f" ({r['table_fqn']})")
+        lines.append(f"- {r['source_name']} ({r['check_date']}): {r['status']} — "
+                     f"{r['row_count']} rows vs {base} ({r['table_fqn']})")
     lines += ['', 'Log: DATA_QUALITY_LOG. First step: check the source feed for the day shown.']
     return subject, '\n'.join(lines)
 
@@ -137,17 +166,24 @@ def run_and_log(session, sources: dict[str, str], log_table: str,
                 email_recipients: str | None = None) -> str:
     """SP entry point: run the check, write the log, send one grouped warning.
 
-    check_date defaults to yesterday (the latest complete source day).
+    Without an explicit check_date, each source is checked at its expected
+    lag behind today (SOURCE_LAG_DAYS; default yesterday). An explicit
+    check_date overrides the lag and applies to every source (manual runs).
     Email is best-effort: skipped when no integration is configured, and an
     email failure never fails the check itself.
     """
     def runner(sql):
         return [row.as_dict() for row in session.sql(sql).collect()]
 
-    cd = (datetime.date.fromisoformat(check_date) if check_date
-          else datetime.date.today() - datetime.timedelta(days=1))
-    results = run_check(runner, sources, cd)
-    write_log(runner, results, log_table, run_date=datetime.date.today())
+    today = datetime.date.today()
+    if check_date:
+        cd = datetime.date.fromisoformat(check_date)
+        results = run_check(runner, sources, cd)
+    else:
+        cd = today
+        results = run_check(runner, sources, None,
+                            check_dates=check_dates_for(sources, today))
+    write_log(runner, results, log_table, run_date=today)
 
     email = build_email(results, cd)
     email_status = 'no problems, no email'
@@ -162,7 +198,8 @@ def run_and_log(session, sources: dict[str, str], log_table: str,
     elif email:
         email_status = 'problems found but no email integration configured'
 
-    summary = ', '.join(f"{r['source_name']}={r['status']}" for r in results)
+    summary = ', '.join(f"{r['source_name']}={r['status']}({r['check_date']})"
+                        for r in results)
     return f'{cd}: {summary}; {email_status}'
 
 
@@ -171,7 +208,8 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(description='Pre-run source-volume check (warn-only).')
     parser.add_argument('--client', required=True)
-    parser.add_argument('--check-date', default=None, help='YYYY-MM-DD; defaults to yesterday')
+    parser.add_argument('--check-date', default=None,
+                        help='YYYY-MM-DD for every source; defaults to per-source expected lag')
     parser.add_argument('--log-table', default=None,
                         help='DATA_QUALITY_LOG FQN; omit to print results without writing')
     args = parser.parse_args()
@@ -186,12 +224,16 @@ def main() -> int:
     session = create_session(cfg)
     runner = snowflake_runner(session)
 
-    cd = (datetime.date.fromisoformat(args.check_date) if args.check_date
-          else datetime.date.today() - datetime.timedelta(days=1))
-    results = run_check(runner, sources, cd)
+    if args.check_date:
+        cd = datetime.date.fromisoformat(args.check_date)
+        results = run_check(runner, sources, cd)
+    else:
+        results = run_check(runner, sources, None,
+                            check_dates=check_dates_for(sources, datetime.date.today()))
     for r in results:
         base = '—' if r['baseline_rows'] is None else f"{r['baseline_rows']:.0f}"
-        print(f"{r['status']:8} {r['source_name']:16} {r['row_count']} rows vs baseline {base}")
+        print(f"{r['status']:8} {r['source_name']:16} ({r['check_date']}) "
+              f"{r['row_count']} rows vs baseline {base}")
     if args.log_table:
         write_log(runner, results, args.log_table, run_date=datetime.date.today())
         print(f'Written to {args.log_table}')
