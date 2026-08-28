@@ -618,6 +618,7 @@ def run_pipeline(
     return_intermediates: bool = False,
     run_id: str | None = None,
     pipeline_version: str | None = None,
+    gate_plan=None,
 ):
     """
     Run the full alerts pipeline and return a list of alert card dicts.
@@ -654,6 +655,9 @@ def run_pipeline(
                            used for output table names, detector/gatherer selection, and lookback windows
     return_intermediates : optional bool — when True, return (cards, signals, enriched)
                            instead of just cards; used for regression snapshots
+    gate_plan            : optional GatePlan from stages._0_quality.quality_gate —
+                           skips detectors on FAILED sources and flags signals
+                           from SUSPECT sources (never blocks the run)
 
     Returns
     -------
@@ -696,6 +700,7 @@ def run_pipeline(
         store_hierarchy=store_hierarchy,
         config=det_cfg,
         cfg=cfg,
+        gate_plan=gate_plan,
     )
 
     return run_pipeline_from_signals(

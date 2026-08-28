@@ -1,9 +1,9 @@
 # PRD — Source Data-Quality Gate
 
-**Date:** 2026-08-18
-**Status:** Draft — for review by Bryan / Daniel / Dave
+**Date:** 2026-08-18 · **Signed off by Daniel:** 2026-08-27 · **Pending sign-off:** Bryan, Dave
+**Status:** Implemented — PR #57 open for Dan's review/merge
 **Related ADR:** None yet (an ADR should be recorded once the fail-open/fail-closed policy is agreed)
-**Triage label:** `ready-for-review`
+**Triage label:** `ready-for-implementation`
 
 ---
 

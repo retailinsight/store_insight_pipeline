@@ -251,8 +251,20 @@ scoring:
 # them into hard errors that stop the pipeline.
 # Checks cover: required columns, row counts, date ranges, negative values,
 # and expected store coverage (if store_hierarchy is provided).
+#
+# Stage-0 gate (prd-source-data-quality-gate.md, Dan signed off 27 Aug 2026):
+# classifies each daily source vs its trailing 28-day same-weekday median.
+# Never blocks the whole run — a FAILED source skips only the detectors that
+# consume it (read from each detector's detect() signature); SUSPECT sources
+# flag their signals with data_quality_flag = SUSPECT_SOURCE.
 data_quality:
   strict: false
+  gate_enabled: true
+  suspect_fraction: 0.75          # below 75% of baseline → SUSPECT
+  failed_fraction: 0.5            # below 50% of baseline → FAILED
+  baseline_weeks: 4               # trailing same-weekday baseline
+  calendar_exceptions: []         # dates (YYYY-MM-DD) exempt from gating, e.g. bank holidays
+  log_table: "{database}.{schema}.DATA_QUALITY_LOG"
 
 # ── Cortex LLM controls ──────────────────────────────────────────────────────
 # Budget and quality gates for the Cortex narrative engine.  When the budget is

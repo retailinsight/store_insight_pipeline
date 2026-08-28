@@ -3,8 +3,36 @@
 Living document: re-validate before each deployment step and after each production run.
 Validation helpers: `scripts/validate_deploy_risks.py`, `scripts/check_run_output.py`, `scripts/spot_check_cards.py`, `scripts/migrate_alerts_table_schema.py`, `scripts/validate_lineage_populated.py`, `scripts/validate_merge_snowflake.py`, `scripts/check_task_history.py` (read-only except migration; VPN required).
 
-Last live-Snowflake validation: **2026-08-26 (source-volume check redeploy to 11:30 UK)** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
-Requirements/code review updated: **2026-08-26**
+Last live-Snowflake validation: **2026-08-28 (per-source-lag fix deployed to prod; false failures gone)** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
+Requirements/code review updated: **2026-08-28 (per-source feed lag confirmed structural; PR #56 merged and live)**
+
+---
+
+## ✅ Per-source lag fix LIVE in prod — 2026-08-28
+
+PR **#56** (`fix/source-check-per-source-lag`) merged by Dan. `SP_SOURCE_VOLUME_CHECK`
+and `SOURCE_VOLUME_CHECK_TASK` redeployed from `main` and resumed — daily 11:30 UK,
+log-only until the email/Slack notification integration exists.
+`SOURCE_LAG_DAYS`: osa/markdown_log = 1, feedback/markdown_sales/wastage = 3.
+
+Manual CALL with no explicit `check_date` (so each source is read at its own expected
+lag) proves the fix — same feeds, same day, before vs after:
+
+| Source | Checked | Rows | Baseline | Before (single X+1) | After (per-source lag) |
+|---|---|---|---|---|---|
+| `osa` | 2026-08-27 | 1,138,018 | 1,146,549 | OK | ✅ OK |
+| `markdown_log` | 2026-08-27 | 4,158 | 4,150 | OK | ✅ OK |
+| `feedback` | 2026-08-25 | 2,311 | 1,646 | FAILED (0 rows) | ✅ OK |
+| `markdown_sales` | 2026-08-25 | 288,127 | 291,256 | FAILED (0 rows) | ✅ OK |
+| `wastage` | 2026-08-25 | 1,879 | 1,932 | FAILED (0 rows) | ✅ OK |
+
+SP returned `no problems, no email`. The three daily false failures are gone, so a
+`FAILED` row in `DATA_QUALITY_LOG` now means a feed is genuinely short.
+
+**Dan's position (28 Aug Slack):** X+3 freshness is acceptable — stores largely do not
+action an alert on the same day it appears in the app.
+**Open ask to Dan:** name a primary + backup owner for the feed loads, to receive
+genuine short-feed warnings once the notification integration is approved.
 
 ---
 
@@ -31,6 +59,63 @@ acceptable per alert type (`ALERT_DATA_AGE_REVIEW.md` prepared for the review).
 - **Change:** `SOURCE_VOLUME_CHECK_TASK` rescheduled from 05:30 to 11:30 UK, after the daily feeds have loaded.
 - **Deploy:** `SP_SOURCE_VOLUME_CHECK` and `SOURCE_VOLUME_CHECK_TASK` redeployed to prod and resumed.
 - **Next check:** 2026-08-27 11:30 UK; `DATA_QUALITY_LOG` should show the previous day without false failures.
+- **Outcome:** still false-failed three feeds — the single X+1 assumption was wrong; superseded by the per-source lag fix (28 Aug section above).
+
+---
+
+## ⚠️ First 11:30 source check — 2026-08-27: three feeds lag more than one day
+
+First run of the rescheduled `SOURCE_VOLUME_CHECK_TASK` (11:30 UK, SUCCEEDED at 11:30:12).
+Verified with `scripts/check_morning_run.py` + read-only MAX(DATE) queries at 11:36.
+
+| Source | Check (26 Aug) | Actual latest data | Verdict |
+|---|---|---|---|
+| `osa` | OK (1,140,360 rows) | 26 Aug | healthy |
+| `markdown_log` | OK (4,252 rows) | 26 Aug | healthy |
+| `feedback` | FAILED (0 rows vs 1,582 baseline) | **25 Aug** | one day further behind |
+| `markdown_sales` | FAILED (0 rows vs 289,282 baseline) | **24 Aug** | two days behind |
+| `wastage` | FAILED (0 rows vs 1,775 baseline) | **24 Aug** | two days behind |
+
+- The 25 Aug assumption “all five feeds land in one batch ~11:00 on X+1” does **not** hold today:
+  only `osa` and `markdown_log` have X+1 data at 11:36. Either today's batch is late/partial or
+  `feedback`/`markdown_sales`/`wastage` have a longer natural lag.
+- Warn-only check behaved correctly (task succeeded, log written, no pipeline impact).
+- Actions: post to Slack per one-pager interim process (rows 1–4 morning query); chase the feed
+  owner (owner TBC — Dan chasing); re-check tomorrow after 11:30 — decision steps in `TODO.md`
+  ("Decision point 2026-08-28").
+- **Fix pre-built (not merged):** branch `fix/source-check-per-source-lag` (commit `9a6072f`)
+  adds per-source `SOURCE_LAG_DAYS` check dates; provisional lags 1/1/2/3/3 pending the 28 Aug
+  run. If confirmed: open PR, merge, redeploy, and update `ALERT_DATA_AGE_REVIEW.md`. If the
+  feeds caught up, delete the branch. Do not switch to `fix/source-check-expect-day2` — it would
+  still false-fail `markdown_sales`/`wastage` (2 days behind, not 1).
+- Rest of the morning check healthy: alerts 06:00 SUCCEEDED (536 alerts, caps respected),
+  KPI chain SUCCEEDED (121 rows, `Subcategory`/`When` populated).
+
+---
+
+## ⚠️ Second 11:30 source check — 2026-08-28: per-source lag CONFIRMED structural
+
+Second run of the 11:30 `SOURCE_VOLUME_CHECK_TASK` (SUCCEEDED at 11:30:18). Verified with
+`scripts/check_morning_run.py` (11:38) + read-only MAX(DATE) and baseline probes (~13:45).
+
+| Source | Check (27 Aug day) | MAX(DATE) at 28 Aug | Baseline check at observed lag |
+|---|---|---|---|
+| `osa` | OK (1,138,018 rows) | 27 Aug (X+1) | OK at lag 1 |
+| `markdown_log` | OK (4,158 rows) | 27 Aug (X+1) | OK at lag 1 |
+| `feedback` | FAILED (0 rows vs 1,658 baseline) | 26 Aug (X+2) | **X+2 day only ~72% filled (SUSPECT, 1,137 vs 1,582); complete at X+3 (2,311 vs 1,646 OK)** |
+| `markdown_sales` | FAILED (0 rows vs 291,243 baseline) | 26 Aug (X+2) | OK at lag 2 (283,638 vs 289,282) — but was X+3 on 27 Aug |
+| `wastage` | FAILED (0 rows vs 1,716 baseline) | 26 Aug (X+2) | OK at lag 2 (1,790 vs 1,776) — but was X+3 on 27 Aug |
+
+- Two consecutive days of the same pattern → the lag is **structural**, not a one-off late load.
+- `SOURCE_LAG_DAYS` finalised on `fix/source-check-per-source-lag` (commit `5dd9266`):
+  osa/markdown_log **1**, feedback/markdown_sales/wastage **3** (max observed lag; the check is
+  warn-only, so it must not false-fail on a normal-but-slow load day). Full suite 559 passed / 2 skipped.
+- PR opened for merge to `main`; after merge redeploy with
+  `deploy_source_volume_check_task.py --env prod --resume` (schedule unchanged, 11:30 UK).
+- `ALERT_DATA_AGE_REVIEW.md` needs updating for Dave's freshness review: worst case is
+  feedback-driven alerts on X+3 data at the 06:00 run.
+- Rest of the morning check healthy: alerts 06:00 SUCCEEDED (522 alerts, caps respected:
+  WASTE_TRIM 55), KPI chain SUCCEEDED (121 rows, `Subcategory`/`When` populated).
 
 ---
 

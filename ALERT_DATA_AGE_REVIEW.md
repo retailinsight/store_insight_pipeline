@@ -1,7 +1,29 @@
 # Alert timing review — how old is the data behind each action?
 
-**Date:** 2026-08-24. **For:** Dave and Dan's action-by-action review this week.
+**Date:** 2026-08-24 (updated **2026-08-28** — see the box below). **For:** Dave and Dan's action-by-action review this week.
 **Written by:** Elaheh.
+
+> **28 Aug update — the “one batch, all D-1” premise no longer holds.** The 11:30
+> source checks on 27 and 28 Aug show each feed has its own natural lag:
+> `osa`/`markdown_log` land at **X+1**, but `feedback`, `markdown_sales` and
+> `wastage` are only reliably complete at **X+3** (feedback's X+2 day was ~72%
+> filled on 28 Aug; markdown_sales/wastage were X+3 on 27 Aug, X+2 on 28 Aug).
+> What changes for this review:
+>
+> - **Worst case data age is X+3, not X+2** — for FEEDBACK-driven actions
+>   (COMPLIANCE) and the markdown_sales/wastage inputs to the three ratio checks.
+> - **Moving the run to ~09:15 no longer gives D-1 for every feed** — only for
+>   osa/markdown_log. The three lagging feeds stay 2–3 days behind regardless
+>   of run time, so the mismatch risk in WASTE / WASTE_TRIM /
+>   MARKDOWN_SELLTHROUGH is structural, not a run-time problem. The real fix
+>   for those is aligning detector windows to the min(max-date) across a
+>   check's feeds.
+> - The 11:30 source check now expects each feed's own lag
+>   (`fix/source-check-per-source-lag`), so `DATA_QUALITY_LOG` only flags
+>   genuine shortfalls.
+>
+> The per-action table below still describes which feeds each action uses; read
+> its “Window” ages against the per-feed lags above rather than a single D-2/D-1.
 
 ## Read this first
 

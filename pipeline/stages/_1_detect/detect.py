@@ -111,6 +111,8 @@ def _merge_signals(all_signals):
                 # COMPLIANCE fields
                 'last_week_tf_rate', 'this_week_tf_rate', 'tf_rate_change',
                 'chain_tf_rate', 'above_chain_by',
+                # Data-quality gate (stage 0)
+                'data_quality_flag',
             ):
                 if sig.get(field) is None:
                     continue
@@ -147,6 +149,7 @@ def detect_signals(
     store_hierarchy=None,
     config: DetectorConfig = None,
     cfg: dict = None,
+    gate_plan=None,
 ):
     """
     Run registered detectors and return a merged list of signal dicts.
@@ -177,6 +180,10 @@ def detect_signals(
                      defaults to DetectorConfig() (all defaults)
     cfg            : optional dict — merged config from config.loader;
                      ``cfg['detectors']['enabled']`` selects which detectors run
+    gate_plan      : optional GatePlan from stages._0_quality.quality_gate;
+                     detectors consuming a FAILED source are skipped, and
+                     signals from detectors consuming a SUSPECT source carry
+                     ``data_quality_flag = 'SUSPECT_SOURCE'``
 
     Returns
     -------
@@ -240,7 +247,16 @@ def detect_signals(
     all_signals = []
     counts = {}
     for detector in detectors:
+        if gate_plan is not None and gate_plan.should_skip(detector):
+            name = _detector_module_name(detector)
+            reason = gate_plan.skipped_detectors.get(name, 'failed source')
+            print(f'[1_detect] SKIPPED {name} — FAILED source: {reason}')
+            counts[name.upper()] = 0
+            continue
         result = detector.detect(**matching_kwargs(detector.detect, all_kwargs))
+        if gate_plan is not None and result and gate_plan.should_flag(detector):
+            for sig in result:
+                sig['data_quality_flag'] = 'SUSPECT_SOURCE'
         all_signals.extend(result)
         label = result[0]['trigger_types'][0] if result else detector.__name__.split('.')[-1].upper()
         counts[label] = len(result)

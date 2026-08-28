@@ -1,6 +1,46 @@
 # Store Insight — TODO
 
-Last updated: 2026-08-24
+Last updated: 2026-08-28
+
+## Next / in flight (2026-08-28)
+
+High priority:
+- [ ] **Get Dan to review + merge stage-0 quality-gate PR #57**
+      (https://github.com/dantretailinsight/store_insight/pull/57) — full suite 575 passed / 2 skipped,
+      branch rebased on latest main
+- [ ] **Answer Dan: name a feed-load owner** — he replied 28 Aug "what do you want me to
+      name?" and is happy with X+3 (actions rarely taken the day an alert lands). Need a
+      primary + backup to receive genuine short-feed warnings; then add to the runbook and
+      wire into the Snowflake notification once the Jira ticket lands.
+- [ ] Send Dave the remaining open operating-model and technical-review items (incl. updated `ALERT_DATA_AGE_REVIEW.md` — worst case now X+3)
+- [ ] Confirm seeded write-test store ID with Dave; Cornelious points test account
+- [ ] Pipeline seeding for write-test store in DEV/CRT once store ID/cadence confirmed
+
+Medium priority:
+- [ ] Push RISK_VALIDATION + doc updates (27/28 Aug) when ready
+
+Done 28 Aug (later):
+- [x] **PR #56 merged by Dan** (per-source lag) and **redeployed to prod** —
+      `deploy_source_volume_check_task.py --env prod --resume`; task STARTED, daily 11:30 UK
+- [x] **Fix proven live:** manual CALL with per-source lags returned all five feeds OK
+      (`no problems, no email`); the three daily false failures are gone — a `FAILED` row in
+      `DATA_QUALITY_LOG` now means a genuinely short feed. Before/after table in `RISK_VALIDATION.md`
+- [x] Posted 28 Aug feed-lag confirmation to Slack (structural, per-source lags 1/1/3/3/3)
+
+Done 28 Aug:
+- [x] Submit Jira ticket to Systems Engineering to run Snowflake Slack notification setup
+- [x] 11:30 re-check confirmed the lag is structural (feedback X+2 only ~72% filled; complete X+3);
+      `SOURCE_LAG_DAYS` finalised at 1/1/3/3/3, tests updated, 559 passed / 2 skipped, branch pushed
+- [x] Updated `RISK_VALIDATION.md` (28 Aug section) and `ALERT_DATA_AGE_REVIEW.md` (per-feed lags)
+
+Done 27 Aug:
+- [x] Update PILOT_TEST_AUTOMATION_PHASE1.md with test data strategy
+- [x] Create pilot monitoring Slack channel and webhook
+- [x] Record 26/27 Aug Dan meeting notes and decisions
+- [x] Mark prd-source-data-quality-gate.md as signed off by Dan
+- [x] Draft Slack notifications ticket for Dan/Jeremy review
+- [x] Pre-build per-source expected-lag branch (fix/source-check-per-source-lag)
+- [x] Record Dan's 27 Aug responses to the six sign-offs and update relevant docs
 
 ## Done 2026-07-17
 - [x] **Daily deployment LIVE** — Stored Procedure and scheduled Task
@@ -166,6 +206,33 @@ on small feature branches off the merged `main` — no more stacking on the inte
       tomorrow.**
 - [ ] **E. Answer Dave's test-store follow-ups** — store IDs posted (470 main,
       441/490 back-ups); support the automated-testing items 7–9 as they come up.
+
+### Decision point 2026-08-28, after 11:30 — per-source feed lag
+
+- [ ] **F. First 11:30 source check (27 Aug) found three feeds behind X+1** —
+      task SUCCEEDED at 11:30:12 but `DATA_QUALITY_LOG` shows `feedback`,
+      `markdown_sales`, `wastage` FAILED with 0 rows for 26 Aug. MAX(DATE)
+      probes at 11:36: feedback = 25 Aug (X+2), markdown_sales/wastage =
+      24 Aug (X+3); osa/markdown_log current at 26 Aug (X+1). So the 25 Aug
+      "all five feeds land in one batch ~11:00 on X+1" finding does not hold
+      for all sources. Details in `RISK_VALIDATION.md` (27 Aug section).
+      **Fix pre-built, not merged:** branch `fix/source-check-per-source-lag`
+      (commit `9a6072f`, off latest main) adds `SOURCE_LAG_DAYS` per-source
+      check dates (osa/markdown_log 1, feedback 2, markdown_sales/wastage 3
+      — provisional); explicit `check_date` still overrides for manual runs;
+      6 new tests, full suite 559 passed / 2 skipped.
+      **Tomorrow after 11:30 (28 Aug):** re-run `scripts/check_morning_run.py`
+      + MAX(DATE) probes.
+      • Lags repeat → structural: adjust `SOURCE_LAG_DAYS` to observed values,
+        open the PR, merge, redeploy
+        (`deploy_source_volume_check_task.py --env prod --resume`), and update
+        `ALERT_DATA_AGE_REVIEW.md` for Dave's freshness review (wastage at X+3
+        changes the data-age table).
+      • Feeds caught up → 27 Aug was a late load: delete the branch, no code
+        change; the warn did its job.
+      Do NOT switch to `fix/source-check-expect-day2` — today's data shows it
+      would still false-fail markdown_sales/wastage (they are 2 days behind,
+      not 1) while checking stale days for the healthy feeds.
 
 ### Waiting on others
 
