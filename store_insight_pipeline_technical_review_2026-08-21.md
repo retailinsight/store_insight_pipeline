@@ -3,6 +3,8 @@
 **Date:** 21 August 2026  
 **Purpose:** Share the current state, key risks, owners, and work needed for the pilot.
 
+> **26–27 Aug update:** `fix/source-check-after-1100` (11:30 UK source check) is merged and deployed; `scripts/check_task_status.py` (PR #55) is merged to main; the monitoring one-pager is live. The remaining open items are the alert-ID rule, `AFFECTED_PRODUCTS` fill, three-per-store limit, sample-field policy, outcome rules, .NET liveness URL, notification integration, and support-owner boundaries.
+
 ## 1. Main view
 
 The pipeline and Snowflake base are strong. Much of the old system-map work is now done.
