@@ -5,9 +5,9 @@ Last updated: 2026-08-28
 ## Next / in flight (2026-08-28)
 
 High priority:
-- [ ] **Open + get review on the stage-0 quality-gate PR** (branch `feat/quality-gate-auto-skip`,
-      pushed and rebased on merged main; open at
-      https://github.com/dantretailinsight/store_insight/pull/new/feat/quality-gate-auto-skip)
+- [ ] **Get Dan to review + merge stage-0 quality-gate PR #57**
+      (https://github.com/dantretailinsight/store_insight/pull/57) — full suite 575 passed / 2 skipped,
+      branch rebased on latest main
 - [ ] **Answer Dan: name a feed-load owner** — he replied 28 Aug "what do you want me to
       name?" and is happy with X+3 (actions rarely taken the day an alert lands). Need a
       primary + backup to receive genuine short-feed warnings; then add to the runbook and
