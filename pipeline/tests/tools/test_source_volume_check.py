@@ -3,8 +3,11 @@
 import datetime
 
 from store_insight.pipeline.tools.source_volume_check import (
+    DEFAULT_LAG_DAYS,
+    SOURCE_LAG_DAYS,
     baseline_dates,
     build_email,
+    check_dates_for,
     check_source,
     classify,
     run_check,
@@ -108,6 +111,62 @@ def test_baseline_is_median_of_available_weeks():
 # ---------------------------------------------------------------------------
 # run_check / write_log / build_email
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# per-source expected lag
+# ---------------------------------------------------------------------------
+
+def test_check_dates_use_per_source_expected_lag():
+    """Confirmed 2026-08-27/28: osa/markdown_log at X+1; feedback,
+    markdown_sales and wastage complete by X+3 — each source checks
+    its own latest complete day."""
+    sources = {'osa': 'T', 'feedback': 'T', 'markdown_sales': 'T', 'wastage': 'T'}
+    dates = check_dates_for(sources, MONDAY)
+    assert dates['osa'] == MONDAY - datetime.timedelta(days=1)
+    assert dates['feedback'] == MONDAY - datetime.timedelta(days=3)
+    assert dates['markdown_sales'] == MONDAY - datetime.timedelta(days=3)
+    assert dates['wastage'] == MONDAY - datetime.timedelta(days=3)
+
+
+def test_check_dates_unknown_source_falls_back_to_default_lag():
+    dates = check_dates_for({'new_feed': 'T'}, MONDAY)
+    assert dates['new_feed'] == MONDAY - datetime.timedelta(days=DEFAULT_LAG_DAYS)
+
+
+def test_check_dates_explicit_lag_overrides_module_default():
+    dates = check_dates_for({'osa': 'T'}, MONDAY, lag_days={'osa': 5})
+    assert dates['osa'] == MONDAY - datetime.timedelta(days=5)
+
+
+def test_every_daily_source_has_a_configured_lag():
+    from store_insight.pipeline.tools.source_volume_check import DAILY_SOURCES
+    assert set(SOURCE_LAG_DAYS) == set(DAILY_SOURCES)
+
+
+def test_run_check_uses_per_source_check_dates():
+    osa_date = MONDAY - datetime.timedelta(days=1)
+    wastage_date = MONDAY - datetime.timedelta(days=3)
+    counts = {}
+    for d in (osa_date, wastage_date):
+        counts[str(d)] = 100
+        for b in baseline_dates(d):
+            counts[str(b)] = 100
+    sources = {'osa': 'DB.S.OSA', 'wastage': 'DB.S.WASTAGE'}
+    results = run_check(_runner_with_counts(counts), sources, None,
+                        check_dates=check_dates_for(sources, MONDAY))
+    by_name = {r['source_name']: r for r in results}
+    assert by_name['osa']['check_date'] == str(osa_date)
+    assert by_name['wastage']['check_date'] == str(wastage_date)
+    assert all(r['status'] == 'OK' for r in results)
+
+
+def test_run_check_explicit_check_date_beats_lag():
+    counts = {str(MONDAY): 100}
+    for d in baseline_dates(MONDAY):
+        counts[str(d)] = 100
+    results = run_check(_runner_with_counts(counts), {'wastage': 'T'}, MONDAY)
+    assert results[0]['check_date'] == str(MONDAY)
+
 
 def test_run_check_covers_every_source():
     counts = {str(MONDAY): 100}
