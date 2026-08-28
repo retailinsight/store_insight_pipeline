@@ -5,20 +5,27 @@ Last updated: 2026-08-28
 ## Next / in flight (2026-08-28)
 
 High priority:
-- [ ] **Get Dan to review + merge the per-source-lag PR** (branch `fix/source-check-per-source-lag`,
-      commit `9a6072f` pushed; open at
-      https://github.com/dantretailinsight/store_insight/compare/main...fix/source-check-per-source-lag);
-      after merge: `deploy_source_volume_check_task.py --env prod --resume`
 - [ ] **Open + get review on the stage-0 quality-gate PR** (branch `feat/quality-gate-auto-skip`,
-      commit `73781a0` pushed; open at
+      pushed and rebased on merged main; open at
       https://github.com/dantretailinsight/store_insight/pull/new/feat/quality-gate-auto-skip)
-- [ ] Post 28 Aug feed-lag confirmation to Slack (structural, per-source lags 1/1/3/3/3); chase feed owner via Dan
+- [ ] **Answer Dan: name a feed-load owner** — he replied 28 Aug "what do you want me to
+      name?" and is happy with X+3 (actions rarely taken the day an alert lands). Need a
+      primary + backup to receive genuine short-feed warnings; then add to the runbook and
+      wire into the Snowflake notification once the Jira ticket lands.
 - [ ] Send Dave the remaining open operating-model and technical-review items (incl. updated `ALERT_DATA_AGE_REVIEW.md` — worst case now X+3)
 - [ ] Confirm seeded write-test store ID with Dave; Cornelious points test account
 - [ ] Pipeline seeding for write-test store in DEV/CRT once store ID/cadence confirmed
 
 Medium priority:
 - [ ] Push RISK_VALIDATION + doc updates (27/28 Aug) when ready
+
+Done 28 Aug (later):
+- [x] **PR #56 merged by Dan** (per-source lag) and **redeployed to prod** —
+      `deploy_source_volume_check_task.py --env prod --resume`; task STARTED, daily 11:30 UK
+- [x] **Fix proven live:** manual CALL with per-source lags returned all five feeds OK
+      (`no problems, no email`); the three daily false failures are gone — a `FAILED` row in
+      `DATA_QUALITY_LOG` now means a genuinely short feed. Before/after table in `RISK_VALIDATION.md`
+- [x] Posted 28 Aug feed-lag confirmation to Slack (structural, per-source lags 1/1/3/3/3)
 
 Done 28 Aug:
 - [x] Submit Jira ticket to Systems Engineering to run Snowflake Slack notification setup

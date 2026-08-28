@@ -3,8 +3,36 @@
 Living document: re-validate before each deployment step and after each production run.
 Validation helpers: `scripts/validate_deploy_risks.py`, `scripts/check_run_output.py`, `scripts/spot_check_cards.py`, `scripts/migrate_alerts_table_schema.py`, `scripts/validate_lineage_populated.py`, `scripts/validate_merge_snowflake.py`, `scripts/check_task_history.py` (read-only except migration; VPN required).
 
-Last live-Snowflake validation: **2026-08-28 (second 11:30 source check + per-source lag probes)** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
-Requirements/code review updated: **2026-08-28 (per-source feed lag confirmed structural; `fix/source-check-per-source-lag` finalised, PR pending merge)**
+Last live-Snowflake validation: **2026-08-28 (per-source-lag fix deployed to prod; false failures gone)** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
+Requirements/code review updated: **2026-08-28 (per-source feed lag confirmed structural; PR #56 merged and live)**
+
+---
+
+## ✅ Per-source lag fix LIVE in prod — 2026-08-28
+
+PR **#56** (`fix/source-check-per-source-lag`) merged by Dan. `SP_SOURCE_VOLUME_CHECK`
+and `SOURCE_VOLUME_CHECK_TASK` redeployed from `main` and resumed — daily 11:30 UK,
+log-only until the email/Slack notification integration exists.
+`SOURCE_LAG_DAYS`: osa/markdown_log = 1, feedback/markdown_sales/wastage = 3.
+
+Manual CALL with no explicit `check_date` (so each source is read at its own expected
+lag) proves the fix — same feeds, same day, before vs after:
+
+| Source | Checked | Rows | Baseline | Before (single X+1) | After (per-source lag) |
+|---|---|---|---|---|---|
+| `osa` | 2026-08-27 | 1,138,018 | 1,146,549 | OK | ✅ OK |
+| `markdown_log` | 2026-08-27 | 4,158 | 4,150 | OK | ✅ OK |
+| `feedback` | 2026-08-25 | 2,311 | 1,646 | FAILED (0 rows) | ✅ OK |
+| `markdown_sales` | 2026-08-25 | 288,127 | 291,256 | FAILED (0 rows) | ✅ OK |
+| `wastage` | 2026-08-25 | 1,879 | 1,932 | FAILED (0 rows) | ✅ OK |
+
+SP returned `no problems, no email`. The three daily false failures are gone, so a
+`FAILED` row in `DATA_QUALITY_LOG` now means a feed is genuinely short.
+
+**Dan's position (28 Aug Slack):** X+3 freshness is acceptable — stores largely do not
+action an alert on the same day it appears in the app.
+**Open ask to Dan:** name a primary + backup owner for the feed loads, to receive
+genuine short-feed warnings once the notification integration is approved.
 
 ---
 
@@ -31,6 +59,7 @@ acceptable per alert type (`ALERT_DATA_AGE_REVIEW.md` prepared for the review).
 - **Change:** `SOURCE_VOLUME_CHECK_TASK` rescheduled from 05:30 to 11:30 UK, after the daily feeds have loaded.
 - **Deploy:** `SP_SOURCE_VOLUME_CHECK` and `SOURCE_VOLUME_CHECK_TASK` redeployed to prod and resumed.
 - **Next check:** 2026-08-27 11:30 UK; `DATA_QUALITY_LOG` should show the previous day without false failures.
+- **Outcome:** still false-failed three feeds — the single X+1 assumption was wrong; superseded by the per-source lag fix (28 Aug section above).
 
 ---
 
