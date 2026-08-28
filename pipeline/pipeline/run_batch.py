@@ -93,6 +93,7 @@ from store_insight.pipeline.pipeline.regression import (
     save_golden,
 )
 from store_insight.pipeline.pipeline.session import create_session, load_env
+from store_insight.pipeline.stages._0_quality.quality_gate import run_quality_gate
 from store_insight.pipeline.stages._5_outcomes.outcomes import measure_outcomes
 
 # ---------------------------------------------------------------------------
@@ -260,6 +261,9 @@ def run_single_date(
         store_label = store_id if isinstance(store_id, list | tuple) else [store_id]
         print(f"[run_batch] store filter  : {store_label}")
 
+    print("[run_batch] Stage 0: source data-quality gate...")
+    gate_plan = run_quality_gate(session, cfg, analysis_date=analysis_date)
+
     print("[run_batch] Loading OSA data...")
     osa = load_osa(session, w["lookback_start"], w["this_week_end"], cfg=cfg)
     print(f"[run_batch] OSA rows loaded & cached : {osa.count():,}")
@@ -296,6 +300,7 @@ def run_single_date(
         return_intermediates=deterministic,
         run_id=run_id,
         pipeline_version=pipeline_version,
+        gate_plan=gate_plan,
     )
 
     if deterministic:

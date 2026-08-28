@@ -383,6 +383,47 @@ class LoggingConfig(BaseModel):
     write_run_log: bool = False
 
 
+class DataQualityConfig(BaseModel):
+    """Stage-0 source data-quality gate settings.
+
+    Per Daniel (21 Aug 2026): the gate never blocks the whole run. A FAILED
+    source skips only the detectors that consume it; SUSPECT sources flag
+    their signals with data_quality_flag.
+    """
+
+    gate_enabled: bool = True
+    strict: bool = False
+    suspect_fraction: float = 0.75
+    failed_fraction: float = 0.5
+    baseline_weeks: int = 4
+    calendar_exceptions: list[str] = []
+    log_table: str | None = None
+
+    # Interpolation context - set during PipelineConfig validation
+    _database: str = ""
+    _schema_name: str = ""
+
+    @model_validator(mode="after")
+    def validate_fractions(self) -> "DataQualityConfig":
+        """Enforce 0 < failed_fraction <= suspect_fraction < 1."""
+        if not (0 < self.failed_fraction <= self.suspect_fraction < 1):
+            raise ValueError(
+                "data_quality fractions must satisfy "
+                f"0 < failed_fraction <= suspect_fraction < 1, got "
+                f"failed={self.failed_fraction}, suspect={self.suspect_fraction}"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def interpolate_placeholders(self) -> "DataQualityConfig":
+        """Resolve {database} and {schema} placeholders in log_table."""
+        if self.log_table and self._database and self._schema_name:
+            self.log_table = self.log_table.format(
+                database=self._database, schema=self._schema_name
+            )
+        return self
+
+
 class PipelineConfig(BaseModel):
     """Top-level pipeline configuration composing all sections."""
 
@@ -396,6 +437,7 @@ class PipelineConfig(BaseModel):
     schedule: ScheduleConfig
     scoring: ScoringConfig
     logging: LoggingConfig
+    data_quality: DataQualityConfig = DataQualityConfig()
     client_name: str = "default"
 
     @model_validator(mode="after")
@@ -407,6 +449,9 @@ class PipelineConfig(BaseModel):
         self.output._database = self.connection.database
         self.output._schema_name = self.connection.schema_name
         self.output.interpolate_placeholders()
+        self.data_quality._database = self.connection.database
+        self.data_quality._schema_name = self.connection.schema_name
+        self.data_quality.interpolate_placeholders()
         return self
 
 
