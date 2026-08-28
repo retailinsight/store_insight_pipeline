@@ -36,15 +36,17 @@ BASELINE_WEEKS = 4
 DAILY_SOURCES = ['osa', 'feedback', 'markdown_log', 'markdown_sales', 'wastage']
 
 # Expected lag (days behind today) of each source's latest complete day.
-# Observed at the first 11:30 check on 2026-08-27: osa/markdown_log land at
-# X+1 (~11:00), but feedback was one day further behind and
-# markdown_sales/wastage two days further behind. PROVISIONAL until the
-# 2026-08-28 run confirms the pattern is structural rather than a late load.
+# Confirmed structural over the 2026-08-27 and 2026-08-28 11:30 checks:
+# osa/markdown_log land at X+1 (~11:00). feedback's X+2 day is only partial
+# (~72% of baseline on 28 Aug) and completes by X+3. markdown_sales/wastage
+# were complete at X+2 on 28 Aug but only X+3 on 27 Aug, so 3 is the safe
+# expected lag — this check is warn-only and must not false-fail on a
+# normal-but-slow load day.
 DEFAULT_LAG_DAYS = 1
 SOURCE_LAG_DAYS = {
     'osa': 1,
     'markdown_log': 1,
-    'feedback': 2,
+    'feedback': 3,
     'markdown_sales': 3,
     'wastage': 3,
 }

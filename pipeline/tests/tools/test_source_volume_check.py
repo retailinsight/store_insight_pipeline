@@ -117,12 +117,13 @@ def test_baseline_is_median_of_available_weeks():
 # ---------------------------------------------------------------------------
 
 def test_check_dates_use_per_source_expected_lag():
-    """Observed 2026-08-27: osa/markdown_log at X+1 but feedback X+2,
-    markdown_sales/wastage X+3 — each source checks its own latest day."""
+    """Confirmed 2026-08-27/28: osa/markdown_log at X+1; feedback,
+    markdown_sales and wastage complete by X+3 — each source checks
+    its own latest complete day."""
     sources = {'osa': 'T', 'feedback': 'T', 'markdown_sales': 'T', 'wastage': 'T'}
     dates = check_dates_for(sources, MONDAY)
     assert dates['osa'] == MONDAY - datetime.timedelta(days=1)
-    assert dates['feedback'] == MONDAY - datetime.timedelta(days=2)
+    assert dates['feedback'] == MONDAY - datetime.timedelta(days=3)
     assert dates['markdown_sales'] == MONDAY - datetime.timedelta(days=3)
     assert dates['wastage'] == MONDAY - datetime.timedelta(days=3)
 
