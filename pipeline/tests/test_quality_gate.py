@@ -18,7 +18,6 @@ from store_insight.pipeline.stages._0_quality.quality_gate import (
 )
 from store_insight.pipeline.stages._1_detect import registry
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------

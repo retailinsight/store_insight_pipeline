@@ -36,11 +36,11 @@ import inspect
 from dataclasses import dataclass, field
 
 from store_insight.pipeline.tools.source_volume_check import (
-    check_dates_for,
-    run_check,
     DAILY_SOURCES,
     FAILED_FRACTION,
     SUSPECT_FRACTION,
+    check_dates_for,
+    run_check,
 )
 
 # Daily source dataframe parameters a detector can declare in detect().
