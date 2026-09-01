@@ -1,13 +1,15 @@
 # Store Insight — TODO
 
-Last updated: 2026-08-28
+Last updated: 2026-09-01
 
-## Next / in flight (2026-08-28)
+## Next / in flight (2026-09-01)
 
 High priority:
-- [ ] **Get Dan to review + merge stage-0 quality-gate PR #57**
-      (https://github.com/dantretailinsight/store_insight/pull/57) — full suite 575 passed / 2 skipped,
-      branch rebased on latest main
+- [ ] **Get PR merged: `fix/handler-run-quality-gate`** — 1 Sep finding: PR #57 wired the
+      gate into `run_batch.py` (local CLI) but NOT `deploy/handler.py` (the SP entrypoint
+      the 06:00 Task calls), so the four prod runs since 29 Aug were NOT gate-protected
+      (confirmed: no 06:00 gate rows in `DATA_QUALITY_LOG`, only the 11:30 check's).
+      Fix + regression test on branch; **redeploy pipeline after merge**.
 - [ ] **Answer Dan: name a feed-load owner** — he replied 28 Aug "what do you want me to
       name?" and is happy with X+3 (actions rarely taken the day an alert lands). Need a
       primary + backup to receive genuine short-feed warnings; then add to the runbook and
@@ -17,7 +19,19 @@ High priority:
 - [ ] Pipeline seeding for write-test store in DEV/CRT once store ID/cadence confirmed
 
 Medium priority:
-- [ ] Push RISK_VALIDATION + doc updates (27/28 Aug) when ready
+- [ ] After handler fix is live: verify next 06:00 run writes gate rows to `DATA_QUALITY_LOG`
+      (5 rows with gate `ACTION_TAKEN` in addition to the 11:30 check's 5)
+
+Done 1 Sep:
+- [x] **Weekend verification (29 Aug–1 Sep):** all 06:00 pipeline runs, KPI batches and
+      11:30 source checks SUCCEEDED; per-source lags working (one correct SUSPECT/WARNED
+      on feedback 30 Aug, all else OK); alert volumes 658–801/day
+- [x] Found + fixed the handler gate gap (branch `fix/handler-run-quality-gate`)
+
+Done 28 Aug (evening):
+- [x] **PR #57 merged by Dan** (stage-0 quality gate) and **pipeline redeployed to prod**
+      (`deploy.py --client eastofengland`; task resumed, 06:00 UK). EXECUTE TASK grant
+      already in place (17 Jul, ACCOUNTADMIN) — deploy warning was a harmless re-grant attempt
 
 Done 28 Aug (later):
 - [x] **PR #56 merged by Dan** (per-source lag) and **redeployed to prod** —

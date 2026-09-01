@@ -44,6 +44,15 @@ def test_daily_handler_defaults_to_rule_based():
     assert signature.parameters["use_cortex"].default is False
 
 
+def test_daily_handler_runs_quality_gate_and_passes_plan():
+    # Regression: prod runs go through handler.run, which must invoke the
+    # stage-0 gate and hand its plan to run_pipeline (missed in PR #57 —
+    # the gate only ran via run_batch.py, so scheduled runs were unprotected).
+    source = inspect.getsource(run)
+    assert "run_quality_gate(session, cfg, analysis_date=analysis_date)" in source
+    assert "gate_plan=gate_plan" in source
+
+
 def test_eastofengland_config_defaults_all_engines_to_rule_based():
     cfg = load_config("eastofengland")
     assert cfg.connection.schema_name == "PUBLIC"
