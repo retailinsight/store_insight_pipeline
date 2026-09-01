@@ -3,8 +3,36 @@
 Living document: re-validate before each deployment step and after each production run.
 Validation helpers: `scripts/validate_deploy_risks.py`, `scripts/check_run_output.py`, `scripts/spot_check_cards.py`, `scripts/migrate_alerts_table_schema.py`, `scripts/validate_lineage_populated.py`, `scripts/validate_merge_snowflake.py`, `scripts/check_task_history.py` (read-only except migration; VPN required).
 
-Last live-Snowflake validation: **2026-08-28 (per-source-lag fix deployed to prod; false failures gone)** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
-Requirements/code review updated: **2026-08-28 (per-source feed lag confirmed structural; PR #56 merged and live)**
+Last live-Snowflake validation: **2026-09-01 (weekend runs verified; handler gate gap found)** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
+Requirements/code review updated: **2026-09-01 (stage-0 gate missing from SP handler — fix on `fix/handler-run-quality-gate`)**
+
+---
+
+## ⚠️ Stage-0 gate was NOT active in prod runs — found 2026-09-01
+
+PR **#57** (stage-0 quality gate) merged 28 Aug and the pipeline was redeployed the same
+evening, but the gate was only wired into `run_batch.py` (local CLI). The deployed SP
+entrypoint `pipeline/deploy/handler.py::run` — what `RUN_ALERTS_PIPELINE_TASK` actually
+calls at 06:00 — never invoked `run_quality_gate` and never passed a `gate_plan` to
+`run_pipeline`. **The four prod runs 29 Aug–1 Sep were therefore not gate-protected.**
+
+Evidence: `DATA_QUALITY_LOG` has only the 11:30 check's five rows per day since 29 Aug —
+no 06:00 gate rows with a gate `ACTION_TAKEN`.
+
+Impact assessment: low for these four days — all 11:30 checks reported OK except one
+correct `feedback` SUSPECT (30 Aug, WARNED), so the gate would have skipped nothing.
+
+Fix: branch `fix/handler-run-quality-gate` adds the gate call to `handler.run` before
+data loading and passes `gate_plan` to `run_pipeline`, plus a regression test
+(`test_daily_handler_runs_quality_gate_and_passes_plan`). **Redeploy required after merge.**
+Verification after redeploy: next 06:00 run must add five gate rows to `DATA_QUALITY_LOG`.
+
+## ✅ Weekend runs verified — 2026-09-01 (29 Aug–1 Sep)
+
+All scheduled tasks SUCCEEDED every day: 06:00 pipeline, chained KPI batch, 11:30
+source check. Alert volumes 770 / 801 / 767 / 658. Per-source lags working as designed:
+one genuine `SUSPECT` (`feedback` 30 Aug, 1,243 vs 1,658 baseline, WARNED), all other
+checks OK — no false failures since the per-source-lag fix.
 
 ---
 

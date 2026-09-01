@@ -156,6 +156,12 @@ def run(
         _investigate._USE_CORTEX = True
     print(f"[handler] {engine_name} narrative engine enabled.")
 
+    # ── stage 0: source data-quality gate ─────────────────────────────
+    from store_insight.pipeline.stages._0_quality.quality_gate import run_quality_gate
+
+    print("[handler] Stage 0: source data-quality gate...")
+    gate_plan = run_quality_gate(session, cfg, analysis_date=analysis_date)
+
     # ── load data ──────────────────────────────────────────────────────
     print("[handler] Loading OSA data...")
     osa = load_osa(session, w["lookback_start"], w["this_week_end"], cfg=cfg)
@@ -193,6 +199,7 @@ def run(
         cfg=cfg,
         run_id=run_id,
         pipeline_version=pipeline_version,
+        gate_plan=gate_plan,
     )
 
     write_alerts(session, cards, run_date=run_date, overwrite=overwrite, cfg=cfg)
