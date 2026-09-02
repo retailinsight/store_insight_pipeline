@@ -3,8 +3,28 @@
 Living document: re-validate before each deployment step and after each production run.
 Validation helpers: `scripts/validate_deploy_risks.py`, `scripts/check_run_output.py`, `scripts/spot_check_cards.py`, `scripts/migrate_alerts_table_schema.py`, `scripts/validate_lineage_populated.py`, `scripts/validate_merge_snowflake.py`, `scripts/check_task_history.py` (read-only except migration; VPN required).
 
-Last live-Snowflake validation: **2026-09-01 (weekend runs verified; handler gate gap found)** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
-Requirements/code review updated: **2026-09-01 (stage-0 gate missing from SP handler — fix on `fix/handler-run-quality-gate`)**
+Last live-Snowflake validation: **2026-09-02 (Slack notifications verified end-to-end from DEV monitoring SP)** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
+Requirements/code review updated: **2026-09-02 (Slack notify wired into monitoring SP on `feat/pilot-monitoring-runner`)**
+
+---
+
+## ✅ Slack notifications LIVE for pilot monitoring (DEV) — 2026-09-02
+
+- Snowflake notification integration `SLACK__STORE_INSIGHT_NOTIFICATIONS` (secret in
+  `ADMIN.UTILS`, SD-67936) created by admin; `STORE_INSIGHT_ROLE` granted USAGE on the
+  integration and READ on the secret — send verified as `SVC_STOREINSIGHT`
+  (`scripts/test_slack_notification.py`).
+- `SP_RUN_MONITORING` (`STORE_INSIGHT_DEV`) redeployed with notify logic: posts to
+  **#store-insight-pilot-alerts** only on FAIL/WARN/UNKNOWN or incident recovery;
+  silent when all checks OK. Messages JSON-escaped (raw newlines were silently
+  dropped by the webhook — fixed with `_webhook_safe`).
+- Verified end-to-end 2 Sep: forced no-data run produced a warning message in the
+  channel; subsequent normal run produced the recovery message. `MONITORING_TASK`
+  remains **suspended** in DEV (supervised runs 3–4 Sep before prod promotion).
+- Handler gate fix (PR #58) merged and redeployed 2 Sep; verification pending:
+  tomorrow's 06:00 run must write five gate rows to `DATA_QUALITY_LOG` (see below).
+- Residual risk: monitoring is DEV-only until task promotion; prod feed warnings
+  still rely on the 11:30 log-only check until then.
 
 ---
 
