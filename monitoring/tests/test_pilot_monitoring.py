@@ -10,7 +10,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pilot_monitoring as pm
 
-
 # ── classify_task_runs (C2/C5) ───────────────────────────────────────────────
 
 def test_task_success_is_ok():
