@@ -1,7 +1,7 @@
 # PRD — Store Insight Pilot Monitoring, Stability and Action Performance
 
-**Date:** 20 August 2026
-**Status:** Draft for review
+**Date:** 20 August 2026 (updated 2 Sep)
+**Status:** Phase 1 core BUILT — `monitoring/pilot_monitoring.py` (checks C1–C7 + C9), `SP_RUN_MONITORING` + `MONITORING_TASK` (suspended) deployed to `STORE_INSIGHT_DEV` 2 Sep; `MONITORING_CONFIG/RUN/LOG/INCIDENT` + `LATEST_SYSTEM_HEALTH` view created; first supervised run passed (C2–C6, C9 OK). Supervised runs 3–4 Sep, then promote to prod. Outstanding: C8 probe (Cornelious endpoint), email integration (ACCOUNTADMIN), WARN/FAIL + recipient decisions (Dave/Bryan)
 **Requested by:** Dave Byrne
 **Delivery owner (Snowflake scope):** Elaheh Kalantari — API probe and UI freshness messaging owned separately (see §11 and §12)
 **Pilot target:** 13 September 2026 — East of England

@@ -1,7 +1,7 @@
 # PRD — Outcome Measurement Two-State Quiet-Period Model
 
 **Date:** 2026-08-11 (updated 21 Aug)  
-**Status:** Blocked — Daniel and Dave must first agree, per alert type, what counts as fixed  
+**Status:** Blocked — Daniel and Dave must first agree, per alert type, what counts as fixed. Elaheh's row-writing proposal added 2 Sep (see below) — the only pre-session input still owed  
 **Related ADR:** ADR 0005 — Outcome Measurement: Two-State Quiet-Period Model, Not Point-in-Time Absence (`pipeline/docs/adr/0005-outcome-measurement-two-state.md`)  
 **Triage label:** `ready-for-agent`
 
@@ -41,6 +41,23 @@ If the team cannot build and test the full state change before launch, the safer
 | UI wording for `in_progress` and `resolved` | Dave / Imran | Open |
 
 **Daniel has marked this work blocked** until he and Dave work through the requirements. Until then, the pilot fallback applies: do not report recovered value as a proven outcome.
+
+### Row-writing proposal (Elaheh, 2 Sep — answers Dan's open row above)
+
+Write a row on **every state change plus a weekly heartbeat**, never update in place:
+
+- One row when the alert enters `in_progress` (store commits).
+- One row per weekly evaluation while `in_progress` (the heartbeat) — this gives an audit
+  trail of "still quiet, week N of M" and makes a stuck evaluation visible (no heartbeat =
+  evaluator fault, not a store fact).
+- One row when the state changes to `resolved` (quiet period completed) — recovered value
+  is written on this row only; every earlier row carries `NULL`.
+- Readers always take the latest row per `ALERT_ID` (matches the existing reader rule).
+- Idempotency: key rows on (`ALERT_ID`, `EVALUATION_DATE`); re-running an evaluation for
+  the same date replaces that row rather than appending a duplicate.
+
+Cost is trivial (hundreds of rows/week), and the weekly heartbeat is what makes "quiet for
+2 weeks" provable from the table alone rather than inferred from absence.
 
 ### Main risks if we do not act
 

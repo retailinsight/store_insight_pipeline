@@ -1,15 +1,24 @@
 # Store Insight — TODO
 
-Last updated: 2026-09-01
+Last updated: 2026-09-02
 
-## Next / in flight (2026-09-01)
+## Next / in flight (2026-09-02)
 
 High priority:
-- [ ] **Get PR merged: `fix/handler-run-quality-gate`** — 1 Sep finding: PR #57 wired the
-      gate into `run_batch.py` (local CLI) but NOT `deploy/handler.py` (the SP entrypoint
-      the 06:00 Task calls), so the four prod runs since 29 Aug were NOT gate-protected
-      (confirmed: no 06:00 gate rows in `DATA_QUALITY_LOG`, only the 11:30 check's).
-      Fix + regression test on branch; **redeploy pipeline after merge**.
+- [x] **PR #58 merged 2 Sep: `fix/handler-run-quality-gate`** — gate now wired into
+      `deploy/handler.py` (the SP entrypoint the 06:00 Task calls). Background: PR #57
+      only covered `run_batch.py`, so the prod runs since 29 Aug were not gate-protected.
+- [x] **Redeployed 2 Sep ~10:50 from merged main** — SP + Task re-registered and resumed
+      (CRON 0 6 * * * Europe/London); known benign EXECUTE TASK grant warning.
+- [ ] **Verify tomorrow's (3 Sep) 06:00 run writes 5 gate rows to `DATA_QUALITY_LOG`**
+      (`scripts/check_morning_run.py`).
+- [x] **Monitoring runner built + deployed to DEV 2 Sep** — `monitoring/pilot_monitoring.py`
+      (checks C1–C7 + C9), `SP_RUN_MONITORING` + `MONITORING_TASK` (suspended) in
+      `STORE_INSIGHT_DEV`, MONITORING_RUN/LOG/INCIDENT + `LATEST_SYSTEM_HEALTH` view.
+      First supervised run: C2–C6, C9 OK; C1/C7 UNKNOWN (expected — pre-11:30, old handler).
+      18 unit tests pass (`monitoring/tests/`).
+- [ ] **Monitoring: 3 days supervised runs (3–4 Sep)** — `python scripts/run_monitoring_supervised.py`
+      each morning after 07:00; tune thresholds; then deploy `--env prod --resume` pre-pilot.
 - [ ] **Answer Dan: name a feed-load owner** — he replied 28 Aug "what do you want me to
       name?" and is happy with X+3 (actions rarely taken the day an alert lands). Need a
       primary + backup to receive genuine short-feed warnings; then add to the runbook and
@@ -17,10 +26,62 @@ High priority:
 - [ ] Send Dave the remaining open operating-model and technical-review items (incl. updated `ALERT_DATA_AGE_REVIEW.md` — worst case now X+3)
 - [ ] Confirm seeded write-test store ID with Dave; Cornelious points test account
 - [ ] Pipeline seeding for write-test store in DEV/CRT once store ID/cadence confirmed
+- [ ] **Validate WASTE-9773 (Prompted data package) — due COP today (2 Sep)** — once the
+      new Prompted Compliance / No Expiry tables are pushed to Snowflake, check row counts,
+      dates, store coverage and update the pipeline contract/adapter if needed.
+
+From the 28 Aug action review (`INTERNAL_ACTION_REVIEW_2808.md`) — items on Elaheh:
+- [x] **B2.6 verified 1 Sep — feeds are REAL, with one caveat.** `MARKDOWN_LOG_V1` is live:
+      17.4M rows back to 2021, current to 31 Aug, ~4k rows/day, 117 stores, 9 real markdown
+      types (Short Dated, ManualOverride, Damaged High/Med/Low, Split Pack, HO Instruction,
+      Variable weight, RTC), plausible %/price spreads. `FEEDBACK_V1` live: 1.2M rows,
+      current to X+3 lag, ~1.4k/day, 116 stores, real intervention mix, tick-and-flick flag
+      13% true. **Caveat:** there is NO separate "prompted check" or "date-expiry check"
+      event feed in our Snowflake — compliance is derived from MARKDOWN_LOG_V1 +
+      FEEDBACK_V1. If the new A1.1 actions need prompted-check events, that's a new feed ask.
+- [x] **A1.6/B2.8 closed 1 Sep — deferred to V1+.** `INTERVENTION_USER_ID` found in
+      upstream `LSM_ALERT_FEEDBACK`, but no markdown-override user column. Dan/Dave
+      agreed to leave for V1+. Owners identified: Waste = Sikandar; Availability/alert
+      intervention = Ollie; Markdown override = likely Sikandar (Dan to confirm).
+- [ ] **B3.1–B3.3:** JSON payload issues — orphaned `repeat_item_time_patterns` refs,
+      identical `OSA_STORE_ACTIONABLE` facts across stores (placeholder?), MARKDOWN_SKU
+      score/projected_cost exactly 0.0
+- [x] **A2.10 checked 1 Sep — no matching Store 501/Fruit/Sun batch in live data**, so no
+      false positive confirmed. Keep current thresholds; recheck if the sample resurfaces.
 
 Medium priority:
 - [ ] After handler fix is live: verify next 06:00 run writes gate rows to `DATA_QUALITY_LOG`
       (5 rows with gate `ACTION_TAKEN` in addition to the 11:30 check's 5)
+
+## PRD status (2 Sep) — done vs remaining
+
+**`prd-source-data-quality-gate.md` — LIVE, nearly complete:**
+- [x] Warn-only 11:30 source-volume check (live since 28 Aug, per-source lags 1/1/3/3/3)
+- [x] In-pipeline gate: PR #57 (gate + run_batch) + PR #58 (SP handler) merged; redeployed 2 Sep
+- [ ] Verify first gate-protected 06:00 run (3 Sep) writes gate rows
+- [ ] During pilot: threshold/holiday tuning from evidence; record ADR for fail-open policy
+- [ ] Blocked on others: Bryan/Dave sign-off; feed-load owner named (Dan)
+
+**`prd-pilot-monitoring-and-stability.md` — Phase 1 core built 2 Sep:**
+- [x] Monitoring objects (`MONITORING_CONFIG/RUN/LOG/INCIDENT`, `LATEST_SYSTEM_HEALTH` view)
+- [x] `SP_RUN_MONITORING` with C1–C7 + C9; deployed to DEV (task suspended); 18 unit tests
+- [x] First supervised run passed (C2–C6, C9 OK; C1/C7 UNKNOWN expected pre-11:30)
+- [ ] Supervised runs 3–4 Sep (`scripts/run_monitoring_supervised.py`), tune, then
+      `deploy_monitoring_task.py --env prod --resume` pre-pilot
+- [ ] Blocked on others: C8 .NET probe endpoint (Cornelious/Alex); email notification
+      integration (ACCOUNTADMIN); WARN/FAIL + recipient decisions and stale-data policy (Dave/Bryan);
+      `LATEST_SYSTEM_HEALTH` schema agreement + service-role grants (Cornelious)
+- [ ] Phase 2 (action quality) blocked on outcome-measurement session
+
+**`prd-outcome-measurement-two-state.md` — BLOCKED (no build possible now):**
+- [ ] Dan + Dave working session: per alert type, what counts as fixed; quiet-period value;
+      week rule. Until live, pilot fallback stands: do not report recovered value as proven
+- [ ] Elaheh action once unblocked: propose write-on-state-change row model (Dan asked 21 Aug)
+
+**`PILOT_MONITORING_ONE_PAGER.md` — updated 2 Sep** (rows 1–4, 7 now automated/live).
+Open items blocking "done": .NET endpoint (Cornelious), ACCOUNTADMIN email integration,
+Dave's pilot contact route + stale-data policy, feed-load owner (Dan/Dave), support
+boundaries (Dave/Victoria + Alex), alert delivery workflow definition (Dan/Dave).
 
 Done 1 Sep:
 - [x] **Weekend verification (29 Aug–1 Sep):** all 06:00 pipeline runs, KPI batches and
