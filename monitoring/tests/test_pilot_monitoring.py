@@ -121,3 +121,45 @@ def test_overall_ok():
 
 def test_details_quote_escaping():
     assert pm._q("it's broken") == "it''s broken"
+
+
+# ── build_notification (Slack) ───────────────────────────────────────────────
+
+def _r(check_id, status, details='d'):
+    return {'check_id': check_id, 'component_id': 'comp', 'status': status,
+            'details': details, 'owner': 'owner'}
+
+
+def test_notification_silent_when_all_ok():
+    results = [_r('C1', 'OK'), _r('C2', 'OK')]
+    assert pm.build_notification(results, [], '2026-09-02', 'RUN1') is None
+
+
+def test_notification_on_fail_lists_check_and_owner():
+    results = [_r('C1', 'OK'), _r('C3', 'FAIL', 'no alert rows')]
+    msg = pm.build_notification(results, [], '2026-09-02', 'RUN1')
+    assert 'FAIL' in msg
+    assert 'C3' in msg
+    assert 'no alert rows' in msg
+    assert 'owner' in msg
+
+
+def test_notification_on_unknown_fires():
+    results = [_r('C1', 'UNKNOWN', 'no rows today'), _r('C2', 'OK')]
+    msg = pm.build_notification(results, [], '2026-09-02', 'RUN1')
+    assert msg is not None
+    assert 'UNKNOWN' in msg
+
+
+def test_webhook_safe_escapes_json_breakers():
+    assert pm._webhook_safe('a\nb') == 'a\\nb'
+    assert pm._webhook_safe('say "hi"') == 'say \\"hi\\"'
+    assert pm._webhook_safe('back\\slash') == 'back\\\\slash'
+    assert '$$' not in pm._webhook_safe('a$$b')
+
+
+def test_notification_recovery_only():
+    results = [_r('C1', 'OK'), _r('C2', 'OK')]
+    msg = pm.build_notification(results, ['C3'], '2026-09-02', 'RUN1')
+    assert 'Recovered' in msg
+    assert 'C3' in msg

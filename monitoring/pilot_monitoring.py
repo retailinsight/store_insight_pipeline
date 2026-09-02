@@ -40,6 +40,10 @@ BASELINE_WEEKS = 4        # C4: trailing same-weekday weeks
 TASK_LOOKBACK_HOURS = 18  # C2/C5: how far back to look in TASK_HISTORY
 KPI_MIN_COLUMNS = 28      # C6: expected column count
 
+# Slack notification integration (SD-67936). Messages fire only when a check
+# is not OK or when an open incident recovers — never on all-clear runs.
+SLACK_INTEGRATION = 'SLACK__STORE_INSIGHT_NOTIFICATIONS'
+
 OWNERS = {
     'C1': 'feed owner (respond) / Elaheh (build)',
     'C2': 'Dan',
@@ -366,9 +370,13 @@ def write_results(runner, monitor_db: str, run_id: str, results: list[dict],
 
 
 def update_incidents(runner, monitor_db: str, run_id: str, results: list[dict],
-                     schema: str = 'PUBLIC') -> None:
-    """Open/refresh an incident per FAILing check; resolve on OK."""
+                     schema: str = 'PUBLIC') -> list[str]:
+    """Open/refresh an incident per FAILing check; resolve on OK.
+
+    Returns the incident keys resolved by this run (for recovery messages).
+    """
     p = f'{monitor_db}.{schema}'
+    resolved: list[str] = []
     for r in results:
         key = r['check_id']
         if r['status'] == 'FAIL':
@@ -386,22 +394,80 @@ def update_incidents(runner, monitor_db: str, run_id: str, results: list[dict],
                 f"'{run_id}')"
             )
         elif r['status'] == 'OK':
-            runner(
-                f"UPDATE {p}.MONITORING_INCIDENT "
-                f"SET STATUS = 'RESOLVED', RESOLVED_AT = CURRENT_TIMESTAMP(), "
-                f"LAST_RUN_ID = '{run_id}' "
+            open_rows = runner(
+                f"SELECT INCIDENT_KEY FROM {p}.MONITORING_INCIDENT "
                 f"WHERE INCIDENT_KEY = '{key}' AND STATUS = 'OPEN'"
             )
+            if open_rows:
+                runner(
+                    f"UPDATE {p}.MONITORING_INCIDENT "
+                    f"SET STATUS = 'RESOLVED', RESOLVED_AT = CURRENT_TIMESTAMP(), "
+                    f"LAST_RUN_ID = '{run_id}' "
+                    f"WHERE INCIDENT_KEY = '{key}' AND STATUS = 'OPEN'"
+                )
+                resolved.append(key)
+    return resolved
+
+
+def build_notification(results: list[dict], resolved: list[str],
+                       business_date, run_id: str) -> str | None:
+    """Slack message text, or None when there is nothing worth sending.
+
+    Fires when any check is FAIL/WARN/UNKNOWN (missing data is never OK) or
+    when a previously open incident has recovered. Silent on all-OK runs.
+    """
+    problems = [r for r in results if r['status'] != 'OK']
+    if not problems and not resolved:
+        return None
+    lines = []
+    if problems:
+        worst = overall_status(results)
+        lines.append(
+            f'Store Insight pilot monitoring {business_date}: {worst}')
+        for r in problems:
+            lines.append(
+                f"- {r['check_id']} {r['status']} ({r['component_id']}): "
+                f"{r['details']} [owner: {r['owner']}]")
+    if resolved:
+        lines.append('Recovered since last run: ' + ', '.join(sorted(resolved)))
+    lines.append(f'(run {run_id})')
+    return '\n'.join(lines)
+
+
+def _webhook_safe(message: str) -> str:
+    """Make the text safe for the '{"text": "..."}' webhook body template.
+
+    The integration substitutes the message into a JSON template verbatim, so
+    raw newlines/quotes/backslashes would produce invalid JSON and Slack drops
+    the message silently. Escape at the JSON level; a dollar-quoted SQL string
+    then carries the backslash sequences through unmodified.
+    """
+    return (message.replace('\\', '\\\\')
+                   .replace('"', '\\"')
+                   .replace('\n', '\\n')
+                   .replace('$$', '$ $'))
+
+
+def send_notification(runner, message: str,
+                      integration: str = SLACK_INTEGRATION) -> None:
+    runner(
+        "CALL SYSTEM$SEND_SNOWFLAKE_NOTIFICATION("
+        "SNOWFLAKE.NOTIFICATION.TEXT_PLAIN("
+        f"SNOWFLAKE.NOTIFICATION.SANITIZE_WEBHOOK_CONTENT($${_webhook_safe(message)}$$)), "
+        f"SNOWFLAKE.NOTIFICATION.INTEGRATION('{integration}'))"
+    )
 
 
 def run_monitoring(session, monitor_db: str = 'STORE_INSIGHT_DEV',
                    data_db: str = 'STORE_INSIGHT_DB',
-                   business_date: str | None = None) -> str:
+                   business_date: str | None = None,
+                   slack_integration: str = SLACK_INTEGRATION) -> str:
     """SP entry point. Read-only against data_db; writes only to monitor_db.
 
-    monitor_db    : where MONITORING_* objects live (DEV during supervised runs)
-    data_db       : where the pipeline/KPI/quality tables live (always prod)
-    business_date : override for backfills; defaults to today (RUN_DATE rule)
+    monitor_db        : where MONITORING_* objects live (DEV during supervised runs)
+    data_db           : where the pipeline/KPI/quality tables live (always prod)
+    business_date     : override for backfills; defaults to today (RUN_DATE rule)
+    slack_integration : notification integration name; '' disables Slack sends
     """
     def runner(sql):
         return [row.as_dict() for row in session.sql(sql).collect()]
@@ -441,7 +507,17 @@ def run_monitoring(session, monitor_db: str = 'STORE_INSIGHT_DEV',
         f'monitor run {run_id} completed {len(results)} checks', bd))
 
     write_results(runner, monitor_db, run_id, results)
-    update_incidents(runner, monitor_db, run_id, results)
+    resolved = update_incidents(runner, monitor_db, run_id, results)
+
+    notify_note = ''
+    if slack_integration:
+        message = build_notification(results, resolved, bd, run_id)
+        if message:
+            try:
+                send_notification(runner, message, slack_integration)
+                notify_note = '; slack sent'
+            except Exception as e:  # never fail the run on a notify error
+                notify_note = f'; slack send FAILED: {e}'
 
     overall = overall_status(results)
     runner(
@@ -452,4 +528,4 @@ def run_monitoring(session, monitor_db: str = 'STORE_INSIGHT_DEV',
     )
 
     summary = ', '.join(f"{r['check_id']}={r['status']}" for r in results)
-    return f'{bd} {overall}: {summary} (run {run_id})'
+    return f'{bd} {overall}: {summary} (run {run_id}){notify_note}'

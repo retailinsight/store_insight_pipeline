@@ -13,9 +13,9 @@
 | 4 | KPI batch ran + output complete | Chained `KPI_AVAILABILITY_BATCH_TASK`; automated check C5+C6 (rows + 28-col schema incl. `TIME_OF_DAY_BREAKDOWN`) | Elaheh | **LIVE** (chained) + **automated output check in DEV** |
 | 5 | Production .NET API up | External probe on liveness endpoint (Azure `uks-eoe-webapi-crt`) | **Alex/Engineering to confirm** (Cornelious/BitLogix build, but not product support owner) | **Endpoint TBC — blocking** |
 | 6 | UI availability + auth | Daily GitHub Action e2e (agreed 26 Aug): login → verify data/UI → KPI details → action board → assign → complete. **Full flow incl. writes in DEV; read-only smoke in PROD.** Dedicated test account + store 470 (441/490 back-ups) | Dave (suite), **Alex/Engineering to confirm env owner** (Imran/Cornelious/BitLogix build) | In progress (Week-1 testing goal §6) |
-| 7 | Monitor heartbeat | C9 self-report row in `MONITORING_LOG` + "no result today" query on `MONITORING_RUN` | Elaheh | **Automated in DEV**; external no-result check manual until email integration exists |
+| 7 | Monitor heartbeat | C9 self-report row in `MONITORING_LOG` + "no result today" query on `MONITORING_RUN` | Elaheh | **Automated in DEV**; external no-result check stays manual (`scripts/check_morning_run.py`) |
 
-**Until warning emails exist** (needs ACCOUNTADMIN to approve the notification integration — **blocking, Elaheh chasing**): Elaheh runs one morning query covering rows 1–4 and posts anomalies to Slack.
+**Warning route LIVE (2 Sep, SD-67936):** `SP_RUN_MONITORING` posts to Slack **#store-insight-pilot-alerts** via the `SLACK__STORE_INSIGHT_NOTIFICATIONS` integration — fires only on FAIL/WARN/UNKNOWN or recovery, silent when all OK. Verified end-to-end (forced-failure + recovery messages landed 2 Sep). Elaheh's manual morning query stays as backup until 3 supervised days complete.
 
 ## Warning vs pilot-blocking
 
@@ -42,7 +42,7 @@
 ## Open items blocking "done"
 
 1. **Cornelious:** .NET liveness endpoint URL for the probe (row 5).
-2. **Snowflake admin (ACCOUNTADMIN):** notification integration for warning emails.
+2. ~~**Snowflake admin (ACCOUNTADMIN):** notification integration for warning emails.~~ **DONE 2 Sep (SD-67936):** Slack notification integration live; `STORE_INSIGHT_ROLE` granted usage + secret read; monitor wired and verified.
 3. ~~**Dan (26 Aug):** source-check timing choice — branches `fix/source-check-expect-day2` / `fix/source-check-after-1100` both ready.~~ **DECIDED 26 Aug: merged `fix/source-check-after-1100` (11:30 UK, deployed).**
 4. **Dave:** pilot contact route for store-facing messages; stale-data visibility policy ("Data as of…" vs hide).
 5. **Dan/Dave:** feed-load owner named for row 1 responses.

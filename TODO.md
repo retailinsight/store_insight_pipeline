@@ -15,8 +15,15 @@ High priority:
 - [x] **Monitoring runner built + deployed to DEV 2 Sep** — `monitoring/pilot_monitoring.py`
       (checks C1–C7 + C9), `SP_RUN_MONITORING` + `MONITORING_TASK` (suspended) in
       `STORE_INSIGHT_DEV`, MONITORING_RUN/LOG/INCIDENT + `LATEST_SYSTEM_HEALTH` view.
-      First supervised run: C2–C6, C9 OK; C1/C7 UNKNOWN (expected — pre-11:30, old handler).
-      18 unit tests pass (`monitoring/tests/`).
+      Afternoon supervised run: all 8 checks OK. 23 unit tests pass (`monitoring/tests/`).
+- [x] **Slack warnings LIVE 2 Sep (SD-67936 closed)** — admins created
+      `SLACK__STORE_INSIGHT_NOTIFICATIONS` (secret in ADMIN.UTILS + integration + grants;
+      needed follow-up GRANT READ ON SECRET for our role). SP now posts to
+      #store-insight-pilot-alerts on FAIL/WARN/UNKNOWN + recovery, silent when all OK
+      (`build_notification`/`send_notification`). Verified end-to-end: forced no-data run
+      (`run_monitoring_supervised.py --date`) fired the warning; recovery message cleared it.
+      Gotcha found: raw newlines broke the `{"text": ...}` webhook JSON — now JSON-escaped
+      via dollar-quoted SQL. Test helper: `scripts/test_slack_notification.py`.
 - [ ] **Monitoring: 3 days supervised runs (3–4 Sep)** — `python scripts/run_monitoring_supervised.py`
       each morning after 07:00; tune thresholds; then deploy `--env prod --resume` pre-pilot.
 - [ ] **Answer Dan: name a feed-load owner** — he replied 28 Aug "what do you want me to
@@ -26,9 +33,10 @@ High priority:
 - [ ] Send Dave the remaining open operating-model and technical-review items (incl. updated `ALERT_DATA_AGE_REVIEW.md` — worst case now X+3)
 - [ ] Confirm seeded write-test store ID with Dave; Cornelious points test account
 - [ ] Pipeline seeding for write-test store in DEV/CRT once store ID/cadence confirmed
-- [ ] **Validate WASTE-9773 (Prompted data package) — due COP today (2 Sep)** — once the
-      new Prompted Compliance / No Expiry tables are pushed to Snowflake, check row counts,
-      dates, store coverage and update the pipeline contract/adapter if needed.
+- [ ] **Validate WASTE-9773 (Prompted data package) — due COP today (2 Sep)** — checked
+      15:05: NOT landed yet (no PROMPT%/COMPLIANCE% tables in INBOUND/ANALYSIS; existing
+      markdown feeds fresh). Re-run `scripts/check_prompted_compliance_landing.py` EOD +
+      tomorrow; then check row counts, dates, store coverage and update the contract/adapter.
 
 From the 28 Aug action review (`INTERNAL_ACTION_REVIEW_2808.md`) — items on Elaheh:
 - [x] **B2.6 verified 1 Sep — feeds are REAL, with one caveat.** `MARKDOWN_LOG_V1` is live:
@@ -66,11 +74,13 @@ Medium priority:
 - [x] Monitoring objects (`MONITORING_CONFIG/RUN/LOG/INCIDENT`, `LATEST_SYSTEM_HEALTH` view)
 - [x] `SP_RUN_MONITORING` with C1–C7 + C9; deployed to DEV (task suspended); 18 unit tests
 - [x] First supervised run passed (C2–C6, C9 OK; C1/C7 UNKNOWN expected pre-11:30)
+- [x] Slack notification route live + wired into the SP (2 Sep, SD-67936); fires on
+      FAIL/WARN/UNKNOWN + recovery only
 - [ ] Supervised runs 3–4 Sep (`scripts/run_monitoring_supervised.py`), tune, then
       `deploy_monitoring_task.py --env prod --resume` pre-pilot
-- [ ] Blocked on others: C8 .NET probe endpoint (Cornelious/Alex); email notification
-      integration (ACCOUNTADMIN); WARN/FAIL + recipient decisions and stale-data policy (Dave/Bryan);
-      `LATEST_SYSTEM_HEALTH` schema agreement + service-role grants (Cornelious)
+- [ ] Blocked on others: C8 .NET probe endpoint (Cornelious/Alex); WARN/FAIL + recipient
+      decisions and stale-data policy (Dave/Bryan); `LATEST_SYSTEM_HEALTH` schema agreement
+      + service-role grants (Cornelious)
 - [ ] Phase 2 (action quality) blocked on outcome-measurement session
 
 **`prd-outcome-measurement-two-state.md` — BLOCKED (no build possible now):**
@@ -78,8 +88,8 @@ Medium priority:
       week rule. Until live, pilot fallback stands: do not report recovered value as proven
 - [ ] Elaheh action once unblocked: propose write-on-state-change row model (Dan asked 21 Aug)
 
-**`PILOT_MONITORING_ONE_PAGER.md` — updated 2 Sep** (rows 1–4, 7 now automated/live).
-Open items blocking "done": .NET endpoint (Cornelious), ACCOUNTADMIN email integration,
+**`PILOT_MONITORING_ONE_PAGER.md` — updated 2 Sep** (rows 1–4, 7 automated/live; Slack
+warning route live). Open items blocking "done": .NET endpoint (Cornelious),
 Dave's pilot contact route + stale-data policy, feed-load owner (Dan/Dave), support
 boundaries (Dave/Victoria + Alex), alert delivery workflow definition (Dan/Dave).
 

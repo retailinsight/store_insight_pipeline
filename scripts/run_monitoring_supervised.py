@@ -14,15 +14,19 @@ from snowflake_credentials import get_credentials
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--env", choices=["dev", "prod"], default="dev")
+parser.add_argument("--date", default=None,
+                    help="business date override (YYYY-MM-DD), e.g. to force "
+                         "a no-data day for a Slack notification test")
 args = parser.parse_args()
 
 db = "STORE_INSIGHT_DEV" if args.env == "dev" else "STORE_INSIGHT_DB"
+bd = f"'{args.date}'" if args.date else "NULL"
 
 conn = snowflake.connector.connect(**get_credentials().get_connection_params())
 cur = conn.cursor()
 
 print(f"=== Supervised monitoring run ({db}) ===\n")
-cur.execute(f"CALL {db}.PUBLIC.SP_RUN_MONITORING(NULL, '{db}', 'STORE_INSIGHT_DB')")
+cur.execute(f"CALL {db}.PUBLIC.SP_RUN_MONITORING({bd}, '{db}', 'STORE_INSIGHT_DB')")
 print(cur.fetchone()[0])
 
 print("\n--- LATEST_SYSTEM_HEALTH ---")

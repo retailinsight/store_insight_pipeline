@@ -1,7 +1,7 @@
 # PRD — Store Insight Pilot Monitoring, Stability and Action Performance
 
 **Date:** 20 August 2026 (updated 2 Sep)
-**Status:** Phase 1 core BUILT — `monitoring/pilot_monitoring.py` (checks C1–C7 + C9), `SP_RUN_MONITORING` + `MONITORING_TASK` (suspended) deployed to `STORE_INSIGHT_DEV` 2 Sep; `MONITORING_CONFIG/RUN/LOG/INCIDENT` + `LATEST_SYSTEM_HEALTH` view created; first supervised run passed (C2–C6, C9 OK). Supervised runs 3–4 Sep, then promote to prod. Outstanding: C8 probe (Cornelious endpoint), email integration (ACCOUNTADMIN), WARN/FAIL + recipient decisions (Dave/Bryan)
+**Status:** Phase 1 core BUILT — `monitoring/pilot_monitoring.py` (checks C1–C7 + C9), `SP_RUN_MONITORING` + `MONITORING_TASK` (suspended) deployed to `STORE_INSIGHT_DEV` 2 Sep; `MONITORING_CONFIG/RUN/LOG/INCIDENT` + `LATEST_SYSTEM_HEALTH` view created; supervised runs passing (all 8 checks OK 2 Sep PM). **Slack warnings LIVE 2 Sep (SD-67936):** `SLACK__STORE_INSIGHT_NOTIFICATIONS` integration created + granted; SP posts to #store-insight-pilot-alerts on FAIL/WARN/UNKNOWN and on recovery only — verified end-to-end with forced-failure and recovery messages. Supervised runs 3–4 Sep, then promote to prod. Outstanding: C8 probe (Cornelious endpoint), WARN/FAIL + recipient decisions (Dave/Bryan)
 **Requested by:** Dave Byrne
 **Delivery owner (Snowflake scope):** Elaheh Kalantari — API probe and UI freshness messaging owned separately (see §11 and §12)
 **Pilot target:** 13 September 2026 — East of England
