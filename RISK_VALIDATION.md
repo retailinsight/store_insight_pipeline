@@ -3,8 +3,32 @@
 Living document: re-validate before each deployment step and after each production run.
 Validation helpers: `scripts/validate_deploy_risks.py`, `scripts/check_run_output.py`, `scripts/spot_check_cards.py`, `scripts/migrate_alerts_table_schema.py`, `scripts/validate_lineage_populated.py`, `scripts/validate_merge_snowflake.py`, `scripts/check_task_history.py` (read-only except migration; VPN required).
 
-Last live-Snowflake validation: **2026-09-02 (Slack notifications verified end-to-end from DEV monitoring SP)** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
-Requirements/code review updated: **2026-09-02 (Slack notify wired into monitoring SP on `feat/pilot-monitoring-runner`)**
+Last live-Snowflake validation: **2026-09-03 (gate lag fix deployed + 3 Sep alerts regenerated: 716 cards; monitoring task RESUMED)** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
+Requirements/code review updated: **2026-09-03 (PR #60 `GATE_LAG_DAYS` merged to `main`)**
+
+---
+
+## ✅ RESOLVED same day — 3 Sep: gate false-FAILED osa/markdown_log at 06:00 (16 alerts shipped)
+
+First gate-protected 06:00 run (PR #58) skipped every osa/markdown detector:
+the gate reused the 11:30 check's `SOURCE_LAG_DAYS` (osa/markdown_log = 1), but
+those feeds land ~11:00 — their X-1 day never exists at 06:00. Only 16
+Compliance alerts shipped; store teams reported "no smart actions" at 09:11.
+
+- Root cause proven live: 06:00 gate saw 0 rows for 2 Sep; by 10:16 `OSA_V1`
+  had 1,141,364 rows for 2 Sep. Would have recurred **every** morning.
+- Fix: PR **#60** (`fix/gate-lag-at-0600`) — `GATE_LAG_DAYS` (osa/markdown_log
+  = 2) in `quality_gate.py`; 11:30 check unchanged. Regression tests encode the
+  incident dates and spy the gate SQL (never queries the impossible X-1 day).
+- Redeployed `RUN_ALERTS_PIPELINE` from `main` (SP only, task untouched) and
+  re-ran 3 Sep with overwrite: gate OK at lag 2 (osa 1,140,734 / markdown_log
+  4,071 rows for 1 Sep) → **716 alerts** across all types (387 Availability,
+  178 WASTE_TRIM, 90 Markdown, 44 Waste, 17 Compliance).
+- Monitoring caught it correctly on the supervised run (C1 FAIL, C4 WARN
+  0.03x, C7 FAIL) and Slack alert delivered; `MONITORING_TASK` now **RESUMED**
+  in DEV (daily 07:00 UK) so alerting is automatic from tomorrow.
+- Verification: 4 Sep 06:00 run must show gate OK rows at lag 2 and a normal
+  alert volume; 07:00 monitoring should stay silent (or post recovery).
 
 ---
 
