@@ -1,7 +1,7 @@
 # PRD — Source Data-Quality Gate
 
 **Date:** 2026-08-18 · **Signed off by Daniel:** 2026-08-27 · **Pending sign-off:** Bryan, Dave
-**Status:** Implemented — PR #57 open for Dan's review/merge
+**Status:** LIVE in prod — PR #57 (gate + run_batch wiring) and PR #58 (SP handler wiring) merged; pipeline redeployed 2 Sep ~10:50. First gate-protected scheduled run: 3 Sep 06:00 (verify gate rows in `DATA_QUALITY_LOG`)
 **Related ADR:** None yet (an ADR should be recorded once the fail-open/fail-closed policy is agreed)
 **Triage label:** `ready-for-implementation`
 
