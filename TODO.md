@@ -36,7 +36,8 @@ High priority:
       the pilot team. Our probe stays as manual/backup. Still open too:
       `LATEST_SYSTEM_HEALTH` schema agreement + service-role grants.
 - [ ] **Chase Dave/Bryan:** WARN vs FAIL definitions + warning recipients (now live, no
-      longer hypothetical); stale-data visibility policy; one-pager sign-off.
+      longer hypothetical); stale-data visibility policy; one-pager sign-off
+      (**Dan signed off 3 Sep** — only Dave outstanding).
 - [x] **PR #58 merged 2 Sep: `fix/handler-run-quality-gate`** — gate now wired into
       `deploy/handler.py` (the SP entrypoint the 06:00 Task calls). Background: PR #57
       only covered `run_batch.py`, so the prod runs since 29 Aug were not gate-protected.
@@ -83,9 +84,12 @@ From the 28 Aug action review (`INTERNAL_ACTION_REVIEW_2808.md`) — items on El
       upstream `LSM_ALERT_FEEDBACK`, but no markdown-override user column. Dan/Dave
       agreed to leave for V1+. Owners identified: Waste = Sikandar; Availability/alert
       intervention = Ollie; Markdown override = likely Sikandar (Dan to confirm).
-- [ ] **B3.1–B3.3:** JSON payload issues — orphaned `repeat_item_time_patterns` refs,
-      identical `OSA_STORE_ACTIONABLE` facts across stores (placeholder?), MARKDOWN_SKU
-      score/projected_cost exactly 0.0
+- [ ] **B3.1–B3.3 (DAN's, not Elaheh's):** JSON payload issues — orphaned
+      `repeat_item_time_patterns` refs, identical `OSA_STORE_ACTIONABLE` facts across
+      stores (placeholder?), MARKDOWN_SKU score/projected_cost exactly 0.0.
+      Note for Dan on B3.1: scope mismatch is structural — `osa_item_time_patterns`
+      surfaces any repeat-LSV item in the store/dept, while `repeat_item_details`/
+      `repeat_item_history` (`osa_repeat_history.py`) only cover REPEAT-trigger items.
 - [x] **A2.10 checked 1 Sep — no matching Store 501/Fruit/Sun batch in live data**, so no
       false positive confirmed. Keep current thresholds; recheck if the sample resurfaces.
 
@@ -99,7 +103,8 @@ Medium priority:
 - [x] In-pipeline gate: PR #57 (gate + run_batch) + PR #58 (SP handler) merged; redeployed 2 Sep
 - [x] First gate-protected 06:00 run verified 3 Sep — wrote gate rows AND exposed the
       lag bug (fixed same day, PR #60, `GATE_LAG_DAYS`)
-- [ ] During pilot: threshold/holiday tuning from evidence; record ADR for fail-open policy
+- [x] ADR for fail-open policy recorded 3 Sep (ADR 0006, linked from the PRD)
+- [ ] During pilot: threshold/holiday tuning from evidence
 - [ ] Blocked on others: Bryan/Dave sign-off; feed-load owner named (Dan)
 
 **`prd-pilot-monitoring-and-stability.md` — Phase 1 core built 2 Sep:**
@@ -112,9 +117,12 @@ Medium priority:
       in DEV (07:00 UK daily)
 - [ ] 4 Sep verification, C4 baseline review, then `deploy_monitoring_task.py --env prod
       --resume` pre-pilot (and suspend the DEV task)
-- [ ] Blocked on others: C8 .NET probe endpoint (Cornelious/Alex); WARN/FAIL + recipient
-      decisions and stale-data policy (Dave/Bryan); `LATEST_SYSTEM_HEALTH` schema agreement
-      + service-role grants (Cornelious)
+- [x] C8 probe built + verified 3 Sep (dev endpoint from Cornelious); escalations sent
+      12:00/12:22 to Dave/Dan (WARN-FAIL/recipients/stale-data 30-min ask) and Dave
+      (prod infra + DevOps Azure uptime check)
+- [ ] Blocked on others: prod infra + Azure uptime check (Alex/DevOps); WARN/FAIL +
+      recipient decisions and stale-data policy (Dave/Bryan); `LATEST_SYSTEM_HEALTH`
+      schema agreement + service-role grants (Cornelious)
 - [ ] Phase 2 (action quality) blocked on outcome-measurement session
 
 **`prd-outcome-measurement-two-state.md` — BLOCKED (no build possible now):**
@@ -122,10 +130,11 @@ Medium priority:
       week rule. Until live, pilot fallback stands: do not report recovered value as proven
 - [ ] Elaheh action once unblocked: propose write-on-state-change row model (Dan asked 21 Aug)
 
-**`PILOT_MONITORING_ONE_PAGER.md` — updated 2 Sep** (rows 1–4, 7 automated/live; Slack
-warning route live). Open items blocking "done": .NET endpoint (Cornelious),
-Dave's pilot contact route + stale-data policy, feed-load owner (Dan/Dave), support
-boundaries (Dave/Victoria + Alex), alert delivery workflow definition (Dan/Dave).
+**`PILOT_MONITORING_ONE_PAGER.md` — updated 3 Sep** (rows 1–5, 7 automated/live/built;
+Slack warning route live + automatic). Open items blocking "done": prod API infra +
+DevOps Azure uptime check (Alex/DevOps), Dave's pilot contact route + stale-data policy,
+feed-load owner (Dan/Dave), support boundaries (Dave/Victoria + Alex), alert delivery
+workflow definition (Dan/Dave).
 
 Done 1 Sep:
 - [x] **Weekend verification (29 Aug–1 Sep):** all 06:00 pipeline runs, KPI batches and

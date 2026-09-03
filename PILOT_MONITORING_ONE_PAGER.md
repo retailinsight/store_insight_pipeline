@@ -1,6 +1,6 @@
 # Pre-pilot monitoring & support model — one page
 
-**Date:** 25 Aug 2026 (updated 3 Sep: monitoring task RESUMED in DEV after catching the 3 Sep gate-lag incident; runbook added — `monitoring/RUNBOOK.md`) · **Owner of this model:** Elaheh (technical), Dave + Victoria (operating model) · **Pilot:** East of England, 13 Sep · **Support owners for UI/API/BitLogix components are a first draft — TBC with Alex + Engineering next week**
+**Date:** 25 Aug 2026 (updated 3 Sep: monitoring task RESUMED in DEV after catching the 3 Sep gate-lag incident; runbook added — `monitoring/RUNBOOK.md`) · **Signed off by Dan: 3 Sep** · **Pending: Dave** · **Owner of this model:** Elaheh (technical), Dave + Victoria (operating model) · **Pilot:** East of England, 13 Sep · **Support owners for UI/API/BitLogix components are a first draft — TBC with Alex + Engineering next week**
 **Full detail:** `prds/prd-pilot-monitoring-and-stability.md` (this page is the agreed cut, per Week-1 goal §7)
 
 ## What is monitored, by whom
@@ -48,5 +48,5 @@
 5. **Dan/Dave:** feed-load owner named for row 1 responses.
 6. **Dave/Victoria + Alex/Engineering:** help-desk vs product-team issue boundaries; confirm UI/API/BitLogix support owners and pilot-hour coverage (Dave 27 Aug: Cornelious/Imran are partner resources under Engineering, not product; align with Ian/Alex next week).
 7. ~~**Dan:** data-quality-gate PRD sign-off, so row 1 graduates from warn-only to auto-skip.~~ **SIGNED OFF 27 Aug:** `prd-source-data-quality-gate.md`; implementation of per-alert-type auto-skip in progress.
-8. **Dave/Dan:** final review and sign off `PILOT_MONITORING_ONE_PAGER.md` after Dave thinks about the daily pilot review and remaining owners (Dan 27 Aug: leave it for Dave).
+8. **Dave** (Dan signed off 3 Sep): final review and sign off `PILOT_MONITORING_ONE_PAGER.md` after Dave thinks about the daily pilot review and remaining owners (Dan 27 Aug: leave it for Dave).
 9. **Dan/Dave:** define the alert delivery workflow before building delivery tracking. Cornelious confirmed the .NET API fetches from Snowflake and cannot tell whether an alert was actually shown to a store; `ALERT_ACTION_STATUS` only tracks action status after user interaction.
