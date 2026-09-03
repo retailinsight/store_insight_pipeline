@@ -98,12 +98,21 @@ python scripts/run_monitoring_supervised.py  # re-run all checks + see LATEST_SY
 - **Owner:** Dan (gate policy), Elaheh (mechanics). **Escalate:** Dave/Bryan if stores
   are left without a major alert type for the day.
 
-## C8 — Production .NET API probe (NOT YET BUILT)
+## C8 — .NET API probe (`monitoring/api_probe.py` — built 3 Sep; PROD URL still TBC)
 
-- Blocked on Cornelious/Alex providing the liveness endpoint for `uks-eoe-webapi-crt`.
-  Cannot run inside Snowflake. Until it exists, API downtime is only visible via user
-  reports — treat any store report of app unavailability as pilot-blocking and route
-  to Cornelious/DevOps immediately.
+- **Impact:** stores cannot load the app / smart actions at all.
+- **Validate:** `python monitoring/api_probe.py --retries 1` — healthy = HTTP 200 with
+  `data.status == "ok"` on `/api/v1/api/health` (shape confirmed by Cornelious 3 Sep).
+  Current target is the **DEV app** (`uks-eeco-dev-api-web`); the production app URL
+  for pilot monitoring is still to be confirmed (we had `uks-eoe-webapi-crt` on
+  record) — switch `--url`/`DEFAULT_URL` when it lands.
+- **First fix:** none on our side — route to Cornelious/DevOps immediately (Azure app).
+  Exit code 1 after 3 consecutive failures; optional Slack post via the
+  `STORE_INSIGHT_PROBE_SLACK_WEBHOOK` env var (never committed).
+- **Scheduling:** needs an external scheduler (GitHub Actions cron / Azure) — cannot
+  run inside Snowflake. Not yet scheduled.
+- **Owner:** Cornelious / DevOps. **Escalate:** Dave/Bryan (pilot-blocking during
+  store hours).
 
 ## C9 — Monitor heartbeat (monitor)
 

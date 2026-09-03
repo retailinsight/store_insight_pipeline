@@ -21,10 +21,15 @@ High priority:
 - [ ] **Promote monitoring to prod pre-pilot** — after 4 Sep verification + threshold
       review: `deploy_monitoring_task.py --env prod --resume`, then SUSPEND the DEV task
       (avoid double Slack posts).
-- [ ] **Runbook notes per check (PRD §13)** — impact / validate / first fix / owner /
-      escalation for C1–C7, C9 — see `monitoring/RUNBOOK.md`.
-- [ ] **ADR: gate fail-open policy** — record decision + 3 Sep evidence.
-- [ ] **Chase Cornelious:** C8 .NET liveness endpoint URL; `LATEST_SYSTEM_HEALTH` schema
+- [x] **Runbook DONE 3 Sep (PRD §13)** — `monitoring/RUNBOOK.md`, per-check impact /
+      validate / first fix / owner / escalation for C1–C9 (C8 added after probe built).
+- [x] **ADR 0006 recorded 3 Sep** — gate fail-open policy + 3 Sep evidence
+      (`pipeline/docs/adr/0006-quality-gate-fail-open.md`); PRD linked.
+- [x] **C8 probe BUILT 3 Sep** (`monitoring/api_probe.py` + 6 tests) — Cornelious gave
+      the dev endpoint (`uks-eeco-dev-api-web`, `/api/v1/api/health`, 200 +
+      `data.status=ok`); verified live. Still open: **production app URL** and where
+      the probe runs on a schedule (GitHub Actions/Azure — cannot be Snowflake).
+- [ ] **Chase Cornelious:** C8 **prod** app URL; `LATEST_SYSTEM_HEALTH` schema
       agreement + service-role grants.
 - [ ] **Chase Dave/Bryan:** WARN vs FAIL definitions + warning recipients (now live, no
       longer hypothetical); stale-data visibility policy; one-pager sign-off.
