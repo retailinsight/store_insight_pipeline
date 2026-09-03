@@ -103,14 +103,16 @@ python scripts/run_monitoring_supervised.py  # re-run all checks + see LATEST_SY
 - **Impact:** stores cannot load the app / smart actions at all.
 - **Validate:** `python monitoring/api_probe.py --retries 1` — healthy = HTTP 200 with
   `data.status == "ok"` on `/api/v1/api/health` (shape confirmed by Cornelious 3 Sep).
-  Current target is the **DEV app** (`uks-eeco-dev-api-web`); the production app URL
-  for pilot monitoring is still to be confirmed (we had `uks-eoe-webapi-crt` on
-  record) — switch `--url`/`DEFAULT_URL` when it lands.
+  Current target is the **DEV app** (`uks-eeco-dev-api-web`) — Cornelious confirmed
+  3 Sep that **prod infra has not been created yet**; switch `--url`/`DEFAULT_URL`
+  when it lands.
 - **First fix:** none on our side — route to Cornelious/DevOps immediately (Azure app).
   Exit code 1 after 3 consecutive failures; optional Slack post via the
   `STORE_INSIGHT_PROBE_SLACK_WEBHOOK` env var (never committed).
-- **Scheduling:** needs an external scheduler (GitHub Actions cron / Azure) — cannot
-  run inside Snowflake. Not yet scheduled.
+- **Scheduling:** Cornelious 3 Sep — **DevOps will set up an Azure uptime check**;
+  that is the scheduled C8. This script is the manual/backup validation tool and the
+  written healthy-response contract. Chase DevOps until the Azure check exists and
+  its alerts route somewhere the pilot team sees.
 - **Owner:** Cornelious / DevOps. **Escalate:** Dave/Bryan (pilot-blocking during
   store hours).
 

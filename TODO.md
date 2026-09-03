@@ -29,8 +29,12 @@ High priority:
       the dev endpoint (`uks-eeco-dev-api-web`, `/api/v1/api/health`, 200 +
       `data.status=ok`); verified live. Still open: **production app URL** and where
       the probe runs on a schedule (GitHub Actions/Azure — cannot be Snowflake).
-- [ ] **Chase Cornelious:** C8 **prod** app URL; `LATEST_SYSTEM_HEALTH` schema
-      agreement + service-role grants.
+- [ ] **C8 follow-ups (Cornelious answered 3 Sep):** prod infra **does not exist yet**
+      (pilot-blocking — escalate to Alex/Engineering: when is prod created, and which
+      env do pilot stores hit on 13 Sep?); **DevOps must set up the Azure uptime
+      check** against `/api/v1/api/health` — chase until it exists and alerts route to
+      the pilot team. Our probe stays as manual/backup. Still open too:
+      `LATEST_SYSTEM_HEALTH` schema agreement + service-role grants.
 - [ ] **Chase Dave/Bryan:** WARN vs FAIL definitions + warning recipients (now live, no
       longer hypothetical); stale-data visibility policy; one-pager sign-off.
 - [x] **PR #58 merged 2 Sep: `fix/handler-run-quality-gate`** — gate now wired into
