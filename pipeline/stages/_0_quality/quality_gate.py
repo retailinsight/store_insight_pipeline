@@ -46,6 +46,17 @@ from store_insight.pipeline.tools.source_volume_check import (
 # Daily source dataframe parameters a detector can declare in detect().
 SOURCE_PARAMS = frozenset(DAILY_SOURCES)
 
+# The gate runs at 06:00, before the daily feed load (~11:00). osa and
+# markdown_log land at X+1 by 11:00, so at 06:00 their freshest COMPLETE day
+# is X-2, not X-1 — the 11:30 check's SOURCE_LAG_DAYS of 1 would false-FAIL
+# them every morning and skip their detectors (seen 2026-09-03: only 16
+# Compliance alerts shipped). feedback/markdown_sales/wastage at lag 3 are
+# already complete by 06:00, so they keep the shared lag.
+GATE_LAG_DAYS = {
+    'osa': 2,
+    'markdown_log': 2,
+}
+
 
 def detector_sources(detector_module) -> frozenset[str]:
     """The daily sources a detector consumes, read from its detect() signature."""
@@ -152,7 +163,8 @@ def run_quality_gate(session, cfg, analysis_date: datetime.date | str | None = N
     session       : Snowpark session (runner for the volume queries)
     cfg           : PipelineConfig (tables + data_quality settings)
     analysis_date : run's analysis date; each source is checked at its own
-                    expected lag behind this date (SOURCE_LAG_DAYS)
+                    expected lag behind this date (SOURCE_LAG_DAYS overridden
+                    by GATE_LAG_DAYS for the pre-feed-load 06:00 run)
     detectors     : detector modules; defaults to the full registry
     """
     from store_insight.pipeline.stages._1_detect import registry as _registry
@@ -178,7 +190,7 @@ def run_quality_gate(session, cfg, analysis_date: datetime.date | str | None = N
         analysis_date = datetime.date.fromisoformat(analysis_date)
     base_date = analysis_date or datetime.date.today()
 
-    check_dates = check_dates_for(sources, base_date)
+    check_dates = check_dates_for(sources, base_date, lag_days=GATE_LAG_DAYS)
     exceptions = {str(d) for d in settings['calendar_exceptions']}
 
     results = run_check(

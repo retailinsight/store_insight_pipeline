@@ -197,12 +197,45 @@ def test_run_quality_gate_disabled_runs_everything():
 
 
 def test_calendar_exception_forces_ok():
-    # osa checked at lag 1 behind 2026-08-28 → check_date 2026-08-27
-    cfg = _FakeCfg(calendar_exceptions=['2026-08-27'])
+    # osa checked at gate lag 2 behind 2026-08-28 → check_date 2026-08-26
+    cfg = _FakeCfg(calendar_exceptions=['2026-08-26'])
     plan = run_quality_gate(_FakeSession(0), cfg,
                             analysis_date=datetime.date(2026, 8, 28))
     assert plan.actions == {'osa': 'NONE'}
     assert plan.results[0]['status'] == 'OK'
+
+
+def test_gate_checks_osa_and_markdown_log_at_lag_2():
+    """3 Sep 2026 incident: the 06:00 gate reused the 11:30 check's lag of 1
+    for osa/markdown_log, whose X-1 day never exists before the ~11:00 feed
+    load — both false-FAILED every morning and only Compliance alerts shipped.
+    The gate must check them at lag 2; the lag-3 sources keep the shared lag."""
+    from store_insight.pipeline.stages._0_quality.quality_gate import GATE_LAG_DAYS
+    from store_insight.pipeline.tools.source_volume_check import check_dates_for
+
+    sources = {s: 'T' for s in
+               ('osa', 'feedback', 'markdown_log', 'markdown_sales', 'wastage')}
+    dates = check_dates_for(sources, datetime.date(2026, 9, 3), lag_days=GATE_LAG_DAYS)
+    assert dates['osa'] == datetime.date(2026, 9, 1)
+    assert dates['markdown_log'] == datetime.date(2026, 9, 1)
+    assert dates['feedback'] == datetime.date(2026, 8, 31)
+    assert dates['markdown_sales'] == datetime.date(2026, 8, 31)
+    assert dates['wastage'] == datetime.date(2026, 8, 31)
+
+
+def test_run_quality_gate_uses_gate_lags():
+    """run_quality_gate must query osa at lag 2 behind the analysis date."""
+    captured = []
+
+    class _SpySession(_FakeSession):
+        def sql(self, query):
+            captured.append(query)
+            return super().sql(query)
+
+    run_quality_gate(_SpySession(100), _FakeCfg(),
+                     analysis_date=datetime.date(2026, 9, 3))
+    assert any("'2026-09-01'" in q for q in captured)  # lag 2, not 2026-09-02
+    assert not any("'2026-09-02'" in q for q in captured)
 
 
 def test_zero_rows_without_exception_skips_osa_consumers():
