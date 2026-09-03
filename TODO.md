@@ -1,17 +1,40 @@
 # Store Insight — TODO
 
-Last updated: 2026-09-02
+Last updated: 2026-09-03
 
-## Next / in flight (2026-09-02)
+## Next / in flight (2026-09-03)
 
 High priority:
+- [x] **INCIDENT 3 Sep RESOLVED same day — gate false-FAILED osa/markdown_log at 06:00** —
+      first gate-protected run skipped every osa/markdown detector (16 Compliance-only
+      alerts; stores reported "no smart actions" 09:11). Root cause: gate reused the 11:30
+      check's lag 1 for osa/markdown_log, whose X-1 day never exists before the ~11:00
+      feed load. Fix PR **#60** (`GATE_LAG_DAYS` = 2) merged + SP redeployed; 3 Sep re-run
+      with overwrite wrote **716 alerts** across all types. Regression tests encode the
+      incident. Full write-up in `RISK_VALIDATION.md` (3 Sep section).
+- [x] **Slack alerting now AUTOMATIC** — `MONITORING_TASK` RESUMED in DEV (daily 07:00 UK)
+      after the supervised run correctly caught the 3 Sep incident (C1 FAIL, C4 WARN 0.03x,
+      C7 FAIL) and delivered the Slack alert. Manual morning query now backup only.
+- [ ] **Verify 4 Sep morning:** 06:00 run → gate rows all OK at lag 2 + normal volume
+      (`scripts/check_morning_run.py`); 07:00 monitoring auto-run posts recovery for the
+      3 Sep C1/C7 incidents then goes silent. Closes the supervised-runs item.
+- [ ] **Promote monitoring to prod pre-pilot** — after 4 Sep verification + threshold
+      review: `deploy_monitoring_task.py --env prod --resume`, then SUSPEND the DEV task
+      (avoid double Slack posts).
+- [ ] **Runbook notes per check (PRD §13)** — impact / validate / first fix / owner /
+      escalation for C1–C7, C9 — see `monitoring/RUNBOOK.md`.
+- [ ] **ADR: gate fail-open policy** — record decision + 3 Sep evidence.
+- [ ] **Chase Cornelious:** C8 .NET liveness endpoint URL; `LATEST_SYSTEM_HEALTH` schema
+      agreement + service-role grants.
+- [ ] **Chase Dave/Bryan:** WARN vs FAIL definitions + warning recipients (now live, no
+      longer hypothetical); stale-data visibility policy; one-pager sign-off.
 - [x] **PR #58 merged 2 Sep: `fix/handler-run-quality-gate`** — gate now wired into
       `deploy/handler.py` (the SP entrypoint the 06:00 Task calls). Background: PR #57
       only covered `run_batch.py`, so the prod runs since 29 Aug were not gate-protected.
 - [x] **Redeployed 2 Sep ~10:50 from merged main** — SP + Task re-registered and resumed
       (CRON 0 6 * * * Europe/London); known benign EXECUTE TASK grant warning.
-- [ ] **Verify tomorrow's (3 Sep) 06:00 run writes 5 gate rows to `DATA_QUALITY_LOG`**
-      (`scripts/check_morning_run.py`).
+- [x] **Verified 3 Sep: 06:00 run writes gate rows to `DATA_QUALITY_LOG`** — it did, and
+      exposed the gate-lag bug (see incident above).
 - [x] **Monitoring runner built + deployed to DEV 2 Sep** — `monitoring/pilot_monitoring.py`
       (checks C1–C7 + C9), `SP_RUN_MONITORING` + `MONITORING_TASK` (suspended) in
       `STORE_INSIGHT_DEV`, MONITORING_RUN/LOG/INCIDENT + `LATEST_SYSTEM_HEALTH` view.
@@ -24,8 +47,8 @@ High priority:
       (`run_monitoring_supervised.py --date`) fired the warning; recovery message cleared it.
       Gotcha found: raw newlines broke the `{"text": ...}` webhook JSON — now JSON-escaped
       via dollar-quoted SQL. Test helper: `scripts/test_slack_notification.py`.
-- [ ] **Monitoring: 3 days supervised runs (3–4 Sep)** — `python scripts/run_monitoring_supervised.py`
-      each morning after 07:00; tune thresholds; then deploy `--env prod --resume` pre-pilot.
+- [x] **Monitoring supervised run 3 Sep** — caught the real incident correctly; task now
+      resumed in DEV (see above). Remaining: 4 Sep verification, then prod promotion.
 - [ ] **Answer Dan: name a feed-load owner** — he replied 28 Aug "what do you want me to
       name?" and is happy with X+3 (actions rarely taken the day an alert lands). Need a
       primary + backup to receive genuine short-feed warnings; then add to the runbook and
@@ -58,15 +81,15 @@ From the 28 Aug action review (`INTERNAL_ACTION_REVIEW_2808.md`) — items on El
       false positive confirmed. Keep current thresholds; recheck if the sample resurfaces.
 
 Medium priority:
-- [ ] After handler fix is live: verify next 06:00 run writes gate rows to `DATA_QUALITY_LOG`
-      (5 rows with gate `ACTION_TAKEN` in addition to the 11:30 check's 5)
+- [x] Handler fix verified live 3 Sep — gate rows written at 06:00 (and lag bug found+fixed)
 
 ## PRD status (2 Sep) — done vs remaining
 
 **`prd-source-data-quality-gate.md` — LIVE, nearly complete:**
 - [x] Warn-only 11:30 source-volume check (live since 28 Aug, per-source lags 1/1/3/3/3)
 - [x] In-pipeline gate: PR #57 (gate + run_batch) + PR #58 (SP handler) merged; redeployed 2 Sep
-- [ ] Verify first gate-protected 06:00 run (3 Sep) writes gate rows
+- [x] First gate-protected 06:00 run verified 3 Sep — wrote gate rows AND exposed the
+      lag bug (fixed same day, PR #60, `GATE_LAG_DAYS`)
 - [ ] During pilot: threshold/holiday tuning from evidence; record ADR for fail-open policy
 - [ ] Blocked on others: Bryan/Dave sign-off; feed-load owner named (Dan)
 
@@ -76,8 +99,10 @@ Medium priority:
 - [x] First supervised run passed (C2–C6, C9 OK; C1/C7 UNKNOWN expected pre-11:30)
 - [x] Slack notification route live + wired into the SP (2 Sep, SD-67936); fires on
       FAIL/WARN/UNKNOWN + recovery only
-- [ ] Supervised runs 3–4 Sep (`scripts/run_monitoring_supervised.py`), tune, then
-      `deploy_monitoring_task.py --env prod --resume` pre-pilot
+- [x] Supervised run 3 Sep caught a real incident (C1/C4/C7); `MONITORING_TASK` RESUMED
+      in DEV (07:00 UK daily)
+- [ ] 4 Sep verification, C4 baseline review, then `deploy_monitoring_task.py --env prod
+      --resume` pre-pilot (and suspend the DEV task)
 - [ ] Blocked on others: C8 .NET probe endpoint (Cornelious/Alex); WARN/FAIL + recipient
       decisions and stale-data policy (Dave/Bryan); `LATEST_SYSTEM_HEALTH` schema agreement
       + service-role grants (Cornelious)
