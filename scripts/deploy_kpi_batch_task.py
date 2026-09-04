@@ -175,7 +175,7 @@ def main() -> None:
         if args.resume:
             print(f"  Resuming task {fq_refresh}...")
             session.sql(f"ALTER TASK {fq_refresh} RESUME").collect()
-            state += f" + refresh STARTED (daily 11:45 Europe/London)"
+            state += " + refresh STARTED (daily 11:45 Europe/London)"
         else:
             state += " + refresh SUSPENDED"
 
