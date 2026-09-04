@@ -3,7 +3,7 @@
 Living document: re-validate before each deployment step and after each production run.
 Validation helpers: `scripts/validate_deploy_risks.py`, `scripts/check_run_output.py`, `scripts/spot_check_cards.py`, `scripts/migrate_alerts_table_schema.py`, `scripts/validate_lineage_populated.py`, `scripts/validate_merge_snowflake.py`, `scripts/check_task_history.py` (read-only except migration; VPN required).
 
-Last live-Snowflake validation: **2026-09-03 (gate lag fix deployed + 3 Sep alerts regenerated: 716 cards; monitoring task RESUMED)** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
+Last live-Snowflake validation: **2026-09-04 (4 Sep morning gate OK at lag 2, 644 alerts, all monitoring checks OK; C1/C7 3 Sep incidents resolved; prod monitoring SP + task deployed at 12:14 UK and verified Slack notification at 12:27 via forced FAIL/recovery; `KPI_AVAILABILITY_REFRESH_TASK` deployed 12:50 (daily 11:45 UK, option A run-timing per Dan/Dave) and verified by manual SP call — 121 rows replaced, no duplicates)** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
 Requirements/code review updated: **2026-09-03 (PR #60 `GATE_LAG_DAYS` merged to `main`)**
 
 ---
@@ -27,28 +27,30 @@ Compliance alerts shipped; store teams reported "no smart actions" at 09:11.
 - Monitoring caught it correctly on the supervised run (C1 FAIL, C4 WARN
   0.03x, C7 FAIL) and Slack alert delivered; `MONITORING_TASK` now **RESUMED**
   in DEV (daily 07:00 UK) so alerting is automatic from tomorrow.
-- Verification: 4 Sep 06:00 run must show gate OK rows at lag 2 and a normal
-  alert volume; 07:00 monitoring should stay silent (or post recovery).
+- Verification: 4 Sep 06:00 run must show gate OK rows at lag 2 and a normal alert volume; 07:00 monitoring should stay silent (or post recovery).
+- **Verified 2026-09-04 11:06:** `DATA_QUALITY_LOG` shows all five gate rows OK (`osa`/`markdown_log` correctly checked at lag 2 for 2 Sep); `ALERTS_PIPELINE` = 644 (baseline 606, 1.06x, mix normal); `MONITORING_TASK` ran at 07:00 with all 7/7 checks OK, and the 3 Sep C1/C7 incidents resolved automatically.
 
 ---
 
-## ✅ Slack notifications LIVE for pilot monitoring (DEV) — 2026-09-02
+## ✅ Pilot monitoring + Slack notifications LIVE in PROD — 2026-09-04
 
 - Snowflake notification integration `SLACK__STORE_INSIGHT_NOTIFICATIONS` (secret in
   `ADMIN.UTILS`, SD-67936) created by admin; `STORE_INSIGHT_ROLE` granted USAGE on the
   integration and READ on the secret — send verified as `SVC_STOREINSIGHT`
   (`scripts/test_slack_notification.py`).
-- `SP_RUN_MONITORING` (`STORE_INSIGHT_DEV`) redeployed with notify logic: posts to
-  **#store-insight-pilot-alerts** only on FAIL/WARN/UNKNOWN or incident recovery;
-  silent when all checks OK. Messages JSON-escaped (raw newlines were silently
-  dropped by the webhook — fixed with `_webhook_safe`).
-- Verified end-to-end 2 Sep: forced no-data run produced a warning message in the
-  channel; subsequent normal run produced the recovery message. `MONITORING_TASK`
-  remains **suspended** in DEV (supervised runs 3–4 Sep before prod promotion).
-- Handler gate fix (PR #58) merged and redeployed 2 Sep; verification pending:
-  tomorrow's 06:00 run must write five gate rows to `DATA_QUALITY_LOG` (see below).
-- Residual risk: monitoring is DEV-only until task promotion; prod feed warnings
-  still rely on the 11:30 log-only check until then.
+- `SP_RUN_MONITORING` promoted to prod (`STORE_INSIGHT_DB.PUBLIC.SP_RUN_MONITORING`)
+  and `STORE_INSIGHT_DB.PUBLIC.MONITORING_TASK` resumed daily 07:00 UK; DEV
+  `MONITORING_TASK` suspended to avoid double Slack posts.
+- Posts to **#store-insight-pilot-alerts** only on FAIL/WARN/UNKNOWN or incident
+  recovery; silent when all checks OK. Messages JSON-escaped (raw newlines were
+  silently dropped by the webhook — fixed with `_webhook_safe`).
+- Verified end-to-end: 2 Sep forced no-data run produced a warning and recovery
+  message in DEV; 4 Sep prod supervised run all checks OK, no alert sent.
+- 4 Sep 12:27 UK: direct integration test returned `Enqueued notifications`; prod
+  `SP_RUN_MONITORING` forced FAIL run (2026-07-10) sent a Slack warning for C3/C6;
+  recovery run (2026-09-04) resolved incidents and sent a recovery message.
+- Handler gate fix (PR #58) merged and redeployed 2 Sep; verified: 4 Sep 06:00 run
+  wrote five gate rows to `DATA_QUALITY_LOG`.
 
 ---
 

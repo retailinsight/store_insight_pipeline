@@ -1,6 +1,6 @@
 # Pre-pilot monitoring & support model — one page
 
-**Date:** 25 Aug 2026 (updated 3 Sep: monitoring task RESUMED in DEV after catching the 3 Sep gate-lag incident; runbook added — `monitoring/RUNBOOK.md`) · **Signed off by Dan: 3 Sep** · **Pending: Dave** · **Owner of this model:** Elaheh (technical), Dave + Victoria (operating model) · **Pilot:** East of England, 13 Sep · **Support owners for UI/API/BitLogix components are a first draft — TBC with Alex + Engineering next week**
+**Date:** 25 Aug 2026 (updated 4 Sep: monitoring task promoted to PROD, DEV task suspended; 3 Sep gate-lag incident caught + runbook added — `monitoring/RUNBOOK.md`) · **Signed off by Dan: 3 Sep** · **Pending: Dave** · **Owner of this model:** Elaheh (technical), Dave + Victoria (operating model) · **Pilot:** East of England, 13 Sep · **Support owners for UI/API/BitLogix components are a first draft — TBC with Alex + Engineering next week**
 **Full detail:** `prds/prd-pilot-monitoring-and-stability.md` (this page is the agreed cut, per Week-1 goal §7)
 
 ## What is monitored, by whom
@@ -8,14 +8,14 @@
 | # | What | How (today) | Named owner | Status |
 |---|---|---|---|---|
 | 1 | Source feeds (OSA, feedback, markdown log/sales, wastage) | `SOURCE_VOLUME_CHECK_TASK` daily, 28-day same-weekday median, writes `DATA_QUALITY_LOG`. In-pipeline auto-skip gate **LIVE in prod** (PR #57 + #58 merged, redeployed 2 Sep; `prd-source-data-quality-gate.md`) | Elaheh (build) → feed owner (respond — **owner TBC, Dan chasing**) | **LIVE + verified 3 Sep** (11:30 warn check + 06:00 in-run gate; gate-lag bug found+fixed same day, PR #60) |
-| 2 | Alerts pipeline ran + wrote rows | Automated check C2+C3 in `SP_RUN_MONITORING` (`monitoring/pilot_monitoring.py`, deployed to DEV 2 Sep, supervised runs); manual fallback `scripts/check_task_status.py` | Dan | **AUTOMATIC in DEV** (task resumed 3 Sep, daily 07:00 UK); promote to prod pre-pilot |
-| 3 | Alert volume/mix sanity | Automated check C4: 4-week same-weekday median band 0.5×–2× + mix share warn >80% (normal ≈ 585/day) | Dan / Bryan | **AUTOMATIC in DEV**; caught the 3 Sep incident (WARN 0.03×); promote pre-pilot |
-| 4 | KPI batch ran + output complete | Chained `KPI_AVAILABILITY_BATCH_TASK`; automated check C5+C6 (rows + 28-col schema incl. `TIME_OF_DAY_BREAKDOWN`) | Elaheh | **LIVE** (chained) + **automated output check in DEV** |
+| 2 | Alerts pipeline ran + wrote rows | Automated check C2+C3 in `SP_RUN_MONITORING` (`monitoring/pilot_monitoring.py`, deployed to PROD 4 Sep); manual fallback `scripts/check_task_status.py` | Dan | **AUTOMATIC in PROD** (task resumed 4 Sep, daily 07:00 UK); DEV suspended |
+| 3 | Alert volume/mix sanity | Automated check C4: 4-week same-weekday median band 0.5×–2× + mix share warn >80% (normal ≈ 585/day) | Dan / Bryan | **AUTOMATIC in PROD** (task resumed 4 Sep, daily 07:00 UK); caught the 3 Sep incident (WARN 0.03×); DEV suspended |
+| 4 | KPI batch ran + output complete | Chained `KPI_AVAILABILITY_BATCH_TASK`; automated check C5+C6 (rows + 28-col schema incl. `TIME_OF_DAY_BREAKDOWN`) | Elaheh | **LIVE** (chained) + **automated output check in PROD** |
 | 5 | Production .NET API up | Probe `monitoring/api_probe.py` (built 3 Sep; healthy = 200 + `data.status=ok` on `/api/v1/api/health`) — manual/backup tool + response contract. Scheduled check: **DevOps Azure uptime check** (Cornelious 3 Sep) | **Alex/Engineering to confirm** (Cornelious/BitLogix build, but not product support owner) | **Probe verified on DEV. Cornelious 3 Sep: PROD infra does not exist yet — pilot-blocking dependency — and DevOps must set up the Azure uptime check** |
 | 6 | UI availability + auth | Daily GitHub Action e2e (agreed 26 Aug): login → verify data/UI → KPI details → action board → assign → complete. **Full flow incl. writes in DEV; read-only smoke in PROD.** Dedicated test account + store 470 (441/490 back-ups) | Dave (suite), **Alex/Engineering to confirm env owner** (Imran/Cornelious/BitLogix build) | In progress (Week-1 testing goal §6) |
-| 7 | Monitor heartbeat | C9 self-report row in `MONITORING_LOG` + "no result today" query on `MONITORING_RUN` | Elaheh | **Automated in DEV**; external no-result check stays manual (`scripts/check_morning_run.py`) |
+| 7 | Monitor heartbeat | C9 self-report row in `MONITORING_LOG` + "no result today" query on `MONITORING_RUN` | Elaheh | **AUTOMATIC in PROD** (daily 07:00 UK); external no-result check stays manual (`scripts/check_morning_run.py`) |
 
-**Warning route LIVE and AUTOMATIC (3 Sep):** `SP_RUN_MONITORING` posts to Slack **#store-insight-pilot-alerts** via the `SLACK__STORE_INSIGHT_NOTIFICATIONS` integration — fires only on FAIL/WARN/UNKNOWN or recovery, silent when all OK. Proven on a real incident 3 Sep (gate-lag false skip → C1/C4/C7 fired, alert delivered). `MONITORING_TASK` resumed in DEV, daily 07:00 UK; Elaheh's manual morning query is now backup only. Per-check response steps: `monitoring/RUNBOOK.md`.
+**Warning route LIVE and AUTOMATIC (4 Sep):** `SP_RUN_MONITORING` (`STORE_INSIGHT_DB.PUBLIC`) posts to Slack **#store-insight-pilot-alerts** via the `SLACK__STORE_INSIGHT_NOTIFICATIONS` integration — fires only on FAIL/WARN/UNKNOWN or recovery, silent when all checks OK. Proven on a real incident 3 Sep (gate-lag false skip → C1/C4/C7 fired, alert delivered). `MONITORING_TASK` resumed in PROD and suspended in DEV to avoid duplicate Slack posts; Elaheh's manual morning query is now backup only. Per-check response steps: `monitoring/RUNBOOK.md`.
 
 ## Warning vs pilot-blocking
 

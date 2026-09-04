@@ -1,6 +1,6 @@
 # Store Insight — TODO
 
-Last updated: 2026-09-03
+Last updated: 2026-09-04
 
 ## Next / in flight (2026-09-03)
 
@@ -15,12 +15,16 @@ High priority:
 - [x] **Slack alerting now AUTOMATIC** — `MONITORING_TASK` RESUMED in DEV (daily 07:00 UK)
       after the supervised run correctly caught the 3 Sep incident (C1 FAIL, C4 WARN 0.03x,
       C7 FAIL) and delivered the Slack alert. Manual morning query now backup only.
-- [ ] **Verify 4 Sep morning:** 06:00 run → gate rows all OK at lag 2 + normal volume
-      (`scripts/check_morning_run.py`); 07:00 monitoring auto-run posts recovery for the
-      3 Sep C1/C7 incidents then goes silent. Closes the supervised-runs item.
-- [ ] **Promote monitoring to prod pre-pilot** — after 4 Sep verification + threshold
-      review: `deploy_monitoring_task.py --env prod --resume`, then SUSPEND the DEV task
-      (avoid double Slack posts).
+- [x] **Verify 4 Sep morning:** 06:00 run → gate rows all OK at lag 2 + normal volume
+      (`scripts/check_morning_run.py`); 07:00 monitoring auto-run posted recovery for the
+      3 Sep C1/C7 incidents and went silent. Closes the supervised-runs item.
+- [x] **Promote monitoring to prod pre-pilot** — `deploy_monitoring_task.py --env prod --resume` ran 4 Sep; prod `MONITORING_TASK` resumed (daily 07:00 UK); DEV `MONITORING_TASK` suspended to avoid duplicate Slack posts.
+- [x] **Midday KPI refresh (run-timing option A, Dan/Dave 4 Sep)** — new
+      `KPI_AVAILABILITY_REFRESH_TASK` at 11:45 UK (after the 11:30 source check) calls
+      the same `SP_KPI_AVAILABILITY_BATCH`; delete-by-RUN_DATE + append means it just
+      replaces the morning rows with fresher data. Alerts stay fixed at 06:00. Verified
+      by manual SP call 4 Sep (121 rows, no duplicates). Note: C5 monitoring watches the
+      06:30 batch task only; the 07:00 monitor runs before 11:45 (acceptable for pilot).
 - [x] **Runbook DONE 3 Sep (PRD §13)** — `monitoring/RUNBOOK.md`, per-check impact /
       validate / first fix / owner / escalation for C1–C9 (C8 added after probe built).
 - [x] **ADR 0006 recorded 3 Sep** — gate fail-open policy + 3 Sep evidence

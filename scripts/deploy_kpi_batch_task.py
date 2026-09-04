@@ -5,6 +5,12 @@ runs AFTER RUN_ALERTS_PIPELINE_TASK, so it starts when the alerts pipeline
 finishes rather than at a guessed fixed time. Dev has no alerts task, so the
 dev task keeps an independent 06:30 UTC cron.
 
+Midday KPI refresh (option A run-timing, agreed with Dan/Dave 2026-09-04): prod
+also gets KPI_AVAILABILITY_REFRESH_TASK at 11:45 Europe/London — after the
+11:30 source check confirms the fresh feeds landed. It calls the same SP with
+the same defaults; the batch deletes-by-RUN_DATE then appends, so the refresh
+simply replaces the morning rows with fresher data. Alerts stay fixed at 06:00.
+
 Adding a child task requires briefly suspending the parent task; the script
 restores the parent's previous state afterwards.
 
@@ -37,8 +43,10 @@ ENVS = {
 
 SP_NAME = "SP_KPI_AVAILABILITY_BATCH"
 TASK_NAME = "KPI_AVAILABILITY_BATCH_TASK"
+REFRESH_TASK_NAME = "KPI_AVAILABILITY_REFRESH_TASK"
 STAGE_NAME = "KPI_BATCH_CODE_STAGE"
 CRON = "USING CRON 30 6 * * * UTC"  # daily 06:30 UTC, ~30 min after the 06:00 alerts pipeline
+REFRESH_CRON = "USING CRON 45 11 * * * Europe/London"  # after the 11:30 source check
 CORTEX_MODEL = "mistral-large2"
 
 
@@ -151,6 +159,25 @@ def main() -> None:
             state = f"STARTED ({schedule_desc})"
         else:
             state = "SUSPENDED (run ALTER TASK ... RESUME or redeploy with --resume to enable)"
+
+    if parent:
+        # Midday refresh (prod only): standalone cron task, same SP + table.
+        fq_refresh = f"{db}.PUBLIC.{REFRESH_TASK_NAME}"
+        print(f"  Creating task {fq_refresh} (suspended, {REFRESH_CRON})...")
+        session.sql(f"""
+            CREATE OR REPLACE TASK {fq_refresh}
+              WAREHOUSE = STORE_INSIGHT_WH
+              SCHEDULE = '{REFRESH_CRON}'
+              COMMENT = 'Midday KPI refresh at 11:45 UK after the 11:30 source check; replaces today''s rows with fresher data (option A run-timing, agreed Dan/Dave 2026-09-04)'
+            AS
+              CALL {fq_sp}(NULL, NULL, '{table}')
+        """).collect()
+        if args.resume:
+            print(f"  Resuming task {fq_refresh}...")
+            session.sql(f"ALTER TASK {fq_refresh} RESUME").collect()
+            state += f" + refresh STARTED (daily 11:45 Europe/London)"
+        else:
+            state += " + refresh SUSPENDED"
 
     print(f"Done. Task state: {state}")
     print(f"Manual test: CALL {fq_sp}(NULL, NULL, '{table}');")
