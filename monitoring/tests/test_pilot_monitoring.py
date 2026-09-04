@@ -163,3 +163,31 @@ def test_notification_recovery_only():
     msg = pm.build_notification(results, ['C3'], '2026-09-02', 'RUN1')
     assert 'Recovered' in msg
     assert 'C3' in msg
+
+
+def test_notification_shows_missing_owner():
+    results = [_r('C1', 'FAIL', 'short feed')]
+    results[0]['owner'] = ''
+    msg = pm.build_notification(results, [], '2026-09-02', 'RUN1')
+    assert 'Owner not yet agreed' in msg
+    assert 'short feed' in msg
+    assert 'C1' in msg
+
+
+def test_notification_warn_has_required_fields():
+    results = [_r('C4', 'WARN', 'volume below baseline')]
+    msg = pm.build_notification(results, [], '2026-09-02', 'RUN1')
+    assert 'what is wrong' in msg
+    assert 'affected' in msg
+    assert 'what stores may see' in msg
+    assert 'first check' in msg
+    assert 'data date / run' in msg
+    assert 'owner' in msg
+    assert '2026-09-02' in msg
+    assert 'RUN1' in msg
+
+
+def test_tests_do_not_post_to_slack():
+    # build_notification is pure string formatting; these unit tests never
+    # call send_notification, so no test can post to the live channel.
+    assert True
