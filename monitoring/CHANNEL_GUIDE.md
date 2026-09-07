@@ -1,7 +1,8 @@
 # #store-insight-pilot-alerts — Pinned guide
 
 ## What this channel is for
-This channel is the pilot's early-warning system. It posts automatically when a daily check finds something wrong or when a previous problem has recovered. **Green/healthy runs stay silent**, so no message usually means everything is fine.
+This channel is the pilot's early-warning system. It posts automatically every morning: a green "all healthy" note when everything is fine, a warning block when a daily check finds something wrong, and a recovery note when a previous problem has cleared. 
+**No message at all means the monitor itself did not run** — tell Elaheh.
 
 ## How to read a post
 A post has three parts:

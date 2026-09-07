@@ -40,8 +40,9 @@ BASELINE_WEEKS = 4        # C4: trailing same-weekday weeks
 TASK_LOOKBACK_HOURS = 18  # C2/C5: how far back to look in TASK_HISTORY
 KPI_MIN_COLUMNS = 28      # C6: expected column count
 
-# Slack notification integration (SD-67936). Messages fire only when a check
-# is not OK or when an open incident recovers — never on all-clear runs.
+# Slack notification integration (SD-67936). A message is sent every run:
+# problem blocks when a check is not OK, a recovery line when an open
+# incident clears, and a short all-green note when everything is healthy.
 SLACK_INTEGRATION = 'SLACK__STORE_INSIGHT_NOTIFICATIONS'
 
 OWNERS = {
@@ -502,29 +503,31 @@ def write_results(runner, monitor_db: str, run_id: str, results: list[dict],
 
 def update_incidents(runner, monitor_db: str, run_id: str, results: list[dict],
                      schema: str = 'PUBLIC') -> list[str]:
-    """Open/refresh an incident per FAILing check; resolve on OK.
+    """Open/refresh an incident per non-OK check; resolve on OK.
 
-    Returns the incident keys resolved by this run (for recovery messages).
+    WARN and UNKNOWN open incidents too, so a later OK run produces a
+    recovery message. Returns the incident keys resolved by this run.
     """
     p = f'{monitor_db}.{schema}'
     resolved: list[str] = []
     for r in results:
         key = r['check_id']
-        if r['status'] == 'FAIL':
+        if r['status'] != 'OK':
             runner(
                 f"MERGE INTO {p}.MONITORING_INCIDENT t "
                 f"USING (SELECT '{key}' AS INCIDENT_KEY) s "
                 f"ON t.INCIDENT_KEY = s.INCIDENT_KEY AND t.STATUS = 'OPEN' "
                 f"WHEN MATCHED THEN UPDATE SET "
+                f"  SEVERITY = '{r['status']}', "
                 f"  LAST_OBSERVED_AT = CURRENT_TIMESTAMP(), LAST_RUN_ID = '{run_id}' "
                 f"WHEN NOT MATCHED THEN INSERT "
                 f"  (INCIDENT_KEY, CHECK_ID, COMPONENT_ID, SEVERITY, STATUS, "
                 f"   OPENED_AT, LAST_OBSERVED_AT, LAST_RUN_ID) "
                 f"VALUES ('{key}', '{r['check_id']}', '{r['component_id']}', "
-                f"'FAIL', 'OPEN', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), "
+                f"'{r['status']}', 'OPEN', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), "
                 f"'{run_id}')"
             )
-        elif r['status'] == 'OK':
+        else:  # OK resolves any open incident for this check
             open_rows = runner(
                 f"SELECT INCIDENT_KEY FROM {p}.MONITORING_INCIDENT "
                 f"WHERE INCIDENT_KEY = '{key}' AND STATUS = 'OPEN'"
@@ -542,16 +545,16 @@ def update_incidents(runner, monitor_db: str, run_id: str, results: list[dict],
 
 def build_notification(results: list[dict], resolved: list[str],
                        business_date, run_id: str) -> str | None:
-    """Slack message text, or None when there is nothing worth sending.
+    """Slack message text — one is sent every run.
 
-    Fires when any check is FAIL/WARN/UNKNOWN (missing data is never OK) or
-    when a previously open incident has recovered. Silent on all-OK runs.
-    The format is compact: one short block per problem check with the first
-    response step only. Full troubleshooting lives in the pinned channel guide.
+    Problem blocks when any check is FAIL/WARN/UNKNOWN (missing data is never
+    OK), a recovery line when a previously open incident has cleared, and a
+    short all-green note when everything is healthy so the channel always has
+    a daily heartbeat. The format is compact: one short block per problem
+    check with the first response step only. Full troubleshooting lives in
+    the pinned channel guide.
     """
     problems = [r for r in results if r['status'] != 'OK']
-    if not problems and not resolved:
-        return None
     lines = []
     lines.append(
         f'Store Insight pilot monitoring — {business_date} / {run_id}')
@@ -600,6 +603,14 @@ def build_notification(results: list[dict], resolved: list[str],
             lines.append(
                 f":white_check_mark: {cid} — {title}{suffix} is back to healthy")
         lines.append('No action needed — earlier problem resolved.')
+        lines.append('')
+
+    if not problems:
+        ok_count = sum(1 for r in results if r['status'] == 'OK')
+        lines.append(
+            f':large_green_circle: All {ok_count}/{len(results)} checks green — '
+            'feeds, pipeline, quality gate and KPIs all healthy. '
+            'No action needed today.')
         lines.append('')
 
     lines.append('Full guide, live dashboard and support model: see the pinned items in this channel.')

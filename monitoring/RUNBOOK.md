@@ -3,8 +3,10 @@
 Per `prds/prd-pilot-monitoring-and-stability.md` §13. One section per check: user
 impact, how to validate independently, first safe fix step, owner, escalation.
 
-**Where alerts arrive:** Slack #store-insight-pilot-alerts (fires on FAIL/WARN/UNKNOWN
-and on recovery; silent when all OK). Monitor runs daily 07:00 UK (`MONITORING_TASK`).
+**Where alerts arrive:** Slack #store-insight-pilot-alerts (posts every run: problem
+blocks on FAIL/WARN/UNKNOWN, a recovery line when an incident clears, and an
+all-green note when everything is OK — no message means the monitor did not run).
+Monitor runs daily 07:00 UK (`MONITORING_TASK`).
 **Escalation default:** unresolved by end of working day → Dave/Bryan. Dave decides all
 store-facing communication — component owners never contact stores directly.
 **Record every incident + resolution in `RISK_VALIDATION.md`** (interim incident log).

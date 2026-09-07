@@ -8,6 +8,42 @@ Requirements/code review updated: **2026-09-04 (monitoring view enriched with pl
 
 ---
 
+## ✅ Monitoring now posts daily — 7 Sep: all-green heartbeat + WARN recovery
+
+Per Elaheh's request after the 6 Sep WARN silently cleared: `pilot_monitoring.py`
+changed so a Slack message is sent **every** run, and incidents open on any
+non-OK status (not just FAIL).
+
+- `update_incidents()` now opens/refreshes an incident on FAIL/WARN/UNKNOWN and
+  stores the real severity; an OK run resolves it → recovery line in Slack.
+- `build_notification()` no longer returns `None` on all-OK — it appends
+  `:large_green_circle: All N/N checks green … No action needed today.`
+- Docs updated: `CHANNEL_GUIDE.md` + `RUNBOOK.md` now say no message = monitor
+  did not run (previously "silent when all OK").
+- Redeployed `STORE_INSIGHT_DB.PUBLIC.SP_RUN_MONITORING` + `MONITORING_TASK`
+  (resumed, daily 07:00 UK). Verified live: manual run `MON_2026-09-07_cb3f93b4`
+  returned all-OK with `slack sent`; no open incidents.
+- 29 monitoring unit tests pass (3 new: WARN opens incident, UNKNOWN opens,
+  all-clear message).
+
+---
+
+## ✅ RESOLVED same day — 6 Sep: feedback feed short at 06:00 gate (C1/C7 WARN, self-recovered)
+
+Sunday 06:00 gate flagged `feedback` SUSPECT for CHECK_DATE 3 Sep: 1,145 rows vs
+baseline 1,569 (~73%). `ACTION_TAKEN = FLAGGED` (signals marked SUSPECT; detectors
+NOT skipped), so the run still shipped a normal 584 alerts across all types.
+
+- The 11:30 source-volume check the same day showed feedback recovered (1,190
+  rows, OK) — a late/short landing, not data loss. `FEEDBACK_V1` has rows through
+  5 Sep.
+- 7 Sep run fully clean: all five feeds OK at both 06:00 and 11:30, all 7
+  monitoring checks green, 584 alert rows.
+- No rerun needed (gate flagged, did not skip). If feedback shorts again at
+  06:00, chase the feed-load owner (still TBC — Dan naming).
+
+---
+
 ## ✅ RESOLVED same day — 3 Sep: gate false-FAILED osa/markdown_log at 06:00 (16 alerts shipped)
 
 First gate-protected 06:00 run (PR #58) skipped every osa/markdown detector:
