@@ -1,0 +1,138 @@
+"""
+Tests for the MARKDOWN_COMPLIANCE fact gatherer.
+"""
+
+from __future__ import annotations
+
+from store_insight.pipeline.stages._1_detect.signals import make_markdown_compliance_signal
+from store_insight.pipeline.stages._3_facts.gatherers import markdown_compliance_facts
+
+
+class _FakeDF:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def collect(self):
+        return list(self.rows)
+
+
+def _fixture_rows():
+    rows = []
+    # Store 1, current week
+    dates = [
+        '2026-08-25', '2026-08-26', '2026-08-27', '2026-08-28',
+        '2026-08-29', '2026-08-30', '2026-08-31',
+    ]
+    # 8 + 7 + 6 + 5 + 4 + 3 + 2 = 35 due, with decreasing completion
+    for i, d in enumerate(dates):
+        due = 8 - i
+        rows.append({
+            'DATE': d, 'STORE_ID': 1, 'SITE_NAME': 'Manningtree',
+            'DEPARTMENT_NAME': 'PRODUCE',
+            'MARKDOWNS_DUE': due, 'COMPLETED_ON_TIME': due - 1,
+            'AT_RISK_VALUE': 1.0,
+        })
+    # Add a department with worse compliance to check sorting
+    for _i, d in enumerate(dates):
+        due = 6
+        rows.append({
+            'DATE': d, 'STORE_ID': 1, 'SITE_NAME': 'Manningtree',
+            'DEPARTMENT_NAME': 'DAIRY',
+            'MARKDOWNS_DUE': due, 'COMPLETED_ON_TIME': 2,
+            'AT_RISK_VALUE': 2.0,
+        })
+    # Add a row outside the window to ensure filtering works
+    rows.append({
+        'DATE': '2026-08-24', 'STORE_ID': 1, 'SITE_NAME': 'Manningtree',
+        'DEPARTMENT_NAME': 'PRODUCE',
+        'MARKDOWNS_DUE': 100, 'COMPLETED_ON_TIME': 0,
+        'AT_RISK_VALUE': 50.0,
+    })
+    return rows
+
+
+def test_daily_performance_is_seven_days_and_reconciles():
+    rows = _fixture_rows()
+    df = _FakeDF(rows)
+    signals = [
+        make_markdown_compliance_signal(
+            store_id=1, trigger_types=['WOW'],
+            this_week_markdowns_due=77, this_week_completed_on_time=42,
+        ),
+    ]
+    result = markdown_compliance_facts.gather(
+        df, signals, '2026-08-25', '2026-08-31', top_n=3,
+    )
+    assert 1 in result
+    facts = result[1]
+    assert 'daily_performance_last_7d' in facts
+    daily = facts['daily_performance_last_7d']
+    assert len(daily) == 7
+    assert daily[0]['date'] == '2026-08-25'
+    assert daily[-1]['date'] == '2026-08-31'
+
+    total_due = sum(day['checks_due'] for day in daily)
+    total_completed = sum(day['completed_on_time'] for day in daily)
+    assert total_due == 77
+    assert total_completed == 42
+
+
+def test_worst_departments_are_sorted_and_limited():
+    rows = _fixture_rows()
+    df = _FakeDF(rows)
+    signals = [
+        make_markdown_compliance_signal(store_id=1, trigger_types=['WOW']),
+    ]
+    result = markdown_compliance_facts.gather(
+        df, signals, '2026-08-25', '2026-08-31', top_n=2,
+    )
+    worst = result[1]['worst_departments_top3']
+    assert len(worst) <= 2
+    assert worst[0]['compliance_pct'] <= worst[1]['compliance_pct']
+    assert worst[0]['dept'] == 'DAIRY'
+
+
+def test_driver_assessment_workload_branch():
+    signal = make_markdown_compliance_signal(
+        store_id=1, trigger_types=['WOW'],
+        workload={
+            'this_period_volume': 200, 'prev_period_volume': 150,
+            'volume_change_pct': 33.33, 'chain_avg_volume_per_store': 140,
+            'volume_classification': 'INCREASING',
+        },
+        wow_change_pp=-12.0,
+    )
+    driver = markdown_compliance_facts._build_driver_assessment(signal)
+    assert driver['likely_driver'] == 'WORKLOAD'
+    assert driver['suggested_check'] == 'CHECK_STAFFING_VS_VOLUME'
+    assert driver['compliance_direction'] == 'DETERIORATING'
+
+
+def test_driver_assessment_coaching_branch():
+    signal = make_markdown_compliance_signal(
+        store_id=1, trigger_types=['WOW'],
+        workload={
+            'this_period_volume': 100, 'prev_period_volume': 98,
+            'volume_change_pct': 2.04, 'chain_avg_volume_per_store': 100,
+            'volume_classification': 'STABLE',
+        },
+        wow_change_pp=-8.0,
+    )
+    driver = markdown_compliance_facts._build_driver_assessment(signal)
+    assert driver['likely_driver'] == 'COACHING'
+    assert driver['suggested_check'] == 'REVIEW_PROCESS_WITH_TEAM'
+
+
+def test_extract_facts_returns_expected_keys():
+    signal = make_markdown_compliance_signal(store_id=1, trigger_types=['WOW'])
+    raw = {
+        1: {
+            'daily_performance_last_7d': [{'date': '2026-08-31', 'day': 'Monday'}],
+            'worst_departments_top3': [{'dept': 'DAIRY'}],
+            'driver_assessment': {'likely_driver': 'WORKLOAD'},
+        },
+    }
+    extracted = markdown_compliance_facts.extract_facts(signal, raw)
+    assert extracted['daily_performance_last_7d'] == [{'date': '2026-08-31', 'day': 'Monday'}]
+    assert extracted['worst_departments_top3'] == [{'dept': 'DAIRY'}]
+    assert extracted['driver_assessment'] == {'likely_driver': 'WORKLOAD'}

@@ -10,14 +10,20 @@ from store_insight.pipeline.stages._3_facts import registry
 from store_insight.pipeline.stages._3_facts.config import GathererInfo
 
 EXPECTED_GATHERERS = {
-    'osa_ppg_drilldown', 'osa_dow', 'osa_chain_drift',
-    'osa_repeat_history', 'osa_item_time_patterns', 'osa_cost_projection',
+    'osa_store_actionable_ppg_drilldown', 'osa_store_actionable_item_lsv_changes',
+    'osa_store_actionable_dow', 'osa_store_actionable_day_periods',
+    'osa_item_time_patterns', 'osa_store_actionable_chain_drift',
+    'osa_store_actionable_cost_projection',
     'osa_recurring_slot_facts',
     'tick_and_flick_breakdown',
+    'markdown_compliance_facts',
+    'expiry_date_compliance_facts',
+    'prompted_markdown_compliance_facts',
     'markdown_override_dept_breakdown',
     'waste_dept_breakdown',
     'markdown_sellthrough_dept_breakdown',
     'markdown_sku_history',
+    'straight_to_bin_facts',
 }
 
 
@@ -45,16 +51,20 @@ def test_every_gatherer_has_metadata_with_signal_types():
 
 def test_signal_type_gatherers_populated():
     assert set(registry.SIGNAL_TYPE_GATHERERS.keys()) == {
-        'OSA', 'OSA_RECURRING_SLOT', 'COMPLIANCE', 'MARKDOWN_OVERRIDE',
-        'WASTE', 'WASTE_TRIM', 'MARKDOWN_SELLTHROUGH', 'MARKDOWN_SKU',
+        'OSA_STORE_ACTIONABLE', 'OSA_BIG_DROP', 'OSA_RECURRING_SLOT', 'COMPLIANCE', 'MARKDOWN_COMPLIANCE',
+        'EXPIRY_DATE_COMPLIANCE', 'PROMPTED_MARKDOWN_COMPLIANCE', 'MARKDOWN_OVERRIDE', 'WASTE', 'WASTE_TRIM',
+        'MARKDOWN_SELLTHROUGH', 'MARKDOWN_SKU', 'STRAIGHT_TO_BIN',
     }
 
 
 def test_osa_dispatch_order_matches_yaml():
-    osa = [m.__name__.rsplit('.', 1)[-1] for m in registry.SIGNAL_TYPE_GATHERERS['OSA']]
+    osa = [m.__name__.rsplit('.', 1)[-1]
+           for m in registry.SIGNAL_TYPE_GATHERERS['OSA_STORE_ACTIONABLE']]
     assert osa == [
-        'osa_ppg_drilldown', 'osa_dow', 'osa_chain_drift',
-        'osa_repeat_history', 'osa_item_time_patterns', 'osa_cost_projection',
+        'osa_store_actionable_ppg_drilldown', 'osa_store_actionable_item_lsv_changes',
+        'osa_store_actionable_dow', 'osa_store_actionable_day_periods',
+        'osa_item_time_patterns', 'osa_store_actionable_chain_drift',
+        'osa_store_actionable_cost_projection',
     ]
 
 

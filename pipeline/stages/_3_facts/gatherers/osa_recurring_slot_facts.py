@@ -20,6 +20,7 @@ from collections import defaultdict
 
 from snowflake.snowpark import functions as F
 
+from store_insight.pipeline.pipeline._shared import sunday_first_dow
 from store_insight.pipeline.stages._3_facts.config import GathererInfo
 
 METADATA = GathererInfo(
@@ -90,7 +91,7 @@ def gather(
         .filter((F.col('DATE') >= lookback_start) & (F.col('DATE') <= lookback_end))
         .filter(F.col('STORE_ID').isin(stores))
         .filter(F.col('REPORTING_PERIOD_ID').is_not_null())
-        .with_column('DOW', F.dayofweek(F.col('DATE')))
+        .with_column('DOW', sunday_first_dow(F.col('DATE')))
         .with_column('WEEK_NUMBER', F.weekofyear(F.col('DATE')))
         .with_column('YEAR_NUMBER', F.year(F.col('DATE')))
         .group_by('STORE_ID', section, 'DOW', 'REPORTING_PERIOD_ID', 'YEAR_NUMBER', 'WEEK_NUMBER')

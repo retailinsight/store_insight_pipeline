@@ -44,6 +44,48 @@ class OsaSignal(TypedDict):
     repeat_item_details: list[dict]
 
 
+class OsaStoreActionableSignal(TypedDict):
+    """Typed shape for an actionable OSA detection signal."""
+    signal_type:                 str
+    merge_key:                   tuple[str, int, str]
+    store_id:                    int
+    department:                  str
+    trigger_types:               list[str]
+    last_week_osa:               float | None
+    this_week_osa:               float | None
+    total_last_week_osa:         float | None
+    total_this_week_osa:         float | None
+    wow_drift_pp:                float | None
+    chain_this_week_osa:         float | None
+    total_chain_this_week_osa:   float | None
+    chain_gap_pp:                float | None
+    last_week_lsv:               dict | None
+    this_week_lsv:               dict
+    lsv_change:                  dict | None
+    quality:                     dict
+
+
+class OsaBigDropSignal(TypedDict):
+    """Typed shape for a day-on-day OSA big-drop detection signal."""
+    signal_type:                 str
+    merge_key:                   tuple[str, int, str]
+    store_id:                    int
+    department:                  str
+    trigger_types:               list[str]
+    last_week_osa:               float | None
+    this_week_osa:               float | None
+    total_last_week_osa:         float | None
+    total_this_week_osa:         float | None
+    wow_drift_pp:                float | None
+    chain_this_week_osa:         float | None
+    total_chain_this_week_osa:   float | None
+    chain_gap_pp:                float | None
+    last_week_lsv:               dict | None
+    this_week_lsv:               dict
+    lsv_change:                  dict | None
+    quality:                     dict
+
+
 class ComplianceSignal(TypedDict):
     """Typed shape for a compliance-type detection signal."""
     signal_type:       str                # always 'COMPLIANCE'
@@ -60,6 +102,63 @@ class ComplianceSignal(TypedDict):
     tf_rate_change:    float
     chain_tf_rate:     float
     above_chain_by:    float
+    workload:          dict
+
+
+class MarkdownComplianceSignal(TypedDict):
+    """Typed shape for a markdown-compliance detection signal."""
+    signal_type:                    str                # always 'MARKDOWN_COMPLIANCE'
+    merge_key:                      tuple[str, int]    # ('MARKDOWN_COMPLIANCE', store_id)
+    store_id:                       int
+    site_name:                      str
+    trigger_types:                  list[str]
+    this_week_markdowns_due:        int
+    this_week_completed_on_time:    int
+    this_week_compliance_rate:      float
+    last_week_compliance_rate:      float | None
+    wow_change_pp:                  float | None
+    chain_compliance_rate:          float | None
+    below_chain_pp:                 float | None
+    this_week_at_risk_value:        float            # internal projected-cost basis
+    workload:                       dict
+
+
+class ExpiryDateComplianceSignal(TypedDict):
+    """Typed shape for an expiry-date-compliance detection signal."""
+    signal_type: str
+    merge_key: tuple[str, int]
+    store_id: int
+    site_name: str
+    trigger_types: list[str]
+    trailing_7d_compliance_rate: float
+    prev_7d_compliance_rate: float | None
+    change_pp: float | None
+    chain_trailing_7d_compliance_rate: float | None
+    below_chain_pp: float | None
+    chain_change_pp: float | None
+    trailing_7d_checks_due: int
+    trailing_7d_checks_completed: int
+    trailing_7d_at_risk_value: float
+    workload: dict
+
+
+class PromptedMarkdownComplianceSignal(TypedDict):
+    """Typed shape for a prompted-markdown-compliance detection signal."""
+    signal_type: str                # always 'PROMPTED_MARKDOWN_COMPLIANCE'
+    merge_key: tuple[str, int]      # ('PROMPTED_MARKDOWN_COMPLIANCE', store_id)
+    store_id: int
+    site_name: str
+    trigger_types: list[str]
+    this_week_prompts_issued: int
+    this_week_prompts_actioned_on_time: int
+    this_week_compliance_rate: float
+    last_week_compliance_rate: float | None
+    wow_change_pp: float | None
+    chain_compliance_rate: float | None
+    below_chain_pp: float | None
+    median_response_minutes: float | None
+    this_week_at_risk_value: float  # internal projected-cost basis
+    workload: dict
 
 
 class MarkdownOverrideSignal(TypedDict):
@@ -163,15 +262,34 @@ class WasteTrimSignal(TypedDict):
     markdown_value:   float
 
 
+class StraightToBinSignal(TypedDict):
+    """Typed shape for a straight-to-bin value-threshold detection signal."""
+    signal_type:                str                    # always 'STRAIGHT_TO_BIN'
+    merge_key:                  tuple[str, int]        # ('STRAIGHT_TO_BIN', store_id)
+    store_id:                   int
+    site_name:                  str
+    trigger_types:              list[str]
+    threshold_value:            float
+    last_week_stb_value:        float
+    last_week_stb_items:        int
+    chain_avg_stb_value_per_store: float
+    vs_chain_multiple:          float
+
+
 Signal = (
     OsaSignal
+    | OsaStoreActionableSignal
+    | OsaBigDropSignal
     | OsaRecurringSlotSignal
     | ComplianceSignal
+    | MarkdownComplianceSignal
+    | PromptedMarkdownComplianceSignal
     | MarkdownOverrideSignal
     | WasteSignal
     | MarkdownSellthroughSignal
     | MarkdownSkuSignal
     | WasteTrimSignal
+    | StraightToBinSignal
 )
 
 
@@ -226,6 +344,82 @@ def make_osa_signal(
         'chain_wow_drift_pp':  chain_wow_drift_pp,
         'repeat_item_count':   repeat_item_count,
         'repeat_item_details': repeat_item_details if repeat_item_details is not None else [],
+    }
+
+
+def make_osa_store_actionable_signal(
+    store_id: int,
+    department: str,
+    trigger_types: list[str],
+    this_week_lsv: dict,
+    last_week_lsv: dict | None = None,
+    lsv_change: dict | None = None,
+    last_week_osa: float | None = None,
+    this_week_osa: float | None = None,
+    total_last_week_osa: float | None = None,
+    total_this_week_osa: float | None = None,
+    wow_drift_pp: float | None = None,
+    chain_this_week_osa: float | None = None,
+    total_chain_this_week_osa: float | None = None,
+    chain_gap_pp: float | None = None,
+    quality: dict | None = None,
+) -> OsaStoreActionableSignal:
+    return {
+        'signal_type': 'OSA_STORE_ACTIONABLE',
+        'merge_key': ('OSA_STORE_ACTIONABLE', store_id, department),
+        'store_id': store_id,
+        'department': department,
+        'trigger_types': list(trigger_types),
+        'last_week_osa': last_week_osa,
+        'this_week_osa': this_week_osa,
+        'total_last_week_osa': total_last_week_osa,
+        'total_this_week_osa': total_this_week_osa,
+        'wow_drift_pp': wow_drift_pp,
+        'chain_this_week_osa': chain_this_week_osa,
+        'total_chain_this_week_osa': total_chain_this_week_osa,
+        'chain_gap_pp': chain_gap_pp,
+        'last_week_lsv': last_week_lsv,
+        'this_week_lsv': this_week_lsv,
+        'lsv_change': lsv_change,
+        'quality': quality or {},
+    }
+
+
+def make_osa_big_drop_signal(
+    store_id: int,
+    department: str,
+    trigger_types: list[str],
+    this_week_lsv: dict,
+    last_week_lsv: dict | None = None,
+    lsv_change: dict | None = None,
+    last_week_osa: float | None = None,
+    this_week_osa: float | None = None,
+    total_last_week_osa: float | None = None,
+    total_this_week_osa: float | None = None,
+    wow_drift_pp: float | None = None,
+    chain_this_week_osa: float | None = None,
+    total_chain_this_week_osa: float | None = None,
+    chain_gap_pp: float | None = None,
+    quality: dict | None = None,
+) -> OsaBigDropSignal:
+    return {
+        'signal_type': 'OSA_BIG_DROP',
+        'merge_key': ('OSA_BIG_DROP', store_id, department),
+        'store_id': store_id,
+        'department': department,
+        'trigger_types': list(trigger_types),
+        'last_week_osa': last_week_osa,
+        'this_week_osa': this_week_osa,
+        'total_last_week_osa': total_last_week_osa,
+        'total_this_week_osa': total_this_week_osa,
+        'wow_drift_pp': wow_drift_pp,
+        'chain_this_week_osa': chain_this_week_osa,
+        'total_chain_this_week_osa': total_chain_this_week_osa,
+        'chain_gap_pp': chain_gap_pp,
+        'last_week_lsv': last_week_lsv,
+        'this_week_lsv': this_week_lsv,
+        'lsv_change': lsv_change,
+        'quality': quality or {},
     }
 
 
@@ -471,6 +665,7 @@ def make_compliance_signal(
     tf_rate_change: float = 0.0,
     chain_tf_rate: float = 0.0,
     above_chain_by: float = 0.0,
+    workload: dict | None = None,
 ) -> ComplianceSignal:
     """
     Build a signal dict for a compliance-type alert.
@@ -489,6 +684,7 @@ def make_compliance_signal(
     tf_rate_change     : float — pp change in TF rate WoW
     chain_tf_rate      : float — chain-wide TF rate % this week
     above_chain_by     : float — pp above chain average
+    workload           : dict — volume and change classification
     """
     return {
         'signal_type':       'COMPLIANCE',
@@ -505,6 +701,144 @@ def make_compliance_signal(
         'tf_rate_change':    tf_rate_change,
         'chain_tf_rate':     chain_tf_rate,
         'above_chain_by':    above_chain_by,
+        'workload':          workload or {},
+    }
+
+
+def make_markdown_compliance_signal(
+    store_id: int,
+    trigger_types: list[str],
+    site_name: str | None = None,
+    this_week_markdowns_due: int = 0,
+    this_week_completed_on_time: int = 0,
+    this_week_compliance_rate: float = 0.0,
+    last_week_compliance_rate: float | None = None,
+    wow_change_pp: float | None = None,
+    chain_compliance_rate: float | None = None,
+    below_chain_pp: float | None = None,
+    this_week_at_risk_value: float = 0.0,
+    workload: dict | None = None,
+) -> MarkdownComplianceSignal:
+    """
+    Build a signal dict for a markdown-compliance alert.
+
+    Parameters
+    ----------
+    store_id                    : int
+    trigger_types               : list[str] — e.g. ['WOW'] or ['VS_CHAIN']
+    site_name                   : str | None — human-readable store name
+    this_week_markdowns_due     : int — markdown tasks due this calendar week
+    this_week_completed_on_time : int — markdown tasks completed on time this week
+    this_week_compliance_rate   : float — on-time completion % this week (0–100)
+    last_week_compliance_rate   : float | None — on-time completion % last week
+    wow_change_pp               : float | None — WoW change in percentage points
+    chain_compliance_rate       : float | None — chain-wide on-time completion % this week
+    below_chain_pp              : float | None — pp below chain average (positive = below)
+    this_week_at_risk_value     : float — internal projected-cost basis (£ at risk this week)
+    workload                    : dict | None — volume classification evidence
+    """
+    return {
+        'signal_type':                 'MARKDOWN_COMPLIANCE',
+        'merge_key':                   ('MARKDOWN_COMPLIANCE', store_id),
+        'store_id':                    store_id,
+        'site_name':                   site_name or f'Store {store_id}',
+        'trigger_types':               list(trigger_types),
+        'this_week_markdowns_due':     this_week_markdowns_due,
+        'this_week_completed_on_time': this_week_completed_on_time,
+        'this_week_compliance_rate':   this_week_compliance_rate,
+        'last_week_compliance_rate':   last_week_compliance_rate,
+        'wow_change_pp':               wow_change_pp,
+        'chain_compliance_rate':       chain_compliance_rate,
+        'below_chain_pp':              below_chain_pp,
+        'this_week_at_risk_value':     this_week_at_risk_value,
+        'workload':                    workload or {},
+    }
+
+
+def make_expiry_date_compliance_signal(
+    store_id: int,
+    trigger_types: list[str],
+    site_name: str | None = None,
+    trailing_7d_compliance_rate: float = 0.0,
+    prev_7d_compliance_rate: float | None = None,
+    change_pp: float | None = None,
+    chain_trailing_7d_compliance_rate: float | None = None,
+    below_chain_pp: float | None = None,
+    chain_change_pp: float | None = None,
+    trailing_7d_checks_due: int = 0,
+    trailing_7d_checks_completed: int = 0,
+    trailing_7d_at_risk_value: float = 0.0,
+    workload: dict | None = None,
+) -> ExpiryDateComplianceSignal:
+    return {
+        'signal_type': 'EXPIRY_DATE_COMPLIANCE',
+        'merge_key': ('EXPIRY_DATE_COMPLIANCE', store_id),
+        'store_id': store_id,
+        'site_name': site_name or f'Store {store_id}',
+        'trigger_types': list(trigger_types),
+        'trailing_7d_compliance_rate': trailing_7d_compliance_rate,
+        'prev_7d_compliance_rate': prev_7d_compliance_rate,
+        'change_pp': change_pp,
+        'chain_trailing_7d_compliance_rate': chain_trailing_7d_compliance_rate,
+        'below_chain_pp': below_chain_pp,
+        'chain_change_pp': chain_change_pp,
+        'trailing_7d_checks_due': trailing_7d_checks_due,
+        'trailing_7d_checks_completed': trailing_7d_checks_completed,
+        'trailing_7d_at_risk_value': trailing_7d_at_risk_value,
+        'workload': workload or {},
+    }
+
+
+def make_prompted_markdown_compliance_signal(
+    store_id: int,
+    trigger_types: list[str],
+    site_name: str | None = None,
+    this_week_prompts_issued: int = 0,
+    this_week_prompts_actioned_on_time: int = 0,
+    this_week_compliance_rate: float = 0.0,
+    last_week_compliance_rate: float | None = None,
+    wow_change_pp: float | None = None,
+    chain_compliance_rate: float | None = None,
+    below_chain_pp: float | None = None,
+    median_response_minutes: float | None = None,
+    this_week_at_risk_value: float = 0.0,
+    workload: dict | None = None,
+) -> PromptedMarkdownComplianceSignal:
+    """
+    Build a signal dict for a prompted-markdown-compliance alert.
+
+    Parameters
+    ----------
+    store_id                         : int
+    trigger_types                    : list[str] — e.g. ['WOW'] or ['VS_CHAIN']
+    site_name                        : str | None — human-readable store name
+    this_week_prompts_issued          : int — prompts issued this calendar week
+    this_week_prompts_actioned_on_time : int — prompts actioned on time this week
+    this_week_compliance_rate        : float — on-time actioned % this week (0–100)
+    last_week_compliance_rate        : float | None — on-time actioned % last week
+    wow_change_pp                    : float | None — WoW change in percentage points
+    chain_compliance_rate            : float | None — chain-wide on-time actioned % this week
+    below_chain_pp                   : float | None — pp below chain average (positive = below)
+    median_response_minutes          : float | None — median response time this week in minutes
+    this_week_at_risk_value          : float — internal projected-cost basis (£ at risk this week)
+    workload                         : dict | None — volume classification evidence
+    """
+    return {
+        'signal_type':                         'PROMPTED_MARKDOWN_COMPLIANCE',
+        'merge_key':                           ('PROMPTED_MARKDOWN_COMPLIANCE', store_id),
+        'store_id':                            store_id,
+        'site_name':                           site_name or f'Store {store_id}',
+        'trigger_types':                      list(trigger_types),
+        'this_week_prompts_issued':            this_week_prompts_issued,
+        'this_week_prompts_actioned_on_time':  this_week_prompts_actioned_on_time,
+        'this_week_compliance_rate':           this_week_compliance_rate,
+        'last_week_compliance_rate':           last_week_compliance_rate,
+        'wow_change_pp':                       wow_change_pp,
+        'chain_compliance_rate':               chain_compliance_rate,
+        'below_chain_pp':                      below_chain_pp,
+        'median_response_minutes':             median_response_minutes,
+        'this_week_at_risk_value':             this_week_at_risk_value,
+        'workload':                            workload or {},
     }
 
 
@@ -549,4 +883,42 @@ def make_waste_trim_signal(
         'total_units':      total_units,
         'markdown_ratio':   markdown_ratio,
         'markdown_value':   markdown_value,
+    }
+
+
+def make_straight_to_bin_signal(
+    store_id: int,
+    trigger_types: list[str],
+    site_name: str | None = None,
+    threshold_value: float = 100.0,
+    last_week_stb_value: float = 0.0,
+    last_week_stb_items: int = 0,
+    chain_avg_stb_value_per_store: float = 0.0,
+    vs_chain_multiple: float = 0.0,
+) -> StraightToBinSignal:
+    """
+    Build a signal dict for a straight-to-bin value-threshold alert.
+
+    Parameters
+    ----------
+    store_id                      : int
+    trigger_types                 : list[str] — e.g. ['VALUE_THRESHOLD']
+    site_name                     : str | None — human-readable store name
+    threshold_value               : float — £ threshold that triggered the alert
+    last_week_stb_value           : float — £ total straight-to-bin value last week
+    last_week_stb_items           : int — total items straight-to-bin last week
+    chain_avg_stb_value_per_store : float — chain average STB £ per store last week
+    vs_chain_multiple             : float — store value / chain average
+    """
+    return {
+        'signal_type':                  'STRAIGHT_TO_BIN',
+        'merge_key':                    ('STRAIGHT_TO_BIN', store_id),
+        'store_id':                     store_id,
+        'site_name':                    site_name or f'Store {store_id}',
+        'trigger_types':                list(trigger_types),
+        'threshold_value':              threshold_value,
+        'last_week_stb_value':          last_week_stb_value,
+        'last_week_stb_items':          last_week_stb_items,
+        'chain_avg_stb_value_per_store': chain_avg_stb_value_per_store,
+        'vs_chain_multiple':            vs_chain_multiple,
     }

@@ -121,8 +121,10 @@ def score_all(
         stype  = signal.get('signal_type', '')
         scorer = _registry.SIGNAL_TYPE_SCORERS.get(stype)
         if scorer is None:
-            signal['score'] = 0.0
-            continue
+            raise ValueError(
+                f"signal_type '{stype}' has no scorer registered in "
+                f"signal_type_scorers.yaml - refusing to score it silently"
+            )
 
         context = gather_results.get(stype)
         cost    = scorer.projected_cost(signal, context)

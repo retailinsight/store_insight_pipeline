@@ -176,6 +176,7 @@ def _osa_describe_perfect(_fqn):
         ('ACTUAL_SALES_VOLUME', 'NUMBER(38,4)'),
         ('LOST_SALES_VOLUME',   'NUMBER(38,4)'),
         ('LOST_SALES_VALUE',    'NUMBER(38,4)'),
+        ('INVENTORY_QTY',       'NUMBER(38,4)'),
         ('DEPARTMENT_ID',       'NUMBER(38,0)'),
         ('REPORTING_PERIOD_ID', 'NUMBER(38,0)'),
     ]

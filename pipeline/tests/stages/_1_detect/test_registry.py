@@ -12,10 +12,17 @@ from store_insight.pipeline.stages._1_detect import registry
 from store_insight.pipeline.stages._1_detect.detector_info import DetectorInfo
 
 EXPECTED_DETECTOR_MODULES = {
-    'osa.wow',
-    'osa.vs_chain',
-    'osa.repeat',
+    'osa_store_actionable.wow',
+    'osa_store_actionable.vs_chain',
+    'osa_big_drop.big_drop',
+    'osa_recurring_slot.recurring_slot',
     'compliance.tick_and_flick',
+    'markdown_compliance.wow',
+    'markdown_compliance.vs_chain',
+    'expiry_date_compliance.trailing_7d',
+    'expiry_date_compliance.vs_chain',
+    'prompted_markdown_compliance.wow',
+    'prompted_markdown_compliance.vs_chain',
     'markdown_override.wow',
     'markdown_override.vs_chain',
     'markdown_sku.repeat_request',
@@ -24,6 +31,8 @@ EXPECTED_DETECTOR_MODULES = {
     'markdown_sellthrough.vs_chain',
     'waste.wow',
     'waste.vs_chain',
+    'waste_trim.trim',
+    'straight_to_bin.value_threshold',
 }
 
 

@@ -30,11 +30,21 @@ class DetectorConfig:
     section: str   = 'ITEM_HIERARCHY_2'
     min_lost_sales_value: float = 200.0
 
-    # ---- WOW -----------------------------------------------------------
+    # ---- OSA -----------------------------------------------------------
     min_wow_drop: float = 0.01
-
-    # ---- VS_CHAIN ------------------------------------------------------
     min_chain_gap: float = 0.03
+
+    # ---- OSA STORE ACTIONABLE -----------------------------------------
+    min_actionable_wow_drop: float = 0.01
+    min_actionable_chain_gap: float = 0.02
+    min_actionable_lsv: float = 200.0
+    min_actionable_positive_rows: int = 10
+    max_actionable_unknown_row_pct: float = 10.0
+
+    # ---- OSA BIG DROP ---------------------------------------------------
+    min_actionable_big_drop: float = 0.05
+    min_osa_big_drop_lsv: float = 50.0
+    min_big_drop_positive_rows: int = 5
 
     # ---- REPEAT --------------------------------------------------------
     min_alert_weeks: int   = 4
@@ -65,6 +75,21 @@ class DetectorConfig:
     min_markdown_sales_ratio: float = 0.60
     min_markdown_units: int         = 5
 
+    # ---- MARKDOWN_COMPLIANCE ---------------------------------------------
+    min_markdown_compliance_wow_drop: float   = 0.05    # WoW drop (ratio) to fire WOW
+    min_markdown_compliance_chain_gap: float  = 0.05    # gap below chain (ratio) to fire VS_CHAIN
+    min_markdown_compliance_volume: int       = 50      # min markdowns due this week
+
+    # ---- EXPIRY_DATE_COMPLIANCE ----------------------------------------
+    min_expiry_compliance_7d_drop: float = 0.05
+    min_expiry_compliance_chain_gap: float = 0.05
+    min_expiry_compliance_volume: int = 50
+
+    # ---- PROMPTED_MARKDOWN_COMPLIANCE ----------------------------------
+    min_prompted_markdown_compliance_wow_drop: float = 0.05
+    min_prompted_markdown_compliance_chain_gap: float = 0.05
+    min_prompted_markdown_compliance_volume: int = 50
+
     # ---- MARKDOWN_SELLTHROUGH ------------------------------------------
     min_sellthrough_chain_gap: float = 0.05
     min_sellthrough_wow_drop: float  = 0.05
@@ -76,6 +101,9 @@ class DetectorConfig:
     min_markdown_requests: int      = 8
     min_sku_override_rate: float    = 0.50
     min_sku_requests: int           = 3
+
+    # ---- STRAIGHT_TO_BIN -----------------------------------------------
+    min_stb_value_threshold: float  = 100.0
 
     @classmethod
     def from_config(cls, cfg: dict) -> 'DetectorConfig':

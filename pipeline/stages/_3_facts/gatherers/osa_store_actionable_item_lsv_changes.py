@@ -1,0 +1,109 @@
+from __future__ import annotations
+
+from collections import defaultdict
+
+from snowflake.snowpark import functions as F
+
+from store_insight.pipeline.pipeline._shared import (
+    actionable_window_metrics as window_metrics,
+)
+from store_insight.pipeline.pipeline._shared import (
+    attributed_values,
+    build_store_dept_filter,
+    subtract_attributed,
+)
+from store_insight.pipeline.stages._3_facts.config import GathererInfo
+
+METADATA = GathererInfo(
+    name='osa_store_actionable_item_lsv_changes',
+    signal_types=['OSA_STORE_ACTIONABLE'],
+    facts_keys=['item_lsv_changes'],
+    description='Top latest-week item offenders with prior-week attributed LSV and UPC/EAN arrays.',
+)
+
+
+def gather(
+    osa,
+    item_hierarchy,
+    signals,
+    last_week_start,
+    last_week_end,
+    this_week_start,
+    this_week_end,
+    dept_col='ITEM_HIERARCHY_2',
+    actionable_top_n=5,
+):
+    if not signals:
+        return {}
+
+    filt = build_store_dept_filter(signals, dept_col)
+    group_cols = ['STORE_ID', dept_col, 'ITEM_CODE', 'ITEM_DESCRIPTION', 'ITEM_HIERARCHY_3']
+    latest = window_metrics(osa.filter(filt), this_week_start, this_week_end, group_cols, 'LATEST')
+    prior = window_metrics(osa.filter(filt), last_week_start, last_week_end, group_cols, 'PRIOR')
+    rows = (
+        latest
+        .join(prior, on=group_cols, how='left')
+        .filter(F.col('LATEST_STORE_LSV') > 0)
+        .collect()
+    )
+
+    identifiers = {}
+    if item_hierarchy is not None and {'OSA_ITEM_CODE', 'UPC'}.issubset(set(item_hierarchy.columns)):
+        hierarchy_cols = set(item_hierarchy.columns)
+        identifier_df = (
+            item_hierarchy
+            .filter(F.col('OSA_ITEM_CODE').is_not_null())
+            .select(
+                F.to_varchar(F.col('OSA_ITEM_CODE')).alias('ITEM_CODE'),
+                F.col('UPC'),
+                F.col('EAN') if 'EAN' in hierarchy_cols else F.lit(None).alias('EAN'),
+            )
+            .group_by('ITEM_CODE')
+            .agg(
+                F.array_agg(F.col('UPC')).alias('UPCS'),
+                F.array_agg(F.col('EAN')).alias('EANS'),
+            )
+        )
+        for row in identifier_df.collect():
+            upcs = sorted({str(value) for value in (row['UPCS'] or []) if value is not None})
+            eans = sorted({str(value) for value in (row['EANS'] or []) if value is not None})
+            pair_count = max(len(upcs), len(eans))
+            status = 'unmapped' if pair_count == 0 else ('multiple' if pair_count > 1 else 'unique')
+            identifiers[str(row['ITEM_CODE'])] = {
+                'upcs': upcs,
+                'eans': eans,
+                'identifier_mapping_status': status,
+            }
+
+    grouped = defaultdict(list)
+    for row in rows:
+        key = (int(row['STORE_ID']), row[dept_col])
+        latest_lsv = attributed_values(row, 'LATEST')
+        prior_lsv = attributed_values(row, 'PRIOR')
+        code = str(row['ITEM_CODE'])
+        identity = identifiers.get(code, {
+            'upcs': [], 'eans': [], 'identifier_mapping_status': 'unmapped',
+        })
+        grouped[key].append({
+            'item_code': code,
+            'item_name': row['ITEM_DESCRIPTION'],
+            'ppg': row['ITEM_HIERARCHY_3'],
+            **identity,
+            'latest_week_lsv': latest_lsv,
+            'prior_week_lsv': prior_lsv,
+            'lsv_change': subtract_attributed(latest_lsv, prior_lsv),
+            'prior_week_status': 'observed' if int(row['PRIOR_ROW_COUNT'] or 0) else 'no_source_data',
+        })
+
+    return {
+        key: sorted(
+            items,
+            key=lambda item: (-item['latest_week_lsv']['store_controlled'], item['item_code']),
+        )[:actionable_top_n]
+        for key, items in grouped.items()
+    }
+
+
+def extract_facts(signal, raw_result):
+    key = (signal['store_id'], signal.get('department', ''))
+    return {'item_lsv_changes': raw_result.get(key, [])}

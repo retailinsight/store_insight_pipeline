@@ -57,7 +57,7 @@ def test_eastofengland_config_defaults_all_engines_to_rule_based():
     cfg = load_config("eastofengland")
     assert cfg.connection.schema_name == "PUBLIC"
     signal_types = (
-        "OSA",
+        "OSA_STORE_ACTIONABLE",
         "COMPLIANCE",
         "MARKDOWN_OVERRIDE",
         "WASTE",

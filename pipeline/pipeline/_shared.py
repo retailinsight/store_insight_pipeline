@@ -8,6 +8,10 @@ Import from here to avoid duplicating Snowpark expressions across modules.
 from snowflake.snowpark import functions as F
 
 
+def sunday_first_dow(date_col):
+    return (F.call_function('DAYOFWEEKISO', date_col) % F.lit(7)) + F.lit(1)
+
+
 def osa_score_col(sales_col, lsv_col):
     """
     Snowpark column expression: sales / (sales + lost_sales_volume), or 0.
@@ -86,3 +90,92 @@ def build_store_dept_filter(signals, dept_col='DEPARTMENT_NAME'):
     # signal count reaches ~1000.
     pairs = [[sig['store_id'], sig['department']] for sig in signals]
     return F.in_([F.col('STORE_ID'), F.col(dept_col)], pairs)
+
+
+def attributed_lsv(inventory_qty, lost_sales_value) -> dict[str, float]:
+    value = float(lost_sales_value or 0)
+    result = {'total': value, 'store_controlled': 0.0, 'upstream': 0.0, 'unknown': 0.0}
+    if inventory_qty is None:
+        result['unknown'] = value
+    elif inventory_qty > 0:
+        result['store_controlled'] = value
+    else:
+        result['upstream'] = value
+    return result
+
+
+def attributed_values(row, prefix: str) -> dict[str, float]:
+    return {
+        'total': round(float(row[f'{prefix}_TOTAL_LSV'] or 0), 2),
+        'store_controlled': round(float(row[f'{prefix}_STORE_LSV'] or 0), 2),
+        'upstream': round(float(row[f'{prefix}_UPSTREAM_LSV'] or 0), 2),
+        'unknown': round(float(row[f'{prefix}_UNKNOWN_LSV'] or 0), 2),
+    }
+
+
+def subtract_attributed(latest: dict, prior: dict) -> dict[str, float]:
+    return {key: round(float(latest.get(key, 0)) - float(prior.get(key, 0)), 2) for key in latest}
+
+
+def project_attributed(values: dict, weeks: int) -> dict[str, float]:
+    return {key: round(float(value or 0) * weeks, 2) for key, value in values.items()}
+
+
+def quality_values(row, prefix: str) -> dict[str, float | int]:
+    row_count = int(row[f'{prefix}_ROW_COUNT'] or 0)
+    unknown_rows = int(row[f'{prefix}_UNKNOWN_ROWS'] or 0)
+    return {
+        'row_count': row_count,
+        'positive_inventory_rows': int(row[f'{prefix}_POSITIVE_ROWS'] or 0),
+        'unknown_inventory_rows': unknown_rows,
+        'unknown_inventory_row_pct': round((unknown_rows / row_count * 100) if row_count else 0.0, 2),
+    }
+
+
+def quality_is_valid(quality: dict, min_positive_rows: int, max_unknown_row_pct: float) -> bool:
+    return (
+        quality['positive_inventory_rows'] >= min_positive_rows
+        and quality['unknown_inventory_row_pct'] <= max_unknown_row_pct
+    )
+
+
+def quality_reasons(quality: dict, min_positive_rows: int, max_unknown_row_pct: float) -> list[str]:
+    reasons = []
+    if quality['positive_inventory_rows'] < min_positive_rows:
+        reasons.append('insufficient_positive_inventory_rows')
+    if quality['unknown_inventory_row_pct'] > max_unknown_row_pct:
+        reasons.append('excessive_unknown_inventory_rows')
+    return reasons
+
+
+def actionable_window_metrics(osa, start, end, group_cols, prefix):
+    positive = F.col('INVENTORY_QTY') > 0
+    upstream = F.col('INVENTORY_QTY').is_not_null() & (F.col('INVENTORY_QTY') <= 0)
+    unknown = F.col('INVENTORY_QTY').is_null()
+
+    return (
+        osa
+        .filter((F.col('DATE') >= start) & (F.col('DATE') <= end))
+        .group_by(*group_cols)
+        .agg(
+            F.sum('ACTUAL_SALES_VOLUME').alias(f'{prefix}_TOTAL_SALES'),
+            F.sum('LOST_SALES_VOLUME').alias(f'{prefix}_TOTAL_LOST_VOLUME'),
+            F.sum('LOST_SALES_VALUE').alias(f'{prefix}_TOTAL_LSV'),
+            F.sum(F.when(positive, F.col('ACTUAL_SALES_VOLUME')).otherwise(F.lit(0))).alias(f'{prefix}_STORE_SALES'),
+            F.sum(F.when(positive, F.col('LOST_SALES_VOLUME')).otherwise(F.lit(0))).alias(f'{prefix}_STORE_LOST_VOLUME'),
+            F.sum(F.when(positive, F.col('LOST_SALES_VALUE')).otherwise(F.lit(0))).alias(f'{prefix}_STORE_LSV'),
+            F.sum(F.when(upstream, F.col('LOST_SALES_VALUE')).otherwise(F.lit(0))).alias(f'{prefix}_UPSTREAM_LSV'),
+            F.sum(F.when(unknown, F.col('LOST_SALES_VALUE')).otherwise(F.lit(0))).alias(f'{prefix}_UNKNOWN_LSV'),
+            F.count(F.lit(1)).alias(f'{prefix}_ROW_COUNT'),
+            F.sum(F.when(positive, F.lit(1)).otherwise(F.lit(0))).alias(f'{prefix}_POSITIVE_ROWS'),
+            F.sum(F.when(unknown, F.lit(1)).otherwise(F.lit(0))).alias(f'{prefix}_UNKNOWN_ROWS'),
+        )
+        .with_column(
+            f'{prefix}_TOTAL_OSA',
+            osa_score_col(F.col(f'{prefix}_TOTAL_SALES'), F.col(f'{prefix}_TOTAL_LOST_VOLUME')),
+        )
+        .with_column(
+            f'{prefix}_STORE_OSA',
+            osa_score_col(F.col(f'{prefix}_TOTAL_SALES'), F.col(f'{prefix}_STORE_LOST_VOLUME')),
+        )
+    )

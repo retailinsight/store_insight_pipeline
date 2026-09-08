@@ -22,6 +22,16 @@ FACTORY_CASES = [
         dict(store_id=1, department='D', trigger_types=['WOW']),
     ),
     (
+        S.make_osa_store_actionable_signal,
+        S.OsaStoreActionableSignal,
+        dict(
+            store_id=1,
+            department='D',
+            trigger_types=['WOW'],
+            this_week_lsv={'total': 1.0, 'store_controlled': 1.0, 'upstream': 0.0, 'unknown': 0.0},
+        ),
+    ),
+    (
         S.make_markdown_override_signal,
         S.MarkdownOverrideSignal,
         dict(store_id=1, trigger_types=['WOW']),
@@ -45,6 +55,16 @@ FACTORY_CASES = [
         S.make_compliance_signal,
         S.ComplianceSignal,
         dict(store_id=1, trigger_types=['TICK_AND_FLICK']),
+    ),
+    (
+        S.make_markdown_compliance_signal,
+        S.MarkdownComplianceSignal,
+        dict(store_id=1, trigger_types=['WOW']),
+    ),
+    (
+        S.make_prompted_markdown_compliance_signal,
+        S.PromptedMarkdownComplianceSignal,
+        dict(store_id=1, trigger_types=['WOW']),
     ),
 ]
 
@@ -72,6 +92,16 @@ def test_osa_merge_key_shape():
     assert sig['merge_key'] == ('OSA', 5, 'BAKERY')
 
 
+def test_osa_store_actionable_merge_key_shape():
+    sig = S.make_osa_store_actionable_signal(
+        store_id=5,
+        department='BAKERY',
+        trigger_types=['WOW'],
+        this_week_lsv={'total': 1.0, 'store_controlled': 1.0, 'upstream': 0.0, 'unknown': 0.0},
+    )
+    assert sig['merge_key'] == ('OSA_STORE_ACTIONABLE', 5, 'BAKERY')
+
+
 def test_compliance_merge_key_shape():
     sig = S.make_compliance_signal(store_id=5, trigger_types=['TICK_AND_FLICK'])
     assert sig['merge_key'] == ('COMPLIANCE', 5)
@@ -97,6 +127,16 @@ def test_markdown_sku_merge_key_shape_includes_item():
     assert sig['merge_key'] == ('MARKDOWN_SKU', 3, 999)
 
 
+def test_markdown_compliance_merge_key_shape():
+    sig = S.make_markdown_compliance_signal(store_id=3, trigger_types=['WOW'])
+    assert sig['merge_key'] == ('MARKDOWN_COMPLIANCE', 3)
+
+
+def test_prompted_markdown_compliance_merge_key_shape():
+    sig = S.make_prompted_markdown_compliance_signal(store_id=3, trigger_types=['WOW'])
+    assert sig['merge_key'] == ('PROMPTED_MARKDOWN_COMPLIANCE', 3)
+
+
 # ---------------------------------------------------------------------------
 # Defaults and input-mutation safety
 # ---------------------------------------------------------------------------
@@ -119,6 +159,8 @@ def test_trigger_types_is_fresh_list_not_aliased():
     (S.make_markdown_sellthrough_signal, dict(store_id=1, trigger_types=['WOW'])),
     (S.make_markdown_sku_signal, dict(store_id=1, item_id=1, trigger_types=['X'])),
     (S.make_compliance_signal, dict(store_id=1, trigger_types=['TICK_AND_FLICK'])),
+    (S.make_markdown_compliance_signal, dict(store_id=1, trigger_types=['WOW'])),
+    (S.make_prompted_markdown_compliance_signal, dict(store_id=1, trigger_types=['WOW'])),
 ])
 def test_site_name_defaults_to_store_label(factory, kwargs):
     sig = factory(**kwargs)
@@ -136,6 +178,10 @@ def test_site_name_defaults_to_store_label(factory, kwargs):
      dict(store_id=1, item_id=1, trigger_types=['X']), 'Anytown'),
     (S.make_compliance_signal,
      dict(store_id=1, trigger_types=['TICK_AND_FLICK']), 'Anytown'),
+    (S.make_markdown_compliance_signal,
+     dict(store_id=1, trigger_types=['WOW']), 'Anytown'),
+    (S.make_prompted_markdown_compliance_signal,
+     dict(store_id=1, trigger_types=['WOW']), 'Anytown'),
 ])
 def test_site_name_explicit_preserved(factory, kwargs, explicit_name):
     sig = factory(site_name=explicit_name, **kwargs)

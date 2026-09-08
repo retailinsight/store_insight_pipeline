@@ -47,12 +47,7 @@ columns:
   ITEM_HIERARCHY_3:
     type: VARCHAR
     required: false
-    description: Subclass level name.
-
-  ITEM_HIERARCHY_4:
-    type: VARCHAR
-    required: false
-    description: Product Profile Group (PPG) name.
+    description: PPG level name.
 
   ITEM_HIERARCHY_ID_1:
     type: NUMBER
@@ -65,11 +60,6 @@ columns:
     description: Department level numeric ID (used for WMD grouping).
 
   ITEM_HIERARCHY_ID_3:
-    type: NUMBER
-    required: false
-    description: Subclass level numeric ID.
-
-  ITEM_HIERARCHY_ID_4:
     type: NUMBER
     required: false
     description: PPG level numeric ID.

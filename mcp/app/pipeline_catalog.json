@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-27T10:49:05+00:00",
+  "generated_at": "2026-09-08T19:55:32+00:00",
   "pipeline_summary": "Weekly batch that detects retail availability and markdown anomalies, enriches each signal with supporting facts, generates plain-English narrative cards, and scores them so the highest-impact issues surface first.",
   "stages": {
     "1_detect": "Run lightweight statistical detectors → list of signals.",
@@ -8,10 +8,10 @@
     "4_investigate": "Generate human-readable issue / explanation / recommended_action."
   },
   "signal_types": {
-    "OSA": {
-      "description": "On-shelf availability has dropped for a store-department (week-on-week, vs chain, or via persistent repeat-offender items).",
+    "OSA_STORE_ACTIONABLE": {
+      "description": "Store-actionable on-shelf availability has dropped for a store-department (week-on-week or vs chain).",
       "merge_key": "(signal_type, store_id, department)",
-      "factory": "make_osa_signal",
+      "factory": "make_osa_store_actionable_signal",
       "bucket": "Availability",
       "fields": [
         {
@@ -35,15 +35,19 @@
           "type": "list[str]"
         },
         {
-          "name": "this_week_lsv",
-          "type": "float | None"
-        },
-        {
           "name": "last_week_osa",
           "type": "float | None"
         },
         {
           "name": "this_week_osa",
+          "type": "float | None"
+        },
+        {
+          "name": "total_last_week_osa",
+          "type": "float | None"
+        },
+        {
+          "name": "total_this_week_osa",
           "type": "float | None"
         },
         {
@@ -55,117 +59,396 @@
           "type": "float | None"
         },
         {
+          "name": "total_chain_this_week_osa",
+          "type": "float | None"
+        },
+        {
           "name": "chain_gap_pp",
           "type": "float | None"
         },
         {
-          "name": "chain_wow_drift_pp",
-          "type": "float | None"
+          "name": "last_week_lsv",
+          "type": "dict | None"
         },
         {
-          "name": "repeat_item_count",
-          "type": "int | None"
+          "name": "this_week_lsv",
+          "type": "dict"
         },
         {
-          "name": "repeat_item_details",
-          "type": "list[dict]"
+          "name": "lsv_change",
+          "type": "dict | None"
+        },
+        {
+          "name": "quality",
+          "type": "dict"
         }
       ],
       "detectors": [
         {
-          "name": "OSA REPEAT",
-          "module": "repeat",
-          "problem": "One or more items in a store-department have had persistently poor availability across multiple weeks, indicating a chronic structural problem.",
-          "action": "Investigate the specific repeat-offender items listed in the signal and resolve underlying causes such as chronic out-of-stocks, ordering failures, or ranging issues.",
-          "baseline": "The same item in the same store-department over the rolling lookback window (default: 10 weeks).",
-          "logic": "Weekly OSA = actual sales volume / (actual sales volume + lost sales volume).\nAn item alert week requires OSA < (1 - min_osa_drop) and weekly lost sales value > min_weekly_lsv.\nFires when one or more items in the store-department have item alert weeks >= min_alert_weeks in the rolling lookback window.",
-          "config_keys": [
-            "min_alert_weeks",
-            "min_osa_drop",
-            "min_weekly_lsv"
-          ]
-        },
-        {
           "name": "VS_CHAIN",
           "module": "vs_chain",
-          "problem": "Store-department OSA is significantly below the chain-wide average, indicating structural underperformance relative to peers.",
-          "action": "Review why this store is underperforming its peers in this department and address root causes such as ordering, compliance, or ranging issues.",
-          "baseline": "The chain-wide average OSA for the same department this week.",
-          "logic": "OSA = actual sales volume / (actual sales volume + lost sales volume).\nChain gap = chain department OSA - store department OSA.\nFires when chain gap > min_chain_gap and this-week lost sales value > min_lost_sales_value.",
+          "problem": "Store-controlled availability is below the like-for-like chain benchmark.",
+          "action": "Prioritise the items and trading periods with recorded positive inventory and lost sales.",
+          "baseline": "The chain department store-controlled OSA for the same week.",
+          "logic": "Store and chain OSA use all sales volume plus positive-inventory lost-sales volume and fire on a configured gap and store-controlled LSV gate.",
           "config_keys": [
-            "min_chain_gap",
-            "min_lost_sales_value"
+            "min_actionable_chain_gap",
+            "min_actionable_lsv",
+            "min_actionable_positive_rows",
+            "max_actionable_unknown_row_pct"
           ]
         },
         {
           "name": "WOW",
           "module": "wow",
-          "problem": "Store-department OSA has dropped sharply week-on-week, indicating an acute availability deterioration.",
-          "action": "Investigate what changed in the store or supply chain this week and take corrective action to restore availability.",
-          "baseline": "The same store-department OSA from the previous week.",
-          "logic": "OSA = actual sales volume / (actual sales volume + lost sales volume).\nWoW drop = last-week OSA - this-week OSA.\nFires when WoW drop > min_wow_drop and this-week lost sales value > min_lost_sales_value.",
+          "problem": "Store-controlled availability deteriorated week-on-week.",
+          "action": "Prioritise the items and trading periods with recorded positive inventory and lost sales.",
+          "baseline": "The same store-department store-controlled OSA in the preceding week.",
+          "logic": "Store-controlled OSA uses all sales volume plus positive-inventory lost-sales volume and fires on a configured weekly drop and store-controlled LSV gate.",
           "config_keys": [
-            "min_wow_drop",
-            "min_lost_sales_value"
+            "min_actionable_wow_drop",
+            "min_actionable_lsv",
+            "min_actionable_positive_rows",
+            "max_actionable_unknown_row_pct"
           ]
         }
       ],
       "gatherers": [
         {
-          "name": "osa_ppg_drilldown",
+          "name": "osa_store_actionable_ppg_drilldown",
           "facts_keys": [
-            "subclass_contributors",
-            "subclass_changes"
+            "ppg_lsv_changes"
           ],
-          "description": "Top-N PPGs by this-week LSV and WoW LSV increase for each store-department."
+          "description": "Top latest-week PPGs with prior-week and changed attributed LSV."
         },
         {
-          "name": "osa_dow",
+          "name": "osa_store_actionable_item_lsv_changes",
+          "facts_keys": [
+            "item_lsv_changes"
+          ],
+          "description": "Top latest-week item offenders with prior-week attributed LSV and UPC/EAN arrays."
+        },
+        {
+          "name": "osa_store_actionable_dow",
           "facts_keys": [
             "dow_pattern",
             "worst_day"
           ],
-          "description": "Lost sales by day-of-week for the current week, sorted descending."
+          "description": "Seven chronological dates with attributed LSV and source-data status."
         },
         {
-          "name": "osa_chain_drift",
+          "name": "osa_store_actionable_day_periods",
           "facts_keys": [
-            "chain_last_week_osa",
-            "chain_this_week_osa",
-            "chain_drift_pp"
+            "day_period_pattern",
+            "worst_day_period",
+            "day_period_grid",
+            "grid_scope",
+            "grid_start_date",
+            "grid_end_date",
+            "dow_pattern",
+            "worst_day"
           ],
-          "description": "Chain-wide WoW OSA drift per department, keyed by department name."
-        },
-        {
-          "name": "osa_repeat_history",
-          "facts_keys": [
-            "repeat_item_history"
-          ],
-          "description": "Week-by-week OSA and LSV history per item for REPEAT signals."
+          "description": "Top day/reporting-period rows and complete grid by store-controlled LSV."
         },
         {
           "name": "osa_item_time_patterns",
           "facts_keys": [
             "day_period_pattern",
             "worst_day_period",
-            "repeat_item_time_patterns"
+            "repeat_item_time_patterns",
+            "day_period_grid",
+            "grid_scope",
+            "grid_start_date",
+            "grid_end_date",
+            "top_lsv_items_last_week_top5"
           ],
-          "description": "Day-of-week / reporting-period lost-sales patterns and repeat-offender items."
+          "description": "Day-of-week / reporting-period patterns, repeat offenders, complete heat-map grid, and top prior-week items."
         },
         {
-          "name": "osa_cost_projection",
+          "name": "osa_store_actionable_chain_drift",
           "facts_keys": [
-            "cost_projection",
-            "projection_weeks"
+            "chain_store_last_week_osa",
+            "chain_store_this_week_osa",
+            "chain_store_drift_pp"
           ],
-          "description": "Cost-of-doing-nothing projection: this_week_lsv * projection_weeks."
+          "description": "Chain-wide store-controlled OSA drift per department, returned only when data-quality thresholds are met."
+        },
+        {
+          "name": "osa_store_actionable_cost_projection",
+          "facts_keys": [
+            "cost_projection"
+          ],
+          "description": "Attributed cost-of-inaction projection using latest-week run rate."
         }
       ],
       "investigator": {
         "engine": "rule_based",
-        "skill_file": "skills/osa_investigation_skill.md",
-        "description": "OSA availability alerts — WOW, VS_CHAIN, and REPEAT triggers",
-        "skill_text": "# Investigation Skill: OSA Availability Alert\n\n## Purpose\nGuide the investigation of an OSA (on-shelf availability) alert for a store-department.\nUse this skill alongside the Smart Action Card Content Skill to generate card content\nthat is specific, commercially grounded, and actionable for a store manager.\n\n---\n\n## When This Skill Applies\n\nSignal type: **OSA**\nTrigger types (one or more may be present on the same signal):\n\n| Trigger | What it means |\n|---|---|\n| `WOW` | Store OSA dropped week-on-week beyond the threshold |\n| `VS_CHAIN` | Store OSA is materially below the chain average this week |\n| `REPEAT` | One or more items have triggered availability alerts for N consecutive weeks |\n\nA signal may carry multiple triggers (e.g. WOW + VS_CHAIN). Investigate all present triggers;\nthe one with the strongest commercial impact should lead the narrative.\n\n---\n\n## Investigation Steps\n\n### 1. Establish the commercial scale\n- Start with `this_week_lsv` — the total lost sales value for the department this week.\n- Calculate the 4-week projection: `this_week_lsv × projection_weeks`.\n- This sets the stakes. If LSV is low, the recommended action should be proportionally lighter.\n\n### 2. Characterise the OSA movement (WOW trigger)\n- Compare `this_week_osa` vs `last_week_osa` — the `wow_drift_pp` field gives the signed change.\n- Check `chain_drift_pp` from facts: if the chain also fell, the store may be moving with a wider\n  pattern rather than an isolated problem. Name this in the explanation if relevant.\n- A large store drop with a flat chain = isolated store issue → stronger recommended action.\n\n### 3. Benchmark against the chain (VS_CHAIN trigger)\n- Use `chain_gap_pp` — the gap between store OSA and chain average this week.\n- Use `chain_this_week_osa` from facts for the absolute chain figure.\n- A persistent gap (VS_CHAIN without WOW) suggests a structural availability problem\n  rather than a sudden event.\n\n### 4. Identify the worst-affected products\n- `subclass_contributors` (from `osa_ppg_drilldown`): top PPGs by this-week LSV.\n  → Answers: *which products are losing the most sales right now?*\n- `subclass_changes` (from `osa_ppg_drilldown`): top PPGs by WoW LSV increase.\n  → Answers: *which products are getting worse?*\n- Name the top 1–3 contributors in the detail box. Do not fabricate items not in the list.\n\n### 5. Identify the worst day (DOW pattern)\n- `dow_pattern` (from `osa_dow`): lost sales by day of week, sorted descending.\n- `worst_day` is the first element — use it in the recommended action timing.\n- If no DOW data is available, omit the day reference entirely.\n\n### 6. Investigate repeat offenders (REPEAT trigger only)\n- `repeat_item_history` (from `osa_repeat_history`): per-item weekly OSA and LSV history.\n- `repeat_item_details` on the signal: list of items with `alert_weeks` and `cumulative_lsv`.\n- `repeat_item_count`: number of persistently failing items.\n- For REPEAT signals, the recommended action must address root cause\n  (replenishment parameters, supplier lead times, on-shelf capacity) — not just daily checks.\n\n---\n\n## Narrative Construction Rules\n\n### Title slot\n- Lead with the strongest trigger. Priority order: REPEAT > VS_CHAIN > WOW.\n- Include the key magnitude: pp drop, pp gap, or number of repeat items.\n- Example: `BEERS & LAGERS: 3 items with persistent availability issues`\n\n### Explanation slot\n- Open with the £ lost sales figure.\n- Add OSA context for WOW/VS_CHAIN triggers (store vs chain, drift).\n- Add repeat item count for REPEAT triggers, then list top items.\n- Close with the worst-day callout if available.\n\n### Recommended Action slot\n- Name the department.\n- Include a timing element (e.g. \"before 8am daily\", \"before store opens\").\n- For WOW/VS_CHAIN: focus on replenishment discipline and gap-filling.\n- For REPEAT: focus on root-cause investigation (parameters, lead times, capacity).\n- Include worst-day callout if available.\n\n### Cost if Not Fixed slot\n- Single sentence: `If this continues at the same rate, the store could lose approximately £X in the next N weeks.`\n- Use `cost_projection` and `projection_weeks` from facts directly.\n\n---\n\n## What NOT to Do\n\n- Do not reference trigger type names (`WOW`, `VS_CHAIN`, `REPEAT`) in the card — use plain English.\n- Do not fabricate product names, £ figures, or OSA percentages not present in the signal data.\n- Do not use vague language (\"significant issue\", \"notable drop\") — always quantify.\n- Do not omit the £ projection from the cost panel.\n"
+        "skill_file": "",
+        "description": "Store-actionable OSA alerts — WOW and VS_CHAIN triggers",
+        "skill_text": ""
+      }
+    },
+    "OSA_BIG_DROP": {
+      "description": "Store-controlled availability dropped sharply from one sales day to the next for a store-department.",
+      "merge_key": "(signal_type, store_id, department)",
+      "factory": "make_osa_big_drop_signal",
+      "bucket": "Availability",
+      "fields": [
+        {
+          "name": "signal_type",
+          "type": "str"
+        },
+        {
+          "name": "merge_key",
+          "type": "tuple[str, int, str]"
+        },
+        {
+          "name": "store_id",
+          "type": "int"
+        },
+        {
+          "name": "department",
+          "type": "str"
+        },
+        {
+          "name": "trigger_types",
+          "type": "list[str]"
+        },
+        {
+          "name": "last_week_osa",
+          "type": "float | None"
+        },
+        {
+          "name": "this_week_osa",
+          "type": "float | None"
+        },
+        {
+          "name": "total_last_week_osa",
+          "type": "float | None"
+        },
+        {
+          "name": "total_this_week_osa",
+          "type": "float | None"
+        },
+        {
+          "name": "wow_drift_pp",
+          "type": "float | None"
+        },
+        {
+          "name": "chain_this_week_osa",
+          "type": "float | None"
+        },
+        {
+          "name": "total_chain_this_week_osa",
+          "type": "float | None"
+        },
+        {
+          "name": "chain_gap_pp",
+          "type": "float | None"
+        },
+        {
+          "name": "last_week_lsv",
+          "type": "dict | None"
+        },
+        {
+          "name": "this_week_lsv",
+          "type": "dict"
+        },
+        {
+          "name": "lsv_change",
+          "type": "dict | None"
+        },
+        {
+          "name": "quality",
+          "type": "dict"
+        }
+      ],
+      "detectors": [
+        {
+          "name": "BIG_DROP",
+          "module": "big_drop",
+          "problem": "Store-controlled availability dropped sharply from one day to the next.",
+          "action": "Prioritise the items and trading periods with recorded positive inventory and lost sales.",
+          "baseline": "The same store-department store-controlled OSA on the most recent preceding sales day in the data.",
+          "logic": "Store-controlled OSA uses all sales volume plus positive-inventory lost-sales volume and fires when the day-on-day drop exceeds 5 percentage points and the quality gates (5 positive-inventory rows and <10% unknown-inventory rows) are met. The preceding day is the latest sales day before the analysis date, not the strict calendar yesterday.",
+          "config_keys": [
+            "min_actionable_big_drop",
+            "min_osa_big_drop_lsv",
+            "min_big_drop_positive_rows",
+            "max_actionable_unknown_row_pct"
+          ]
+        }
+      ],
+      "gatherers": [
+        {
+          "name": "osa_store_actionable_ppg_drilldown",
+          "facts_keys": [
+            "ppg_lsv_changes"
+          ],
+          "description": "Top latest-week PPGs with prior-week and changed attributed LSV."
+        },
+        {
+          "name": "osa_store_actionable_item_lsv_changes",
+          "facts_keys": [
+            "item_lsv_changes"
+          ],
+          "description": "Top latest-week item offenders with prior-week attributed LSV and UPC/EAN arrays."
+        },
+        {
+          "name": "osa_store_actionable_dow",
+          "facts_keys": [
+            "dow_pattern",
+            "worst_day"
+          ],
+          "description": "Seven chronological dates with attributed LSV and source-data status."
+        },
+        {
+          "name": "osa_store_actionable_day_periods",
+          "facts_keys": [
+            "day_period_pattern",
+            "worst_day_period",
+            "day_period_grid",
+            "grid_scope",
+            "grid_start_date",
+            "grid_end_date",
+            "dow_pattern",
+            "worst_day"
+          ],
+          "description": "Top day/reporting-period rows and complete grid by store-controlled LSV."
+        },
+        {
+          "name": "osa_item_time_patterns",
+          "facts_keys": [
+            "day_period_pattern",
+            "worst_day_period",
+            "repeat_item_time_patterns",
+            "day_period_grid",
+            "grid_scope",
+            "grid_start_date",
+            "grid_end_date",
+            "top_lsv_items_last_week_top5"
+          ],
+          "description": "Day-of-week / reporting-period patterns, repeat offenders, complete heat-map grid, and top prior-week items."
+        },
+        {
+          "name": "osa_store_actionable_chain_drift",
+          "facts_keys": [
+            "chain_store_last_week_osa",
+            "chain_store_this_week_osa",
+            "chain_store_drift_pp"
+          ],
+          "description": "Chain-wide store-controlled OSA drift per department, returned only when data-quality thresholds are met."
+        },
+        {
+          "name": "osa_store_actionable_cost_projection",
+          "facts_keys": [
+            "cost_projection"
+          ],
+          "description": "Attributed cost-of-inaction projection using latest-week run rate."
+        }
+      ],
+      "investigator": {
+        "engine": "rule_based",
+        "skill_file": "",
+        "description": "Day-on-day store-controlled OSA drop alerts — BIG_DROP trigger",
+        "skill_text": ""
+      }
+    },
+    "OSA_RECURRING_SLOT": {
+      "description": "Recurring OSA lost sales for a store-department in a specific day-of-week + reporting-period slot.",
+      "merge_key": "(signal_type, store_id, department)",
+      "factory": "make_osa_recurring_slot_signal",
+      "bucket": "Availability",
+      "fields": [
+        {
+          "name": "signal_type",
+          "type": "str"
+        },
+        {
+          "name": "merge_key",
+          "type": "tuple[str, int, str, int, int]"
+        },
+        {
+          "name": "store_id",
+          "type": "int"
+        },
+        {
+          "name": "department",
+          "type": "str"
+        },
+        {
+          "name": "section",
+          "type": "str"
+        },
+        {
+          "name": "trigger_types",
+          "type": "list[str]"
+        },
+        {
+          "name": "dow",
+          "type": "int"
+        },
+        {
+          "name": "dow_name",
+          "type": "str"
+        },
+        {
+          "name": "period_id",
+          "type": "int"
+        },
+        {
+          "name": "period_label",
+          "type": "str"
+        },
+        {
+          "name": "repeat_item_count",
+          "type": "int"
+        },
+        {
+          "name": "repeat_item_details",
+          "type": "list[dict]"
+        },
+        {
+          "name": "total_lsv",
+          "type": "float"
+        },
+        {
+          "name": "avg_weekly_lsv",
+          "type": "float"
+        }
+      ],
+      "detectors": [
+        {
+          "name": "OSA RECURRING_SLOT",
+          "module": "recurring_slot",
+          "problem": "A store-department repeatedly loses sales in a specific day-of-week + reporting-period slot, suggesting a time-driven operational issue such as staffing, delivery timing, or demand spikes.",
+          "action": "Investigate why this department consistently runs short in the flagged time slot and address root causes such as delivery schedules, shelf-filling routines, or staffing levels.",
+          "baseline": "The same store-department in the same day-of-week + reporting-period slot over the rolling lookback window (default: 10 weeks).",
+          "logic": "Item-slot = store + department + item + day of week + reporting period.\nA qualifying item-slot has lost sales volume > 0 in >= min_item_repeat_weeks distinct weeks, total lost sales value >= min_item_pattern_lsv, and an occurrence in the current or previous week.\nFires when qualifying item-slots in the same store + department + day + period >= min_items.",
+          "config_keys": [
+            "min_item_repeat_weeks",
+            "min_item_pattern_lsv",
+            "min_items"
+          ]
+        }
+      ],
+      "gatherers": [
+        {
+          "name": "osa_recurring_slot_facts",
+          "facts_keys": [
+            "slot_history",
+            "recurring_slot_share_pct",
+            "slot_share_of_dept_total_pct",
+            "slot_trend"
+          ],
+          "description": "Supporting facts for recurring OSA time-slot alerts."
+        }
+      ],
+      "investigator": {
+        "engine": "rule_based",
+        "skill_file": "skills/osa_recurring_slot_investigation_skill.md",
+        "description": "Recurring OSA lost-sales alerts for specific day-of-week + reporting-period slots",
+        "skill_text": "# Investigation Skill: OSA Recurring Slot Alert\n\n## Purpose\n\nGuide the investigation of an `OSA_RECURRING_SLOT` alert: a store-department that repeatedly loses sales in a specific day-of-week + reporting-period slot (e.g. Monday mornings).\n\nUse this skill alongside the Smart Action Card Content Skill to generate card content that is specific, commercially grounded, and actionable for a store manager.\n\n---\n\n## When This Skill Applies\n\nSignal type: **OSA_RECURRING_SLOT**\nTrigger type: **RECURRING_SLOT**\n\nA signal fires when at least two items in a store-department show a recurring lost-sales pattern in the same `(day-of-week, reporting_period)` slot across multiple weeks.\n\n---\n\n## Investigation Steps\n\n### 1. Establish the commercial scale\n- Start with `avg_weekly_lsv` and `total_lsv` on the signal.\n- Calculate the 4-week projection: `avg_weekly_lsv × projection_weeks`.\n- This sets the stakes. If the weekly LSV is low, the recommended action should be proportionally lighter.\n\n### 2. Characterise the recurring slot\n- Identify `dow_name` and `period_label` — the specific slot with the problem (e.g. \"Monday Morning\").\n- Use `repeat_item_count` and `repeat_item_details` to see how many items and which items drive the pattern.\n- Each item detail includes `repeat_weeks` and `total_lsv` — longer-running patterns are more entrenched.\n\n### 3. Check trend and share\n- `slot_trend` from facts: is the slot getting worse, better, or flat?\n- `recurring_slot_share_pct`: what share of the slot's total lost sales is explained by the recurring items?\n- `slot_share_of_dept_total_pct`: what share of the whole department's lost sales is this slot responsible for?\n- A high and worsening share means the slot is a priority for operational intervention.\n\n### 4. Review weekly slot history\n- `slot_history` from facts gives week-by-week LSV, sales volume, and OSA for the slot.\n- Look for step changes (e.g., a new delivery schedule or staffing rota) and sustained spikes.\n- Name the last 1–3 weeks in the explanation if the trend is notable.\n\n### 5. Identify operational drivers\nThe trigger is time-specific, so investigate operational causes tied to that slot:\n- Delivery timing: does the delivery arrive after the slot starts?\n- Shelf-filling routines: is the department restocked before the busy period?\n- Staffing levels: are there enough colleagues on the shop floor during the slot?\n- Demand spikes: is there a known weekly event (promotions, local market) that coincides with the slot?\n\n---\n\n## Narrative Construction Rules\n\n### Title slot\n- Lead with the store, department, and the specific slot.\n- Example: `Store 42 Produce: recurring lost sales on Monday mornings`\n\n### Explanation slot\n- Open with the number of items, the slot, and the total lost sales value over the lookback.\n- Include `avg_weekly_lsv` to give a weekly commercial scale.\n- Add trend and share facts if they strengthen the case.\n- List the top 1–3 recurring items by total LSV. Do not fabricate items not in `repeat_item_details`.\n\n### Recommended Action slot\n- Name the department and the slot.\n- Focus on operational causes tied to the specific time: delivery timing, shelf-filling, staffing, or demand.\n- If the trend is worsening, escalate to the area manager or supply-chain team.\n\n### Cost if Not Fixed slot\n- Single sentence: `If this recurring slot problem continues, the store could lose approximately £X over the next N weeks.`\n- Use `avg_weekly_lsv × projection_weeks` from the signal/scorer.\n\n---\n\n## What NOT to Do\n\n- Do not reference trigger type names (`RECURRING_SLOT`) in the card — use plain English.\n- Do not fabricate product names, £ figures, or percentages not present in the signal/facts.\n- Do not treat this as a generic OSA alert; the time-specific nature is the key insight.\n- Do not omit the £ projection from the cost panel.\n"
       }
     },
     "COMPLIANCE": {
@@ -229,6 +512,10 @@
         {
           "name": "above_chain_by",
           "type": "float"
+        },
+        {
+          "name": "workload",
+          "type": "dict"
         }
       ],
       "detectors": [
@@ -250,16 +537,349 @@
         {
           "name": "tick_and_flick_breakdown",
           "facts_keys": [
-            "tf_by_alert_type"
+            "tf_by_alert_type",
+            "alert_volume_by_day",
+            "driver_assessment"
           ],
-          "description": "Alert type is the unchanged source ALERT_TYPE_NAME label: the kind of alert intervention the store actioned. It is not a department, severity, SKU grouping, or a category derived by this pipeline. For each alert type, this adds current-week interventions worked, tick-and-flicked dismissals, and tick-and-flick rate = dismissals / interventions worked."
+          "description": "Alert type is the unchanged source ALERT_TYPE_NAME label: the kind of alert intervention the store actioned. It is not a department, severity, SKU grouping, or a category derived by this pipeline. For each alert type, this adds current-week interventions worked, tick-and-flicked dismissals, and tick-and-flick rate = dismissals / interventions worked. Also builds a daily volume breakdown and a workload/coaching driver assessment."
         }
       ],
       "investigator": {
         "engine": "rule_based",
         "skill_file": "skills/compliance_investigation_skill.md",
         "description": "Tick-and-flick compliance alerts",
-        "skill_text": "# Investigation Skill: Compliance (Tick-and-Flick) Alert\n\n## Purpose\nGuide the investigation of a COMPLIANCE alert triggered by the tick-and-flick detector.\nUse this skill alongside the Smart Action Card Content Skill to generate card content\nthat is specific, commercially grounded, and actionable for a store manager or area manager.\n\n---\n\n## When This Skill Applies\n\nSignal type: **COMPLIANCE**\nTrigger type: `TICK_AND_FLICK`\n\nA tick-and-flick alert fires when a store's rate of alerts being dismissed without\ngenuine investigation (tick-and-flick rate) is materially above the chain average\nand has risen week-on-week.\n\n---\n\n## Key Signal Fields\n\n| Field | Meaning |\n|---|---|\n| `this_week_tf_rate` | % of alerts worked this week that were tick-and-flick |\n| `last_week_tf_rate` | Same metric last week |\n| `tf_rate_change` | Signed week-on-week change in pp |\n| `chain_tf_rate` | Chain average tick-and-flick rate this week |\n| `above_chain_by` | How many pp the store is above the chain average |\n| `this_week_worked` | Total alerts worked this week |\n| `this_week_tf` | Number of those that were tick-and-flick |\n\nFact gathered from `tick_and_flick_breakdown`:\n\n| Fact key | Meaning |\n|---|---|\n| `tf_by_alert_type` | Breakdown by alert type — which alert categories are being dismissed most carelessly |\n\n---\n\n## Investigation Steps\n\n### 1. Establish the scale of the problem\n- `this_week_tf` out of `this_week_worked` gives the raw count.\n- `this_week_tf_rate` gives the proportion — this is the headline figure.\n- `above_chain_by` contextualises severity: a store 5pp above chain is a concern;\n  20pp above chain is a serious compliance failure.\n\n### 2. Assess the trajectory\n- `tf_rate_change` tells you whether this is getting better or worse.\n- A rising rate (positive `tf_rate_change`) with an already-high absolute rate\n  signals an escalating problem — recommended action should be more urgent.\n- A falling rate that is still above chain may be improving — acknowledge progress\n  while maintaining the action instruction.\n\n### 3. Identify the worst alert types\n- `tf_by_alert_type` (from `tick_and_flick_breakdown`): lists each alert category\n  worked at this store, with `worked`, `tf_count`, and `tf_rate` per type.\n- Sort by `tf_rate` descending — the top 1–3 are the categories being dismissed most carelessly.\n- Name these in the detail box. This tells the manager exactly where to spot-check behaviour.\n\n### 4. Consider the downstream impact\n- Tick-and-flick dismissals mean availability alerts go unresolved.\n- The commercial cost is indirect but real: unaddressed OSA alerts translate to\n  ongoing lost sales across the affected departments.\n- The cost panel should reflect this qualitatively (no £ projection is available\n  for compliance signals — do not invent one).\n\n---\n\n## Narrative Construction Rules\n\n### Title slot\n- Format: `[STORE NAME]: tick-and-flick compliance declining`\n- Use `site_name` for the store identifier, not a store ID number.\n- Include the headline rate if space allows: e.g. `42.3% of alerts tick-and-flicked this week`\n\n### Explanation slot\n- Open with the raw count and rate: `X of Y alerts worked this week were tick-and-flick (Z%)`.\n- State the week-on-week change.\n- State the gap above chain average.\n- List the worst 1–3 alert types from `tf_by_alert_type` with their rates.\n\n### Recommended Action slot\n- Name the store.\n- Direct the manager to review alert working practice with their team.\n- Instruct them to spot-check the specific alert types named in the explanation.\n- Where the rate is rising, add urgency: suggest a coaching session with the store manager.\n- Do not suggest punitive language — frame as coaching and process improvement.\n\n### Cost if Not Fixed slot\n- No £ projection is available for compliance signals.\n- Use a qualitative statement instead:\n  `\"Unresolved alerts mean availability issues go unaddressed, increasing the risk of lost sales across affected departments.\"`\n- Do not attempt to calculate or fabricate a £ figure.\n\n---\n\n## What NOT to Do\n\n- Do not reference `TICK_AND_FLICK` as a technical term in the card — use plain English (\"dismissed without investigation\", \"tick-and-flick\").\n- Do not invent a £ projection — compliance signals do not have `this_week_lsv`.\n- Do not name alert types not present in `tf_by_alert_type`.\n- Do not use vague language — always state the rate and the comparison (vs chain, vs last week).\n"
+        "skill_text": "# Investigation Skill: Compliance (Tick-and-Flick) Alert\n\n## Purpose\nGuide the investigation of a COMPLIANCE alert triggered by the tick-and-flick detector.\nUse this skill alongside the Smart Action Card Content Skill to generate card content\nthat is specific, commercially grounded, and actionable for a store manager or area manager.\n\n---\n\n## When This Skill Applies\n\nSignal type: **COMPLIANCE**\nTrigger type: `TICK_AND_FLICK`\n\nA tick-and-flick alert fires when a store's rate of alerts being dismissed without\ngenuine investigation (tick-and-flick rate) is materially above the chain average\nand has risen week-on-week.\n\n---\n\n## Key Signal Fields\n\n| Field | Meaning |\n|---|---|\n| `this_week_tf_rate` | % of alerts worked this week that were tick-and-flick |\n| `last_week_tf_rate` | Same metric last week |\n| `tf_rate_change` | Signed week-on-week change in pp |\n| `chain_tf_rate` | Chain average tick-and-flick rate this week |\n| `above_chain_by` | How many pp the store is above the chain average |\n| `this_week_worked` | Total alerts worked this week |\n| `this_week_tf` | Number of those that were tick-and-flick |\n\nFact gathered from `tick_and_flick_breakdown`:\n\n| Fact key | Meaning |\n|---|---|\n| `tf_by_alert_type` | Breakdown by alert type — which alert categories are being dismissed most carelessly |\n\n---\n\n## Investigation Steps\n\n### 1. Establish the scale of the problem\n- `this_week_tf` out of `this_week_worked` gives the raw count.\n- `this_week_tf_rate` gives the proportion — this is the headline figure.\n- `above_chain_by` contextualises severity: a store 5pp above chain is a concern;\n  20pp above chain is a serious compliance failure.\n\n### 2. Assess the trajectory\n- `tf_rate_change` tells you whether this is getting better or worse.\n- A rising rate (positive `tf_rate_change`) with an already-high absolute rate\n  signals an escalating problem — recommended action should be more urgent.\n- A falling rate that is still above chain may be improving — acknowledge progress\n  while maintaining the action instruction.\n\n### 3. Identify the worst alert types\n- `tf_by_alert_type` (from `tick_and_flick_breakdown`): lists each alert category\n  worked at this store, with `worked`, `tf_count`, and `tf_rate` per type.\n- Sort by `tf_rate` descending — the top 1–3 are the categories being dismissed most carelessly.\n- Name these in the detail box. This tells the manager exactly where to spot-check behaviour.\n\n### 4. Consider the downstream impact\n- Tick-and-flick dismissals mean availability alerts go unresolved.\n- The commercial cost is measured, not estimated: the scorer sums the\n  `LOST_SALES_VALUE` of the exact item-days this store tick-and-flicked this\n  week (`projected_cost` on the signal). It is the observed alert-day loss on\n  dismissed alerts — a floor for what carelessness cost, not a future forecast.\n- The cost panel should present this £ figure as measured lost sales tied to\n  dismissed alerts. Do not extend it into a projection of future loss.\n\n---\n\n## Narrative Construction Rules\n\n### Title slot\n- Format: `[STORE NAME]: tick-and-flick compliance declining`\n- Use `site_name` for the store identifier, not a store ID number.\n- Include the headline rate if space allows: e.g. `42.3% of alerts tick-and-flicked this week`\n\n### Explanation slot\n- Open with the raw count and rate: `X of Y alerts worked this week were tick-and-flick (Z%)`.\n- State the week-on-week change.\n- State the gap above chain average.\n- List the worst 1–3 alert types from `tf_by_alert_type` with their rates.\n\n### Recommended Action slot\n- Name the store.\n- Direct the manager to review alert working practice with their team.\n- Instruct them to spot-check the specific alert types named in the explanation.\n- Where the rate is rising, add urgency: suggest a coaching session with the store manager.\n- Do not suggest punitive language — frame as coaching and process improvement.\n\n### Cost if Not Fixed slot\n- Use the signal's `projected_cost`: the summed `LOST_SALES_VALUE` of the items\n  this store tick-and-flicked this week.\n- Frame it as measured, not predicted: e.g.\n  `\"£X of lost sales this week sat behind alerts that were dismissed without investigation.\"`\n- If `projected_cost` is £0 (no matching OSA facts), fall back to the qualitative\n  statement: `\"Unresolved alerts mean availability issues go unaddressed, increasing the risk of lost sales across affected departments.\"`\n- Do not calculate any figure beyond the supplied `projected_cost`.\n\n---\n\n## What NOT to Do\n\n- Do not reference `TICK_AND_FLICK` as a technical term in the card — use plain English (\"dismissed without investigation\", \"tick-and-flick\").\n- Do not invent any £ beyond the supplied `projected_cost` — compliance signals do not have `this_week_lsv`.\n- Do not name alert types not present in `tf_by_alert_type`.\n- Do not use vague language — always state the rate and the comparison (vs chain, vs last week).\n"
+      }
+    },
+    "MARKDOWN_COMPLIANCE": {
+      "description": "Store markdown on-time completion compliance is dropping week-on-week or sitting below the chain average.",
+      "merge_key": "(signal_type, store_id, department)",
+      "factory": "make_markdown_compliance_signal",
+      "bucket": "Compliance",
+      "fields": [
+        {
+          "name": "signal_type",
+          "type": "str"
+        },
+        {
+          "name": "merge_key",
+          "type": "tuple[str, int]"
+        },
+        {
+          "name": "store_id",
+          "type": "int"
+        },
+        {
+          "name": "site_name",
+          "type": "str"
+        },
+        {
+          "name": "trigger_types",
+          "type": "list[str]"
+        },
+        {
+          "name": "this_week_markdowns_due",
+          "type": "int"
+        },
+        {
+          "name": "this_week_completed_on_time",
+          "type": "int"
+        },
+        {
+          "name": "this_week_compliance_rate",
+          "type": "float"
+        },
+        {
+          "name": "last_week_compliance_rate",
+          "type": "float | None"
+        },
+        {
+          "name": "wow_change_pp",
+          "type": "float | None"
+        },
+        {
+          "name": "chain_compliance_rate",
+          "type": "float | None"
+        },
+        {
+          "name": "below_chain_pp",
+          "type": "float | None"
+        },
+        {
+          "name": "this_week_at_risk_value",
+          "type": "float"
+        },
+        {
+          "name": "workload",
+          "type": "dict"
+        }
+      ],
+      "detectors": [
+        {
+          "name": "VS_CHAIN",
+          "module": "vs_chain",
+          "problem": "A store's markdown on-time completion rate is below the chain average.",
+          "action": "Investigate why this store is completing fewer markdowns on time than its peers.",
+          "baseline": "The chain-wide markdown on-time completion rate for the same calendar week.",
+          "logic": "Markdown compliance rate = COMPLETED_ON_TIME / MARKDOWNS_DUE.\nBelow-chain gap = chain_rate - store_rate (as a ratio).\nFires when gap >= min_markdown_compliance_chain_gap and this_week_markdowns_due >= min_markdown_compliance_volume.",
+          "config_keys": [
+            "min_markdown_compliance_chain_gap",
+            "min_markdown_compliance_volume"
+          ]
+        },
+        {
+          "name": "WOW",
+          "module": "wow",
+          "problem": "A store's markdown on-time completion rate has dropped sharply week-on-week.",
+          "action": "Review markdown workload and completion process with the store manager.",
+          "baseline": "The same store on-time completion rate from the previous calendar week.",
+          "logic": "Markdown compliance rate = COMPLETED_ON_TIME / MARKDOWNS_DUE.\nWoW drop = last_week_rate - this_week_rate (as a ratio).\nFires when drop >= min_markdown_compliance_wow_drop and this_week_markdowns_due >= min_markdown_compliance_volume.",
+          "config_keys": [
+            "min_markdown_compliance_wow_drop",
+            "min_markdown_compliance_volume"
+          ]
+        }
+      ],
+      "gatherers": [
+        {
+          "name": "markdown_compliance_facts",
+          "facts_keys": [
+            "daily_performance_last_7d",
+            "worst_departments_top3",
+            "driver_assessment"
+          ],
+          "description": "Daily on-time completion breakdown for the current week, worst three departments by compliance rate, and workload/coaching driver assessment."
+        }
+      ],
+      "investigator": {
+        "engine": "rule_based",
+        "skill_file": "skills/markdown_compliance_investigation_skill.md",
+        "description": "Markdown on-time completion compliance alerts — WOW and VS_CHAIN triggers",
+        "skill_text": "# Markdown On-Time Completion Compliance — Investigation Skill\n\n## What the alert means\nA store completed fewer markdowns on time than expected this week, either versus its own prior-week performance (WOW) or versus the chain average (VS_CHAIN), or both.\n\n## Facts to review\n- `daily_performance_last_7d`: day-by-day on-time completion rate and task volume.\n- `worst_departments_top3`: departments with the lowest on-time completion rate.\n- `driver_assessment`: whether the drop looks workload-driven (task volume rising) or coaching-driven (volume flat/falling but execution worse).\n- `workload`: this-week and prior-week markdown volumes, chain average volume per store, and classification.\n\n## Recommended response\n- **WORKLOAD** (volume INCREASING): review staffing hours against markdown workload this week; escalate to area manager if hours cannot cover volume.\n- **COACHING** (volume STABLE/DECREASING): review the markdown routine with the team within 48 hours; focus on the worst departments.\n- Success target: recover to the prior week's on-time completion rate.\n- Review in 7 days.\n"
+      }
+    },
+    "EXPIRY_DATE_COMPLIANCE": {
+      "description": "Store expiry-check completion is dropping over a trailing 7-day window or sitting below the chain average.",
+      "merge_key": "(signal_type, store_id, department)",
+      "factory": "make_expiry_date_compliance_signal",
+      "bucket": "Compliance",
+      "fields": [
+        {
+          "name": "signal_type",
+          "type": "str"
+        },
+        {
+          "name": "merge_key",
+          "type": "tuple[str, int]"
+        },
+        {
+          "name": "store_id",
+          "type": "int"
+        },
+        {
+          "name": "site_name",
+          "type": "str"
+        },
+        {
+          "name": "trigger_types",
+          "type": "list[str]"
+        },
+        {
+          "name": "trailing_7d_compliance_rate",
+          "type": "float"
+        },
+        {
+          "name": "prev_7d_compliance_rate",
+          "type": "float | None"
+        },
+        {
+          "name": "change_pp",
+          "type": "float | None"
+        },
+        {
+          "name": "chain_trailing_7d_compliance_rate",
+          "type": "float | None"
+        },
+        {
+          "name": "below_chain_pp",
+          "type": "float | None"
+        },
+        {
+          "name": "chain_change_pp",
+          "type": "float | None"
+        },
+        {
+          "name": "trailing_7d_checks_due",
+          "type": "int"
+        },
+        {
+          "name": "trailing_7d_checks_completed",
+          "type": "int"
+        },
+        {
+          "name": "trailing_7d_at_risk_value",
+          "type": "float"
+        },
+        {
+          "name": "workload",
+          "type": "dict"
+        }
+      ],
+      "detectors": [
+        {
+          "name": "TRAILING_7D",
+          "module": "trailing_7d",
+          "problem": "A store's expiry-check completion rate deteriorated over the trailing seven days.",
+          "action": "Review expiry-check workload and process with the store manager.",
+          "baseline": "The same store during the preceding seven days.",
+          "logic": "Weighted completion rate drop must meet the configured threshold and volume floor.",
+          "config_keys": [
+            "min_expiry_compliance_7d_drop",
+            "min_expiry_compliance_volume"
+          ]
+        },
+        {
+          "name": "VS_CHAIN",
+          "module": "vs_chain",
+          "problem": "A store's trailing expiry-check completion rate is below chain.",
+          "action": "Review the store expiry-check process against peers.",
+          "baseline": "Weighted chain completion rate for the same trailing seven days.",
+          "logic": "Weighted chain gap must meet the configured threshold and volume floor.",
+          "config_keys": [
+            "min_expiry_compliance_chain_gap",
+            "min_expiry_compliance_volume"
+          ]
+        }
+      ],
+      "gatherers": [
+        {
+          "name": "expiry_date_compliance_facts",
+          "facts_keys": [
+            "chain_comparison",
+            "daily_performance_last_7d",
+            "worst_departments_top3",
+            "expiry_markdown_volume_dod",
+            "driver_assessment"
+          ],
+          "description": "Trailing expiry compliance evidence from canonical synthetic rows."
+        }
+      ],
+      "investigator": {
+        "engine": "rule_based",
+        "skill_file": "",
+        "description": "Expiry-check completion alerts — TRAILING_7D and VS_CHAIN triggers",
+        "skill_text": ""
+      }
+    },
+    "PROMPTED_MARKDOWN_COMPLIANCE": {
+      "description": "Store prompted-markdown on-time response is dropping week-on-week or sitting below the chain average.",
+      "merge_key": "(signal_type, store_id, department)",
+      "factory": "make_prompted_markdown_compliance_signal",
+      "bucket": "Compliance",
+      "fields": [
+        {
+          "name": "signal_type",
+          "type": "str"
+        },
+        {
+          "name": "merge_key",
+          "type": "tuple[str, int]"
+        },
+        {
+          "name": "store_id",
+          "type": "int"
+        },
+        {
+          "name": "site_name",
+          "type": "str"
+        },
+        {
+          "name": "trigger_types",
+          "type": "list[str]"
+        },
+        {
+          "name": "this_week_prompts_issued",
+          "type": "int"
+        },
+        {
+          "name": "this_week_prompts_actioned_on_time",
+          "type": "int"
+        },
+        {
+          "name": "this_week_compliance_rate",
+          "type": "float"
+        },
+        {
+          "name": "last_week_compliance_rate",
+          "type": "float | None"
+        },
+        {
+          "name": "wow_change_pp",
+          "type": "float | None"
+        },
+        {
+          "name": "chain_compliance_rate",
+          "type": "float | None"
+        },
+        {
+          "name": "below_chain_pp",
+          "type": "float | None"
+        },
+        {
+          "name": "median_response_minutes",
+          "type": "float | None"
+        },
+        {
+          "name": "this_week_at_risk_value",
+          "type": "float"
+        },
+        {
+          "name": "workload",
+          "type": "dict"
+        }
+      ],
+      "detectors": [
+        {
+          "name": "VS_CHAIN",
+          "module": "vs_chain",
+          "problem": "A store's prompted-markdown on-time actioned rate is below the chain average.",
+          "action": "Investigate why this store is actioning fewer prompts on time than its peers.",
+          "baseline": "The chain-wide prompted-markdown on-time actioned rate for the same calendar week.",
+          "logic": "Prompted markdown compliance rate = prompts actioned on time / prompts issued.\nBelow-chain gap = chain_rate - store_rate (as a ratio).\nFires when gap >= min_prompted_markdown_compliance_chain_gap and this_week_prompts_issued >= min_prompted_markdown_compliance_volume.",
+          "config_keys": [
+            "min_prompted_markdown_compliance_chain_gap",
+            "min_prompted_markdown_compliance_volume"
+          ]
+        },
+        {
+          "name": "WOW",
+          "module": "wow",
+          "problem": "A store's prompted-markdown on-time actioned rate has dropped sharply week-on-week.",
+          "action": "Review prompt workload and response process with the store manager.",
+          "baseline": "The same store on-time actioned rate from the previous calendar week.",
+          "logic": "Prompted markdown compliance rate = prompts actioned on time / prompts issued.\nWoW drop = last_week_rate - this_week_rate (as a ratio).\nFires when drop >= min_prompted_markdown_compliance_wow_drop and this_week_prompts_issued >= min_prompted_markdown_compliance_volume.",
+          "config_keys": [
+            "min_prompted_markdown_compliance_wow_drop",
+            "min_prompted_markdown_compliance_volume"
+          ]
+        }
+      ],
+      "gatherers": [
+        {
+          "name": "prompted_markdown_compliance_facts",
+          "facts_keys": [
+            "daily_performance_last_7d",
+            "worst_departments_top3",
+            "driver_assessment"
+          ],
+          "description": "Daily on-time actioned breakdown for the current week, worst three departments by compliance rate, and workload/coaching driver assessment."
+        }
+      ],
+      "investigator": {
+        "engine": "rule_based",
+        "skill_file": "",
+        "description": "Prompted-markdown on-time response alerts — WOW and VS_CHAIN triggers",
+        "skill_text": ""
       }
     },
     "MARKDOWN_OVERRIDE": {
@@ -422,10 +1042,10 @@
         {
           "name": "VS_CHAIN",
           "module": "vs_chain",
-          "problem": "Store waste rate (units wasted per unit put through the markdown process) is significantly above the chain average, indicating the markdown process is not recovering stock effectively.",
-          "action": "Review which departments and items are being wasted at the highest rate. Ensure markdown guidance is being applied early enough to give stock a chance to sell.",
-          "baseline": "The chain-wide waste rate for the same week.",
-          "logic": "Waste rate = wasted units / markdown quantity.\nChain gap = store waste rate - chain waste rate.\nFires when chain gap > min_stb_chain_gap and this-week wasted units >= min_waste_qty.",
+          "problem": "The store has more waste relative to markdown activity than the chain average. This is a waste-to-markdown ratio, not a straight-to-bin rate: the source data cannot show whether an individual wasted unit was marked down before disposal.",
+          "action": "Review the departments with the most waste and assess markdown timing, markdown depth, ordering, and operational handling. Treat missed markdown as a hypothesis to investigate, not a confirmed cause.",
+          "baseline": "The chain-wide waste-to-markdown ratio for the same week: total waste units divided by total markdown units.",
+          "logic": "Waste-to-markdown ratio = waste units / markdown units.\nChain gap = store ratio - chain ratio.\nFires when the gap is at least min_stb_chain_gap and this-week waste units are at least min_waste_qty.\nThis metric does not measure the proportion of units sent directly to bin without markdown.",
           "config_keys": [
             "min_stb_chain_gap",
             "min_waste_qty"
@@ -434,10 +1054,10 @@
         {
           "name": "WOW",
           "module": "wow",
-          "problem": "Store waste rate (units wasted per unit put through the markdown process) has risen sharply week-on-week, indicating a sudden deterioration in markdown recovery.",
-          "action": "Investigate what changed this week — which departments or items are driving the sudden increase in waste relative to markdown throughput.",
-          "baseline": "The same store waste rate from the previous week.",
-          "logic": "Waste rate = wasted units / markdown quantity.\nWoW increase = this-week waste rate - last-week waste rate.\nFires when WoW increase > min_stb_wow_increase and this-week wasted units >= min_waste_qty.",
+          "problem": "The store has more waste relative to markdown activity than in the prior week. This is a waste-to-markdown ratio, not a straight-to-bin rate: the source data cannot show whether an individual wasted unit was marked down before disposal.",
+          "action": "Investigate which departments or items drove the change in waste relative to markdown activity. Assess markdown timing, markdown depth, ordering, and operational handling without assuming a specific cause.",
+          "baseline": "The same store's waste-to-markdown ratio from the previous week: waste units divided by markdown units.",
+          "logic": "Waste-to-markdown ratio = waste units / markdown units.\nWoW increase = this-week ratio - last-week ratio.\nFires when the increase is at least min_stb_wow_increase and this-week waste units are at least min_waste_qty.\nThis metric does not measure the proportion of units sent directly to bin without markdown.",
           "config_keys": [
             "min_stb_wow_increase",
             "min_waste_qty"
@@ -457,7 +1077,98 @@
         "engine": "rule_based",
         "skill_file": "skills/waste_investigation_skill.md",
         "description": "Straight-to-bin waste rate alerts — VS_CHAIN and WOW triggers",
-        "skill_text": "# Waste Investigation Skill\n\n## Purpose\nThis skill guides the investigation of a `WASTE` alert. A store's straight-to-bin (STB) rate — the proportion of wasted items that were never marked down before being discarded — is either significantly above the chain average (`VS_CHAIN`) or has risen sharply week-on-week (`WOW`). Straight-to-bin waste represents a direct, recoverable loss: items that could have been sold at a reduced price were instead binned.\n\n---\n\n## Key Signal Fields\n\n| Field | Description |\n|---|---|\n| `this_week_stb_rate` | % of wasted items going straight to bin this week |\n| `chain_stb_rate` | Chain-wide STB rate this week |\n| `above_chain_pp` | pp above chain (VS_CHAIN trigger only) |\n| `last_week_stb_rate` | STB rate last week (WOW trigger only) |\n| `wow_change_pp` | pp change WoW (WOW trigger only) |\n| `this_week_waste_qty` | Total units wasted this week |\n| `this_week_stb_qty` | Units going straight to bin this week |\n| `this_week_waste_value` | £ value of all waste this week (at original price) |\n\n## Key Facts Fields (from Stage 2)\n\n| Field | Description |\n|---|---|\n| `waste_dept_breakdown` | Top departments by STB quantity — `[{dept, waste_qty, stb_qty, stb_rate_pct, waste_value}]` |\n\n---\n\n## Investigation Steps\n\n### 1. Establish the scale\n- How many units were wasted? (`this_week_waste_qty`)\n- What proportion went straight to bin? (`this_week_stb_qty` / `this_week_waste_qty`)\n- What is the total waste value at original price? (`this_week_waste_value`) — this is the upper bound of what could have been recovered.\n\n### 2. Identify the trigger\n- **VS_CHAIN**: The store's STB rate is `above_chain_pp` pp above the chain average. Is this a persistent structural problem or a recent change?\n- **WOW**: The rate has jumped `wow_change_pp` pp in a single week. Is a specific department or event driving the spike?\n\n### 3. Drill into departments\n- Review `waste_dept_breakdown` to identify the worst-performing departments by STB quantity and value.\n- Focus the recommended action on the highest-impact departments.\n\n### 4. Root cause framing\n- STB waste usually means items reached end-of-life without ever being flagged for markdown — either because:\n  - The markdown process wasn't followed (items missed)\n  - Items were over-ordered and the markdown algorithm couldn't clear them in time\n  - Staff are binning items without following the markdown step\n- The narrative should prompt investigation of *which* explanation applies here.\n\n---\n\n## Narrative Construction Rules\n\n### Title\n- VS_CHAIN: `\"Straight-to-bin waste {this_week_stb_rate}% — {above_chain_pp}pp above chain average\"`\n- WOW: `\"Straight-to-bin rate up {wow_change_pp}pp this week to {this_week_stb_rate}%\"`\n- Both triggers merged: Use the VS_CHAIN framing with the WOW change in the detail box.\n\n### Detail Box\n- State the raw numbers: `\"{this_week_stb_qty} of {this_week_waste_qty} wasted units ({this_week_stb_rate}%) went straight to bin this week.\"`\n- For VS_CHAIN: `\"Chain average STB rate is {chain_stb_rate}% — this store is {above_chain_pp}pp above.\"`\n- For WOW: `\"Last week the rate was {last_week_stb_rate}% — up {wow_change_pp}pp.\"`\n- If dept breakdown available: name the top 1–2 departments by STB quantity.\n\n### Recommended Action\n- Name the department if available: `\"Review end-of-life processes in [DEPT] — ensure items flagged for markdown are being actioned before they reach their waste date.\"`\n- `\"Check whether the markdown algorithm is being followed and items are not being binned before markdown is applied.\"`\n\n### Cost If Not Fixed\n- Straight-to-bin waste has a directly quantifiable opportunity cost.\n- Use `this_week_waste_value` as the upper bound of recoverable value.\n- Frame as: `\"If left unaddressed, items worth approximately £{this_week_waste_value} per week are being discarded that could have generated revenue through markdowns.\"` \n- Note that not all waste value is recoverable — markdown revenue is typically 30–70% of original price.\n\n---\n\n## Do Not\n- Do not conflate total waste with STB waste — some waste is unavoidable (e.g. damaged items).\n- Do not suggest the store is deliberately wasting stock.\n- Do not reference `store_id` or raw merge keys.\n- Do not project multi-week costs unless explicitly asked — the single-week figure is sufficient.\n"
+        "skill_text": "# Waste Investigation Skill\n\n## Purpose\nThis skill guides the investigation of a `WASTE` alert. It compares waste units with markdown units to identify stores where waste is high relative to markdown activity, either compared with the chain (`VS_CHAIN`) or with the prior week (`WOW`). It does not establish whether individual wasted units were marked down before disposal.\n\n---\n\n## Key Signal Fields\n\n| Field | Description |\n|---|---|\n| `this_week_stb_rate` | Waste units as a % of markdown units this week; retained field name |\n| `chain_stb_rate` | Chain-wide waste-to-markdown ratio this week; retained field name |\n| `above_chain_pp` | pp above chain ratio (VS_CHAIN trigger only) |\n| `last_week_stb_rate` | Store waste-to-markdown ratio last week (WOW trigger only) |\n| `wow_change_pp` | pp change in the ratio WoW (WOW trigger only) |\n| `this_week_waste_qty` | Total units wasted this week |\n| `this_week_stb_qty` | Not available from the source data; do not use in a narrative |\n| `this_week_waste_value` | £ value of all waste this week (at original price) |\n\n## Key Facts Fields (from Stage 2)\n\n| Field | Description |\n|---|---|\n| `waste_dept_breakdown` | Top departments by waste quantity and value — `[{dept, waste_qty, waste_value}]` |\n\n---\n\n## Investigation Steps\n\n### 1. Establish the scale\n- How many units were wasted? (`this_week_waste_qty`)\n- What is the total waste value at original price? (`this_week_waste_value`) — this is the upper bound of what could have been recovered.\n- How high is waste relative to markdown activity? (`this_week_stb_rate`)\n\n### 2. Identify the trigger\n- **VS_CHAIN**: The store's waste-to-markdown ratio is `above_chain_pp` pp above the chain average. Is this persistent or recent?\n- **WOW**: The ratio has changed by `wow_change_pp` pp in a single week. Is a specific department or event driving the change?\n\n### 3. Drill into departments\n- Review `waste_dept_breakdown` to identify the departments with the most waste units and value.\n- Focus the recommended action on the highest-impact departments.\n\n### 4. Root cause framing\n- A high waste-to-markdown ratio may reflect missed markdown opportunities, over-ordering, unsuitable markdown depth, or operational handling.\n- The data cannot attribute individual waste units to a markdown history, so the narrative must frame these as investigation hypotheses rather than facts.\n\n---\n\n## Narrative Construction Rules\n\n### Title\n- VS_CHAIN: `\"Waste-to-markdown ratio {this_week_stb_rate}% — {above_chain_pp}pp above chain average\"`\n- WOW: `\"Waste-to-markdown ratio up {wow_change_pp}pp this week to {this_week_stb_rate}%\"`\n- Both triggers merged: Use the VS_CHAIN framing with the WOW change in the detail box.\n\n### Detail Box\n- State the raw numbers: `\"{this_week_waste_qty} units were wasted this week, valued at £{this_week_waste_value} at original price.\"`\n- State the contextual metric: `\"Waste was {this_week_stb_rate}% of markdown volume this week.\"`\n- For VS_CHAIN: `\"Chain average waste-to-markdown ratio is {chain_stb_rate}% — this store is {above_chain_pp}pp above.\"`\n- For WOW: `\"Last week the waste-to-markdown ratio was {last_week_stb_rate}% — up {wow_change_pp}pp.\"`\n- If department breakdown is available, name the top 1–2 departments by waste quantity and value.\n\n### Recommended Action\n- Name the department if available: `\"Review waste and markdown processes in [DEPT] to identify missed markdown opportunities, over-ordering, or operational handling issues.\"`\n- Do not state that items were binned before markdown was applied.\n\n### Cost If Not Fixed\n- `this_week_waste_value` is the original-price value of all waste, not a confirmed recoverable markdown opportunity.\n- Frame as: `\"Items worth approximately £{this_week_waste_value} at original price were wasted this week. Review whether some could have been recovered through earlier markdown action.\"`\n- Do not imply all waste value was recoverable.\n\n---\n\n## Do Not\n- Do not call this measure straight-to-bin or imply that individual waste units bypassed markdown.\n- Do not use `this_week_stb_qty`; it is unavailable from the source data.\n- Do not imply that all original-price waste value was recoverable.\n- Do not suggest the store is deliberately wasting stock.\n- Do not reference `store_id` or raw merge keys.\n- Do not project multi-week costs unless explicitly asked — the single-week figure is sufficient.\n"
+      }
+    },
+    "WASTE_TRIM": {
+      "description": "Store-item markdown dependency alert where markdown sales exceed the configured ratio of total sales.",
+      "merge_key": "(signal_type, store_id, item_id)",
+      "factory": "make_waste_trim_signal",
+      "bucket": "WASTE_TRIM",
+      "fields": [
+        {
+          "name": "signal_type",
+          "type": "str"
+        },
+        {
+          "name": "merge_key",
+          "type": "tuple[str, int, int]"
+        },
+        {
+          "name": "store_id",
+          "type": "int"
+        },
+        {
+          "name": "site_name",
+          "type": "str"
+        },
+        {
+          "name": "item_id",
+          "type": "int"
+        },
+        {
+          "name": "item_description",
+          "type": "str"
+        },
+        {
+          "name": "department",
+          "type": "str"
+        },
+        {
+          "name": "section",
+          "type": "str"
+        },
+        {
+          "name": "trigger_types",
+          "type": "list[str]"
+        },
+        {
+          "name": "markdown_units",
+          "type": "int"
+        },
+        {
+          "name": "total_units",
+          "type": "int"
+        },
+        {
+          "name": "markdown_ratio",
+          "type": "float"
+        },
+        {
+          "name": "markdown_value",
+          "type": "float"
+        }
+      ],
+      "detectors": [
+        {
+          "name": "WASTE_TRIM",
+          "module": "trim",
+          "problem": "A store-item has a high WMD-sales-to-OSA-sales ratio in the current week. This is a volume proxy, not proof that the sales occurred at a markdown price.",
+          "action": "Treat this as a data-quality and investigation lead. Confirm markdown-price attribution before acting on ranging, ordering, or clearance decisions.",
+          "baseline": "The current-week WMD sales quantity and OSA actual sales volume for the same store-item after the WMD-to-OSA item crosswalk.",
+          "logic": "Current proxy = WMD sales quantity / (WMD sales quantity + OSA actual sales volume).\nFires when the proxy > min_markdown_sales_ratio and WMD sales quantity >= min_markdown_units.\nLimitation: the available WMD sales source does not identify markdown-priced transactions, so this is not a verified markdown-sales ratio.",
+          "config_keys": [
+            "min_markdown_sales_ratio",
+            "min_markdown_units"
+          ]
+        }
+      ],
+      "gatherers": [
+        {
+          "name": "waste_trim_facts",
+          "facts_keys": [
+            "chain_markdown_ratio",
+            "dept_markdown_ratio",
+            "weekly_trend"
+          ],
+          "description": "Chain/dept markdown-sales benchmark and store-item weekly trend."
+        }
+      ],
+      "investigator": {
+        "engine": "rule_based",
+        "skill_file": "skills/waste_trim_investigation_skill.md",
+        "description": "Store-item markdown dependency alerts where markdown sales exceed the configured ratio of total sales",
+        "skill_text": "# Waste Trim Investigation Skill\n\n## Role\nYou are a Store Insight analyst helping a store manager understand why a specific item is being sold mostly at markdown.\n\n## Signal Definition\nA WASTE_TRIM alert fires when a store-item sold more than the configured ratio of its units at markdown in the last completed week.\n\n## Key Questions to Answer\n1. Is this item overstocked or over-ordered at this store?\n2. Is the demand forecast too high, forcing markdown clearance?\n3. Is this item appropriate for this store's customer profile?\n4. How does this store's markdown ratio compare to the rest of the chain for this item?\n\n## Narrative Requirements\n- State the markdown ratio clearly (markdown units / total units).\n- Compare to the chain average and department average when available.\n- Highlight whether the ratio is worsening week-on-week using the provided trend.\n- Recommend concrete next steps: review order quantity, demand forecast, or ranging.\n"
       }
     },
     "MARKDOWN_SELLTHROUGH": {
@@ -659,6 +1370,87 @@
         "description": "SKU-level markdown alerts — REPEAT_REQUEST and EXCESSIVE_OVERRIDE triggers",
         "skill_text": "# Markdown SKU Investigation Skill\n\n## Purpose\nThis skill guides the investigation of a `MARKDOWN_SKU` alert. This is a SKU-level alert fired when a specific item at a specific store shows a persistent markdown problem over a rolling window:\n\n- **REPEAT_REQUEST**: The markdown algorithm has flagged this item for reduction on 3+ distinct weeks, indicating a chronic surplus — the store keeps receiving more of this item than it can sell at full price.\n- **EXCESSIVE_OVERRIDE**: Staff at this store are overriding the algorithm's price recommendation for this specific item on more than 50% of occasions, suggesting persistent resistance to the guidance for this SKU.\n\nUnlike the store-level alerts (MARKDOWN_OVERRIDE, WASTE, MARKDOWN_SELLTHROUGH), this alert is about a *single item* and warrants a targeted SKU-level conversation.\n\n---\n\n## Key Signal Fields\n\n| Field | Description |\n|---|---|\n| `item_id` | Internal item identifier |\n| `item_description` | Human-readable item name |\n| `department` | Department this item belongs to |\n| `markdown_request_count` | Total markdown requests for this item in the window |\n| `override_count` | Number of those requests that were overridden (EXCESSIVE_OVERRIDE only) |\n| `lookback_weeks` | Rolling window length in weeks |\n| `avg_markdown_pct` | Average markdown depth % over the window |\n\n## Key Facts Fields (from Stage 2)\n\n| Field | Description |\n|---|---|\n| `sku_markdown_history` | Week-by-week history — `[{week_start, request_count, override_count, avg_markdown_pct}]` ordered oldest to newest |\n\n---\n\n## Investigation Steps\n\n### 1. Identify the item\n- What is the item? (`item_description`, `department`)\n- How many times has it appeared in the markdown programme over `lookback_weeks` weeks? (`markdown_request_count`)\n\n### 2. Understand the trigger\n\n**REPEAT_REQUEST**:\n- The algorithm keeps flagging this item because it is not selling through at full price.\n- Look at `sku_markdown_history` — is the request happening every week, or sporadically?\n- Is the markdown depth increasing over time (avg_markdown_pct getting larger)? This suggests the item is getting harder to sell.\n- Root causes: over-ordering, poor ranging for this store's customer base, or a seasonal item past its peak.\n\n**EXCESSIVE_OVERRIDE**:\n- Staff are regularly overriding the recommended markdown for this specific item.\n- Look at `override_count` vs `markdown_request_count` — what is the override rate?\n- Is the override happening consistently across all weeks in `sku_markdown_history`?\n- Root causes: staff believe the item is worth more than the algorithm suggests, or there is a pricing policy misunderstanding for this item.\n\n### 3. Assess the pattern from history\n- Review `sku_markdown_history` for trend: is the problem getting worse, stable, or improving?\n- If improving in the most recent week, consider whether the alert is still actionable.\n\n---\n\n## Narrative Construction Rules\n\n### Title\n- REPEAT_REQUEST: `\"[item_description] marked down {markdown_request_count} times in {lookback_weeks} weeks\"`\n- EXCESSIVE_OVERRIDE: `\"[item_description] overridden {override_count} of {markdown_request_count} markdown requests in {lookback_weeks} weeks\"`\n- Both triggers merged: Lead with EXCESSIVE_OVERRIDE if present, add repeat context.\n\n### Detail Box\n- State the item clearly: `\"[item_description] ([department])\"`\n- REPEAT_REQUEST: `\"This item has been flagged for markdown on {markdown_request_count} occasions over the last {lookback_weeks} weeks, with an average markdown depth of {avg_markdown_pct}%.\"`\n- EXCESSIVE_OVERRIDE: `\"The markdown recommendation for this item has been overridden {override_count} of {markdown_request_count} times — a {override_rate}% override rate.\"`\n- If history shows a trend (e.g. every week): note the pattern explicitly.\n\n### Recommended Action\n- REPEAT_REQUEST: `\"Review the ordering and ranging for [item_description] in [department]. Consider whether this item is suited to this store's customer profile, or whether ordering quantities should be reduced.\"`\n- EXCESSIVE_OVERRIDE: `\"Discuss the pricing guidance for [item_description] with the store manager. If the algorithm recommendation is consistently wrong for this item, escalate to the buying team for a review of the markdown parameters.\"`\n\n### Cost If Not Fixed\n- For REPEAT_REQUEST: repeated markdown requests mean the item is chronically over-ordered or unsuited to this store.\n  - Use: `\"An item requiring markdown every week represents a recurring ordering cost and waste risk. If quantities are not adjusted, this pattern is likely to continue.\"`\n- For EXCESSIVE_OVERRIDE: items overridden may sell more slowly and ultimately be wasted.\n  - Use: `\"Consistently overriding the recommended markdown means this item is likely to sell at a slower rate, increasing its risk of reaching end-of-life unsold.\"`\n- Do **not** project a £ cost — SKU-level waste projections require volume data not available in this signal.\n\n---\n\n## Do Not\n- Do not name individual staff members.\n- Do not reference `item_id`, `store_id`, or raw merge keys in the narrative.\n- Do not suggest immediate ranging removal without flagging this should go through the buying team.\n- Do not conflate REPEAT_REQUEST (an ordering/demand problem) with EXCESSIVE_OVERRIDE (a compliance/training problem) — the recommended actions are different.\n"
       }
+    },
+    "STRAIGHT_TO_BIN": {
+      "description": "Store-department straight-to-bin waste value has exceeded the configured threshold.",
+      "merge_key": "(signal_type, store_id, department)",
+      "factory": "make_straight_to_bin_signal",
+      "bucket": "Waste",
+      "fields": [
+        {
+          "name": "signal_type",
+          "type": "str"
+        },
+        {
+          "name": "merge_key",
+          "type": "tuple[str, int]"
+        },
+        {
+          "name": "store_id",
+          "type": "int"
+        },
+        {
+          "name": "site_name",
+          "type": "str"
+        },
+        {
+          "name": "trigger_types",
+          "type": "list[str]"
+        },
+        {
+          "name": "threshold_value",
+          "type": "float"
+        },
+        {
+          "name": "last_week_stb_value",
+          "type": "float"
+        },
+        {
+          "name": "last_week_stb_items",
+          "type": "int"
+        },
+        {
+          "name": "chain_avg_stb_value_per_store",
+          "type": "float"
+        },
+        {
+          "name": "vs_chain_multiple",
+          "type": "float"
+        }
+      ],
+      "detectors": [
+        {
+          "name": "VALUE_THRESHOLD",
+          "module": "value_threshold",
+          "problem": "A store's total straight-to-bin value last week exceeded the £ threshold.",
+          "action": "Review markdown routine on peak days, targeting worst departments.",
+          "baseline": "Configurable £ threshold (default £100) and chain average STB value per store.",
+          "logic": "Sum STB_VALUE per store for the last calendar week.\nFires when store total strictly exceeds min_stb_value_threshold.\nChain average is computed across all stores with any STB activity.",
+          "config_keys": [
+            "min_stb_value_threshold"
+          ]
+        }
+      ],
+      "gatherers": [
+        {
+          "name": "straight_to_bin_facts",
+          "facts_keys": [
+            "stb_by_day_last_week",
+            "worst_departments_by_value_top3",
+            "top_items_by_value_top5",
+            "chain_avg_stb_value_per_store",
+            "markdown_compliance_by_day_last_week",
+            "items_no_expiry_date_top5"
+          ],
+          "description": "Daily STB breakdown, worst departments, top items, chain average, markdown compliance by day, and items with no expiry date."
+        }
+      ],
+      "investigator": {
+        "engine": "rule_based",
+        "skill_file": "",
+        "description": "Straight-to-bin value threshold alerts — VALUE_THRESHOLD trigger",
+        "skill_text": ""
+      }
     }
   },
   "thresholds": [
@@ -672,50 +1464,105 @@
       "name": "min_lost_sales_value",
       "type": "float",
       "default": 200.0,
-      "detectors": [
-        "OSA VS_CHAIN",
-        "OSA WOW"
-      ]
+      "detectors": []
     },
     {
       "name": "min_wow_drop",
       "type": "float",
       "default": 0.01,
-      "detectors": [
-        "OSA WOW"
-      ]
+      "detectors": []
     },
     {
       "name": "min_chain_gap",
       "type": "float",
       "default": 0.03,
+      "detectors": []
+    },
+    {
+      "name": "min_actionable_wow_drop",
+      "type": "float",
+      "default": 0.01,
       "detectors": [
-        "OSA VS_CHAIN"
+        "OSA_STORE_ACTIONABLE WOW"
+      ]
+    },
+    {
+      "name": "min_actionable_chain_gap",
+      "type": "float",
+      "default": 0.02,
+      "detectors": [
+        "OSA_STORE_ACTIONABLE VS_CHAIN"
+      ]
+    },
+    {
+      "name": "min_actionable_lsv",
+      "type": "float",
+      "default": 200.0,
+      "detectors": [
+        "OSA_STORE_ACTIONABLE VS_CHAIN",
+        "OSA_STORE_ACTIONABLE WOW"
+      ]
+    },
+    {
+      "name": "min_actionable_positive_rows",
+      "type": "int",
+      "default": 10,
+      "detectors": [
+        "OSA_STORE_ACTIONABLE VS_CHAIN",
+        "OSA_STORE_ACTIONABLE WOW"
+      ]
+    },
+    {
+      "name": "max_actionable_unknown_row_pct",
+      "type": "float",
+      "default": 10.0,
+      "detectors": [
+        "OSA_BIG_DROP BIG_DROP",
+        "OSA_STORE_ACTIONABLE VS_CHAIN",
+        "OSA_STORE_ACTIONABLE WOW"
+      ]
+    },
+    {
+      "name": "min_actionable_big_drop",
+      "type": "float",
+      "default": 0.05,
+      "detectors": [
+        "OSA_BIG_DROP BIG_DROP"
+      ]
+    },
+    {
+      "name": "min_osa_big_drop_lsv",
+      "type": "float",
+      "default": 50.0,
+      "detectors": [
+        "OSA_BIG_DROP BIG_DROP"
+      ]
+    },
+    {
+      "name": "min_big_drop_positive_rows",
+      "type": "int",
+      "default": 5,
+      "detectors": [
+        "OSA_BIG_DROP BIG_DROP"
       ]
     },
     {
       "name": "min_alert_weeks",
       "type": "int",
       "default": 4,
-      "detectors": [
-        "OSA OSA REPEAT"
-      ]
+      "detectors": []
     },
     {
       "name": "min_osa_drop",
       "type": "float",
       "default": 0.05,
-      "detectors": [
-        "OSA OSA REPEAT"
-      ]
+      "detectors": []
     },
     {
       "name": "min_weekly_lsv",
       "type": "float",
       "default": 50.0,
-      "detectors": [
-        "OSA OSA REPEAT"
-      ]
+      "detectors": []
     },
     {
       "name": "min_item_repeat_weeks",
@@ -832,6 +1679,81 @@
       ]
     },
     {
+      "name": "min_markdown_compliance_wow_drop",
+      "type": "float",
+      "default": 0.05,
+      "detectors": [
+        "MARKDOWN_COMPLIANCE WOW"
+      ]
+    },
+    {
+      "name": "min_markdown_compliance_chain_gap",
+      "type": "float",
+      "default": 0.05,
+      "detectors": [
+        "MARKDOWN_COMPLIANCE VS_CHAIN"
+      ]
+    },
+    {
+      "name": "min_markdown_compliance_volume",
+      "type": "int",
+      "default": 50,
+      "detectors": [
+        "MARKDOWN_COMPLIANCE VS_CHAIN",
+        "MARKDOWN_COMPLIANCE WOW"
+      ]
+    },
+    {
+      "name": "min_expiry_compliance_7d_drop",
+      "type": "float",
+      "default": 0.05,
+      "detectors": [
+        "EXPIRY_DATE_COMPLIANCE TRAILING_7D"
+      ]
+    },
+    {
+      "name": "min_expiry_compliance_chain_gap",
+      "type": "float",
+      "default": 0.05,
+      "detectors": [
+        "EXPIRY_DATE_COMPLIANCE VS_CHAIN"
+      ]
+    },
+    {
+      "name": "min_expiry_compliance_volume",
+      "type": "int",
+      "default": 50,
+      "detectors": [
+        "EXPIRY_DATE_COMPLIANCE TRAILING_7D",
+        "EXPIRY_DATE_COMPLIANCE VS_CHAIN"
+      ]
+    },
+    {
+      "name": "min_prompted_markdown_compliance_wow_drop",
+      "type": "float",
+      "default": 0.05,
+      "detectors": [
+        "PROMPTED_MARKDOWN_COMPLIANCE WOW"
+      ]
+    },
+    {
+      "name": "min_prompted_markdown_compliance_chain_gap",
+      "type": "float",
+      "default": 0.05,
+      "detectors": [
+        "PROMPTED_MARKDOWN_COMPLIANCE VS_CHAIN"
+      ]
+    },
+    {
+      "name": "min_prompted_markdown_compliance_volume",
+      "type": "int",
+      "default": 50,
+      "detectors": [
+        "PROMPTED_MARKDOWN_COMPLIANCE VS_CHAIN",
+        "PROMPTED_MARKDOWN_COMPLIANCE WOW"
+      ]
+    },
+    {
       "name": "min_sellthrough_chain_gap",
       "type": "float",
       "default": 0.05,
@@ -895,6 +1817,14 @@
       "default": 3,
       "detectors": [
         "MARKDOWN_SKU EXCESSIVE_OVERRIDE"
+      ]
+    },
+    {
+      "name": "min_stb_value_threshold",
+      "type": "float",
+      "default": 100.0,
+      "detectors": [
+        "STRAIGHT_TO_BIN VALUE_THRESHOLD"
       ]
     }
   ]

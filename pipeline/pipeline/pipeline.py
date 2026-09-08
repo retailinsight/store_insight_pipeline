@@ -611,6 +611,7 @@ def run_pipeline(
     markdown_log=None,
     markdown_sales=None,
     wastage=None,
+    straight_to_bin=None,
     item_hierarchy=None,
     store_hierarchy=None,
     config: DetectorConfig = None,
@@ -646,6 +647,8 @@ def run_pipeline(
                        required for MARKDOWN_SELLTHROUGH detectors/gatherers
     wastage          : optional cached Snowpark DataFrame — SOURCE_WMD_WASTAGE;
                        required for WASTE detectors/gatherers
+    straight_to_bin  : optional cached Snowpark DataFrame — SOURCE_STRAIGHT_TO_BIN;
+                       required for STRAIGHT_TO_BIN detectors/gatherers
     item_hierarchy   : optional cached Snowpark DataFrame — SOURCE_WMD_ITEM_HIERARCHY;
                        required for MARKDOWN_SKU detectors and WMD dept-breakdown gatherers
     store_hierarchy  : optional cached Snowpark DataFrame — SOURCE_WMD_STORE_HIERARCHY;
@@ -696,6 +699,7 @@ def run_pipeline(
         markdown_log=markdown_log,
         markdown_sales=markdown_sales,
         wastage=wastage,
+        straight_to_bin=straight_to_bin,
         item_hierarchy=item_hierarchy,
         store_hierarchy=store_hierarchy,
         config=det_cfg,
@@ -720,6 +724,7 @@ def run_pipeline(
         markdown_log=markdown_log,
         markdown_sales=markdown_sales,
         wastage=wastage,
+        straight_to_bin=straight_to_bin,
         item_hierarchy=item_hierarchy,
         config=det_cfg,
         cfg=cfg,
@@ -786,6 +791,7 @@ def run_pipeline_from_signals(
     markdown_log=None,
     markdown_sales=None,
     wastage=None,
+    straight_to_bin=None,
     item_hierarchy=None,
     config: DetectorConfig = None,
     cfg=None,
@@ -822,6 +828,8 @@ def run_pipeline_from_signals(
                        required for MARKDOWN_SELLTHROUGH gatherer
     wastage          : optional cached Snowpark DataFrame — SOURCE_WMD_WASTAGE;
                        required for WASTE gatherer
+    straight_to_bin  : optional cached Snowpark DataFrame — SOURCE_STRAIGHT_TO_BIN;
+                       required for STRAIGHT_TO_BIN gatherer
     item_hierarchy   : optional cached Snowpark DataFrame — SOURCE_WMD_ITEM_HIERARCHY;
                        required for WMD dept breakdown gatherers
     config               : optional DetectorConfig — threshold overrides
@@ -923,10 +931,13 @@ def run_pipeline_from_signals(
         section=det_cfg.section,
         projection_weeks=projection_weeks,
         drilldown_top_n=drilldown_top_n,
+        min_actionable_positive_rows=det_cfg.min_actionable_positive_rows,
+        max_actionable_unknown_row_pct=det_cfg.max_actionable_unknown_row_pct,
         feedback=feedback,
         markdown_log=markdown_log,
         markdown_sales=markdown_sales,
         wastage=wastage,
+        straight_to_bin=straight_to_bin,
         item_hierarchy=item_hierarchy,
         cfg=cfg,
     )

@@ -126,12 +126,12 @@ class TestDetectorNameValidation:
 
         detectors = DetectorConfig(
             enabled=[
-                "osa.wow",
-                "osa.vs_chain",
+                "osa_store_actionable.wow",
+                "osa_store_actionable.vs_chain",
                 "compliance.tick_and_flick",
             ]
         )
-        assert "osa.wow" in detectors.enabled
+        assert "osa_store_actionable.wow" in detectors.enabled
 
     def test_invalid_detector_name_raises_error(self):
         from store_insight.pipeline.config.models import DetectorConfig
@@ -139,7 +139,7 @@ class TestDetectorNameValidation:
         with pytest.raises(ValidationError):
             DetectorConfig(
                 enabled=[
-                    "osa.wow",
+                    "osa_store_actionable.wow",
                     "nonexistent.detector",  # Invalid: not in registry
                 ]
             )
@@ -196,10 +196,10 @@ class TestPipelineConfig:
                 "wmd_hierarchy": "{database}.{schema}.WMD_ITEM_HIERARCHY",
             },
             output={"alerts": "{database}.{schema}.ALERTS", "top_n_per_store": 10},
-            detectors={"enabled": ["osa.wow"]},
-            thresholds={"shared": {"section": "DEPT"}, "OSA": {"min_wow_drop": 0.01}},
-            gatherers={"OSA": ["osa_ppg_drilldown"]},
-            investigation={"OSA": {"engine": "rule_based"}},
+            detectors={"enabled": ["osa_store_actionable.wow"]},
+            thresholds={"shared": {"section": "DEPT"}, "OSA_STORE_ACTIONABLE": {"min_actionable_wow_drop": 0.01}},
+            gatherers={"OSA_STORE_ACTIONABLE": ["osa_store_actionable_ppg_drilldown"]},
+            investigation={"OSA_STORE_ACTIONABLE": {"engine": "rule_based"}},
             schedule={"cron": "0 6 * * *", "timezone": "Europe/London"},
             scoring={"score_weights": {"OSA": 1.0}},
             logging={"write_signals": False, "write_enriched": False, "write_run_log": False},

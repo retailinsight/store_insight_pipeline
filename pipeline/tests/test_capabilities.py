@@ -55,7 +55,7 @@ def test_required_contracts_ignores_non_data_kwargs():
 
 def test_required_contracts_handles_real_osa_wow_detector():
     """Sanity check against a real detector module shipped in the repo."""
-    from store_insight.pipeline.stages._1_detect.detectors.osa import wow
+    from store_insight.pipeline.stages._1_detect.detectors.osa_store_actionable import wow
 
     assert caps.required_contracts(wow.detect) == {'osa', 'hierarchy'}
 
@@ -138,7 +138,7 @@ def test_validate_missing_capability_for_disabled_detector_is_not_flagged():
         'client_name': 'eastofengland',
         'capabilities': [c for c in _eoe_capabilities() if c != 'feedback'],
         'detectors': {
-            'enabled': ['osa.wow', 'osa.vs_chain', 'osa.repeat'],
+            'enabled': ['osa_store_actionable.wow', 'osa_store_actionable.vs_chain'],
         },
         'gatherers': {},  # No gatherers to avoid validation errors
     }
@@ -158,7 +158,7 @@ def test_validate_disabled_signal_type_skips_its_gatherers():
         # Enable only OSA detectors + tick_and_flick.
         'detectors': {
             'enabled': [
-                'osa.wow', 'osa.vs_chain', 'osa.repeat',
+                'osa_store_actionable.wow', 'osa_store_actionable.vs_chain',
                 'compliance.tick_and_flick',
             ],
         },
@@ -217,7 +217,7 @@ def test_validate_unknown_client_with_default_detectors_flags_everything():
     # We don't pin the exact count (it grows when detectors are added) but
     # we want at least one error per signal-type bucket.
     issue_text = ' '.join(issues)
-    for needle in ('osa.wow', 'compliance.tick_and_flick'):
+    for needle in ('osa_store_actionable.wow', 'compliance.tick_and_flick'):
         assert needle in issue_text, (
             f'Expected {needle!r} to be flagged for client with no adapters; '
             f'issues were: {issues!r}'

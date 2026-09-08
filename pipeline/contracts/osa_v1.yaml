@@ -62,6 +62,15 @@ columns:
       £ value of LOST_SALES_VOLUME.  Drives all LSV-based scoring and the
       cost-projection narrative.  Must be > 0 only when LOST_SALES_VOLUME > 0.
 
+  INVENTORY_QTY:
+    type: NUMBER
+    required: true
+    description: |
+      Recorded perpetual inventory for the item/store/reporting-period
+      observation. OSA_STORE_ACTIONABLE uses positive values for in-store
+      actionability, non-positive values for upstream context, and NULL values
+      as unknown. Negative values are valid source observations.
+
   DEPARTMENT_ID:
     type: NUMBER
     required: false
@@ -78,6 +87,16 @@ columns:
       3 = evening).  Part of the grain — multiple reporting periods per
       item/store/day make (STORE_ID, ITEM_CODE, DATE) non-unique.
       Used by the `osa_item_time_patterns` fact gatherer.
+
+  INVENTORY_QTY:
+    type: NUMBER
+    required: false
+    description: |
+      End-of-day perpetual inventory quantity for the item/store/day.
+      Used by the `osa_lsv_composition` fact gatherer to split lost sales
+      into upstream (`INVENTORY_QTY <= 0`) and store process
+      (`INVENTORY_QTY > 0`). Optional; adapters without the source column
+      may omit it, in which case the gatherer returns no composition.
 
 # Canonical joins — how the pipeline enriches this contract with related ones.
 # Used by the validator and MCP discovery tools; cardinality is declarative only

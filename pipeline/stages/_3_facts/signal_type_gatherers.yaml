@@ -13,24 +13,37 @@
 # Displayed in the pipeline docs and QC notebooks to show what evidence
 # is collected per alert type.
 
-OSA:
-  - name: osa_ppg_drilldown
-    description: Top-N product profile groups by this-week lost sales value and WoW increase
-
-  - name: osa_dow
-    description: Lost sales broken down by day-of-week for the current week
-
-  - name: osa_chain_drift
-    description: Chain-wide week-on-week OSA drift per department (requires full-chain DataFrame)
-
-  - name: osa_repeat_history
-    description: Per-item week-by-week OSA and LSV history (runs only for REPEAT trigger signals)
-
+OSA_STORE_ACTIONABLE:
+  - name: osa_store_actionable_ppg_drilldown
+    description: Top latest-week PPGs with prior-week attributed LSV changes
+  - name: osa_store_actionable_item_lsv_changes
+    description: Top item offenders with prior-week changes and UPC/EAN arrays
+  - name: osa_store_actionable_dow
+    description: Seven chronological day rows with attributed LSV and source status
+  - name: osa_store_actionable_day_periods
+    description: Top day-period rows by store-controlled LSV
   - name: osa_item_time_patterns
-    description: Day-of-week / reporting-period lost-sales patterns and repeat-offender items
+    description: Complete 7x3 day-period grid, prior-week top items, and repeat timing patterns
+  - name: osa_store_actionable_chain_drift
+    description: Store-controlled chain OSA drift context
+  - name: osa_store_actionable_cost_projection
+    description: Attributed four-week cost-of-inaction projection
 
-  - name: osa_cost_projection
-    description: Cost-of-doing-nothing projection (this_week_lsv * projection_weeks, pure Python)
+OSA_BIG_DROP:
+  - name: osa_store_actionable_ppg_drilldown
+    description: Top latest-week PPGs with prior-week attributed LSV changes
+  - name: osa_store_actionable_item_lsv_changes
+    description: Top item offenders with prior-week changes and UPC/EAN arrays
+  - name: osa_store_actionable_dow
+    description: Seven chronological day rows with attributed LSV and source status
+  - name: osa_store_actionable_day_periods
+    description: Top day-period rows by store-controlled LSV
+  - name: osa_item_time_patterns
+    description: Complete 7x3 day-period grid, prior-week top items, and repeat timing patterns
+  - name: osa_store_actionable_chain_drift
+    description: Store-controlled chain OSA drift context
+  - name: osa_store_actionable_cost_projection
+    description: Attributed four-week cost-of-inaction projection
 
 OSA_RECURRING_SLOT:
   - name: osa_recurring_slot_facts
@@ -39,6 +52,18 @@ OSA_RECURRING_SLOT:
 COMPLIANCE:
   - name: tick_and_flick_breakdown
     description: Tick-and-flick alert-type breakdown for each flagged store (requires feedback DataFrame)
+
+MARKDOWN_COMPLIANCE:
+  - name: markdown_compliance_facts
+    description: Daily on-time completion breakdown, worst departments, and workload/coaching driver assessment (requires canonical synthetic DataFrame)
+
+EXPIRY_DATE_COMPLIANCE:
+  - name: expiry_date_compliance_facts
+    description: Chain movement, complete daily performance, worst departments, expiry markdown movement, and driver assessment from synthetic rows
+
+PROMPTED_MARKDOWN_COMPLIANCE:
+  - name: prompted_markdown_compliance_facts
+    description: Daily on-time actioned breakdown, worst departments, and workload/coaching driver assessment from synthetic rows
 
 MARKDOWN_OVERRIDE:
   - name: markdown_override_dept_breakdown
@@ -55,6 +80,10 @@ WASTE_TRIM:
 MARKDOWN_SELLTHROUGH:
   - name: markdown_sellthrough_dept_breakdown
     description: Top-N departments by lowest sell-through rate this week (requires markdown_sales, markdown_log, item_hierarchy DataFrames)
+
+STRAIGHT_TO_BIN:
+  - name: straight_to_bin_facts
+    description: Daily STB breakdown, worst departments, top items, chain average, markdown compliance by day, and items with no expiry date
 
 MARKDOWN_SKU:
   - name: markdown_sku_history

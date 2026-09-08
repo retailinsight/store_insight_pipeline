@@ -55,10 +55,13 @@ def enrich_signals(
     section='ITEM_HIERARCHY_2',
     projection_weeks=4,
     drilldown_top_n=3,
+    min_actionable_positive_rows=10,
+    max_actionable_unknown_row_pct=10.0,
     feedback=None,
     markdown_log=None,
     markdown_sales=None,
     wastage=None,
+    straight_to_bin=None,
     item_hierarchy=None,
     cfg: dict = None,
 ):
@@ -105,6 +108,7 @@ def enrich_signals(
         markdown_log=markdown_log,
         markdown_sales=markdown_sales,
         wastage=wastage,
+        straight_to_bin=straight_to_bin,
         item_hierarchy=item_hierarchy,
         last_week_start=last_week_start,
         last_week_end=last_week_end,
@@ -117,6 +121,8 @@ def enrich_signals(
         dept_col=section,
         top_n=drilldown_top_n,
         projection_weeks=projection_weeks,
+        min_actionable_positive_rows=min_actionable_positive_rows,
+        max_actionable_unknown_row_pct=max_actionable_unknown_row_pct,
     )
 
     # ── Build dispatch map (optionally filtered by config) ─────────────────

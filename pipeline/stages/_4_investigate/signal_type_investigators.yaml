@@ -18,10 +18,15 @@
 # To add a new signal type, add a block here and ensure both engine modules
 # handle it internally.
 
-OSA:
+OSA_STORE_ACTIONABLE:
   engine: rule_based
-  skill_file: skills/osa_investigation_skill.md
-  description: OSA availability alerts — WOW, VS_CHAIN, and REPEAT triggers
+  skill_file: ""
+  description: Store-actionable OSA alerts — WOW and VS_CHAIN triggers
+
+OSA_BIG_DROP:
+  engine: rule_based
+  skill_file: ""
+  description: Day-on-day store-controlled OSA drop alerts — BIG_DROP trigger
 
 OSA_RECURRING_SLOT:
   engine: rule_based
@@ -32,6 +37,21 @@ COMPLIANCE:
   engine: rule_based
   skill_file: skills/compliance_investigation_skill.md
   description: Tick-and-flick compliance alerts
+
+MARKDOWN_COMPLIANCE:
+  engine: rule_based
+  skill_file: skills/markdown_compliance_investigation_skill.md
+  description: Markdown on-time completion compliance alerts — WOW and VS_CHAIN triggers
+
+EXPIRY_DATE_COMPLIANCE:
+  engine: rule_based
+  skill_file: ""
+  description: Expiry-check completion alerts — TRAILING_7D and VS_CHAIN triggers
+
+PROMPTED_MARKDOWN_COMPLIANCE:
+  engine: rule_based
+  skill_file: ""
+  description: Prompted-markdown on-time response alerts — WOW and VS_CHAIN triggers
 
 MARKDOWN_OVERRIDE:
   engine: rule_based
@@ -57,4 +77,9 @@ MARKDOWN_SKU:
   engine: rule_based
   skill_file: skills/markdown_sku_investigation_skill.md
   description: SKU-level markdown alerts — REPEAT_REQUEST and EXCESSIVE_OVERRIDE triggers
+
+STRAIGHT_TO_BIN:
+  engine: rule_based
+  skill_file: ""
+  description: Straight-to-bin value threshold alerts — VALUE_THRESHOLD trigger
 

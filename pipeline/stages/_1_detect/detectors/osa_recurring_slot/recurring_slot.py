@@ -26,6 +26,7 @@ from collections import defaultdict
 
 from snowflake.snowpark import functions as F
 
+from store_insight.pipeline.pipeline._shared import sunday_first_dow
 from store_insight.pipeline.stages._1_detect.detector_info import DetectorInfo
 from store_insight.pipeline.stages._1_detect.signals import make_osa_recurring_slot_signal
 
@@ -100,7 +101,7 @@ def detect(
         .filter((F.col('DATE') >= lookback_start) & (F.col('DATE') <= lookback_end))
         .filter(F.col('LOST_SALES_VOLUME') > 0)
         .filter(F.col('REPORTING_PERIOD_ID').is_not_null())
-        .with_column('DOW', F.dayofweek(F.col('DATE')))
+        .with_column('DOW', sunday_first_dow(F.col('DATE')))
         .with_column('WEEK_NUMBER', F.weekofyear(F.col('DATE')))
         .with_column('YEAR_NUMBER', F.year(F.col('DATE')))
         .select(

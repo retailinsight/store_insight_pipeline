@@ -67,13 +67,31 @@ from store_insight.pipeline.stages._3_facts import registry as facts_reg  # noqa
 # (rather than inside signals.py) so the catalog reads naturally without us
 # having to introduce a metadata dataclass for signal types.
 SIGNAL_TYPE_META: dict[str, dict[str, str]] = {
-    'OSA': {
+    'OSA_STORE_ACTIONABLE': {
         'description': (
-            'On-shelf availability has dropped for a store-department '
-            '(week-on-week, vs chain, or via persistent repeat-offender items).'
+            'Store-actionable on-shelf availability has dropped for a '
+            'store-department (week-on-week or vs chain).'
         ),
         'merge_key': '(signal_type, store_id, department)',
-        'factory':   'make_osa_signal',
+        'factory':   'make_osa_store_actionable_signal',
+        'bucket':    'Availability',
+    },
+    'OSA_BIG_DROP': {
+        'description': (
+            'Store-controlled availability dropped sharply from one sales '
+            'day to the next for a store-department.'
+        ),
+        'merge_key': '(signal_type, store_id, department)',
+        'factory':   'make_osa_big_drop_signal',
+        'bucket':    'Availability',
+    },
+    'OSA_RECURRING_SLOT': {
+        'description': (
+            'Recurring OSA lost sales for a store-department in a specific '
+            'day-of-week + reporting-period slot.'
+        ),
+        'merge_key': '(signal_type, store_id, department)',
+        'factory':   'make_osa_recurring_slot_signal',
         'bucket':    'Availability',
     },
     'COMPLIANCE': {
@@ -83,6 +101,33 @@ SIGNAL_TYPE_META: dict[str, dict[str, str]] = {
         ),
         'merge_key': '(signal_type, store_id)',
         'factory':   'make_compliance_signal',
+        'bucket':    'Compliance',
+    },
+    'MARKDOWN_COMPLIANCE': {
+        'description': (
+            'Store markdown on-time completion compliance is dropping '
+            'week-on-week or sitting below the chain average.'
+        ),
+        'merge_key': '(signal_type, store_id, department)',
+        'factory':   'make_markdown_compliance_signal',
+        'bucket':    'Compliance',
+    },
+    'EXPIRY_DATE_COMPLIANCE': {
+        'description': (
+            'Store expiry-check completion is dropping over a trailing '
+            '7-day window or sitting below the chain average.'
+        ),
+        'merge_key': '(signal_type, store_id, department)',
+        'factory':   'make_expiry_date_compliance_signal',
+        'bucket':    'Compliance',
+    },
+    'PROMPTED_MARKDOWN_COMPLIANCE': {
+        'description': (
+            'Store prompted-markdown on-time response is dropping '
+            'week-on-week or sitting below the chain average.'
+        ),
+        'merge_key': '(signal_type, store_id, department)',
+        'factory':   'make_prompted_markdown_compliance_signal',
         'bucket':    'Compliance',
     },
     'MARKDOWN_OVERRIDE': {
@@ -103,6 +148,15 @@ SIGNAL_TYPE_META: dict[str, dict[str, str]] = {
         'factory':   'make_waste_signal',
         'bucket':    'Waste',
     },
+    'WASTE_TRIM': {
+        'description': (
+            'Store-item markdown dependency alert where markdown sales '
+            'exceed the configured ratio of total sales.'
+        ),
+        'merge_key': '(signal_type, store_id, item_id)',
+        'factory':   'make_waste_trim_signal',
+        'bucket':    'WASTE_TRIM',
+    },
     'MARKDOWN_SELLTHROUGH': {
         'description': (
             'Store markdown sell-through rate is dropping week-on-week or '
@@ -121,16 +175,32 @@ SIGNAL_TYPE_META: dict[str, dict[str, str]] = {
         'factory':   'make_markdown_sku_signal',
         'bucket':    'Markdown',
     },
+    'STRAIGHT_TO_BIN': {
+        'description': (
+            'Store-department straight-to-bin waste value has exceeded the '
+            'configured threshold.'
+        ),
+        'merge_key': '(signal_type, store_id, department)',
+        'factory':   'make_straight_to_bin_signal',
+        'bucket':    'Waste',
+    },
 }
 
 # Map from signal type to the TypedDict class defined in signals.py.
 _TYPED_DICT_FOR_SIGNAL: dict[str, type] = {
-    'OSA':                  signals_mod.OsaSignal,
-    'COMPLIANCE':           signals_mod.ComplianceSignal,
-    'MARKDOWN_OVERRIDE':    signals_mod.MarkdownOverrideSignal,
-    'WASTE':                signals_mod.WasteSignal,
-    'MARKDOWN_SELLTHROUGH': signals_mod.MarkdownSellthroughSignal,
-    'MARKDOWN_SKU':         signals_mod.MarkdownSkuSignal,
+    'OSA_STORE_ACTIONABLE':         signals_mod.OsaStoreActionableSignal,
+    'OSA_BIG_DROP':                 signals_mod.OsaBigDropSignal,
+    'OSA_RECURRING_SLOT':           signals_mod.OsaRecurringSlotSignal,
+    'COMPLIANCE':                   signals_mod.ComplianceSignal,
+    'MARKDOWN_COMPLIANCE':          signals_mod.MarkdownComplianceSignal,
+    'EXPIRY_DATE_COMPLIANCE':       signals_mod.ExpiryDateComplianceSignal,
+    'PROMPTED_MARKDOWN_COMPLIANCE': signals_mod.PromptedMarkdownComplianceSignal,
+    'MARKDOWN_OVERRIDE':            signals_mod.MarkdownOverrideSignal,
+    'WASTE':                        signals_mod.WasteSignal,
+    'WASTE_TRIM':                   signals_mod.WasteTrimSignal,
+    'MARKDOWN_SELLTHROUGH':         signals_mod.MarkdownSellthroughSignal,
+    'MARKDOWN_SKU':                 signals_mod.MarkdownSkuSignal,
+    'STRAIGHT_TO_BIN':              signals_mod.StraightToBinSignal,
 }
 
 
@@ -289,7 +359,7 @@ def build_catalog() -> dict:
         }
 
     return {
-        'generated_at':      _dt.datetime.now(_dt.UTC).isoformat(timespec='seconds'),
+        'generated_at':      _dt.datetime.now(_dt.timezone.utc).isoformat(timespec='seconds'),
         'pipeline_summary':  (
             'Weekly batch that detects retail availability and markdown anomalies, '
             'enriches each signal with supporting facts, generates plain-English '
