@@ -1,9 +1,19 @@
 # Store Insight UK Coop — Deployment Summary
 
-Generated: 2026-07-30. Last updated: 2026-08-24.  
+Generated: 2026-07-30. Last updated: 2026-09-09.
 Sources: `DEPLOYMENT_PLAN.md`, `CHANGES_LOG.md`, `MERGE_TRACKING.md`, and `Store_Insight_pipeline_review_with_diagram/store_insight_engineering_system_map_with_architecture.html`.
 
 ---
+
+## Update — 2026-09-09: additive OSCA KPI groups validated in DEV
+
+- Added OSCA and Store Controllable OSCA as two five-column KPI groups alongside the existing
+  Availability columns; no legacy columns were removed.
+- DEV schema migration and SP deployment completed. The DEV task remains suspended.
+- Manual DEV run wrote 121 rows / 121 stores; all ten new columns and both detailed category /
+  time-of-day JSON payloads are populated.
+- Production schema, SP and task were not changed. Production rollout requires PR approval and a
+  watched deployment because the KPI task is chained to the alerts task and has an 11:45 refresh.
 
 ## Update — 2026-08-24 (PM): cap + KPI task now LIVE in prod
 

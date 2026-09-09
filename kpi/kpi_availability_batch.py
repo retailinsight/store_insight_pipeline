@@ -32,8 +32,12 @@ from pathlib import Path
 from snowflake.snowpark import Session
 from snowflake.snowpark import functions as F
 from snowflake.snowpark.types import (
-    StructType, StructField,
-    StringType, IntegerType, FloatType, VariantType,
+    FloatType,
+    IntegerType,
+    StringType,
+    StructField,
+    StructType,
+    VariantType,
 )
 
 try:  # python-dotenv is not available inside Snowflake stored procedures
@@ -136,6 +140,12 @@ def _osa_pct(sales_col, lsv_col):
     return F.when(denom > 0, sales_col / denom).otherwise(F.lit(0))
 
 
+def _store_controlled_lsv():
+    return F.sum(
+        F.when(F.col("INVENTORY_QTY") > 0, F.col("LOST_SALES_VOLUME")).otherwise(F.lit(0))
+    )
+
+
 def _date_range(end_date: date, days: int):
     start = end_date - timedelta(days=days - 1)
     return str(start), str(end_date)
@@ -163,6 +173,7 @@ def _load_osa(session: Session, lookback_start: str, week_end: str):
             F.col("ACTUAL_SALES_VOLUME"),
             F.col("LOST_SALES_VOLUME"),
             F.col("LOST_SALES_VALUE"),
+            F.col("INVENTORY").alias("INVENTORY_QTY"),
             F.dayname(F.col("ANALYSIS_DATE")).alias("DAY_NAME"),
         )
     )
@@ -204,9 +215,14 @@ def _store_osa(osa, start: str, end: str):
         .agg(
             F.sum("ACTUAL_SALES_VOLUME").alias("SALES"),
             F.sum("LOST_SALES_VOLUME").alias("LSV"),
+            _store_controlled_lsv().alias("STORE_CONTROLLED_LSV"),
             F.sum("LOST_SALES_VALUE").alias("LOST_SALES_VALUE"),
         )
         .with_column("OSA", _osa_pct(F.col("SALES"), F.col("LSV")))
+        .with_column(
+            "STORE_CONTROLLABLE_OSCA",
+            _osa_pct(F.col("SALES"), F.col("STORE_CONTROLLED_LSV")),
+        )
     )
 
 
@@ -219,8 +235,13 @@ def _cluster_osa(osa, sites, start: str, end: str):
         .agg(
             F.sum("SALES").alias("CLUSTER_SALES"),
             F.sum("LSV").alias("CLUSTER_LSV"),
+            F.sum("STORE_CONTROLLED_LSV").alias("CLUSTER_STORE_CONTROLLED_LSV"),
         )
         .with_column("CLUSTER_OSA", _osa_pct(F.col("CLUSTER_SALES"), F.col("CLUSTER_LSV")))
+        .with_column(
+            "CLUSTER_STORE_CONTROLLABLE_OSCA",
+            _osa_pct(F.col("CLUSTER_SALES"), F.col("CLUSTER_STORE_CONTROLLED_LSV")),
+        )
     )
 
 
@@ -233,9 +254,14 @@ def _dept_osa(osa, start: str, end: str):
         .agg(
             F.sum("ACTUAL_SALES_VOLUME").alias("DEPT_SALES"),
             F.sum("LOST_SALES_VOLUME").alias("DEPT_LSV"),
+            _store_controlled_lsv().alias("DEPT_STORE_CONTROLLED_LSV"),
             F.sum("LOST_SALES_VALUE").alias("DEPT_LSV_VALUE"),
         )
         .with_column("DEPT_OSA", _osa_pct(F.col("DEPT_SALES"), F.col("DEPT_LSV")))
+        .with_column(
+            "DEPT_STORE_CONTROLLABLE_OSCA",
+            _osa_pct(F.col("DEPT_SALES"), F.col("DEPT_STORE_CONTROLLED_LSV")),
+        )
     )
 
 
@@ -248,8 +274,13 @@ def _tod_osa(osa, start: str, end: str):
         .agg(
             F.sum("ACTUAL_SALES_VOLUME").alias("TOD_SALES"),
             F.sum("LOST_SALES_VOLUME").alias("TOD_LSV"),
+            _store_controlled_lsv().alias("TOD_STORE_CONTROLLED_LSV"),
         )
         .with_column("TOD_OSA", _osa_pct(F.col("TOD_SALES"), F.col("TOD_LSV")))
+        .with_column(
+            "TOD_STORE_CONTROLLABLE_OSCA",
+            _osa_pct(F.col("TOD_SALES"), F.col("TOD_STORE_CONTROLLED_LSV")),
+        )
     )
 
 
@@ -391,12 +422,32 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
 
     # Join store scores
     store_joined = (
-        tw_store.select(F.col("STORE_ID"), F.col("OSA").alias("TW_OSA"))
-        .join(lw_store.select(F.col("STORE_ID"), F.col("OSA").alias("LW_OSA")), on=["STORE_ID"], how="left")
+        tw_store.select(
+            F.col("STORE_ID"),
+            F.col("OSA").alias("TW_OSA"),
+            F.col("STORE_CONTROLLABLE_OSCA").alias("TW_STORE_CONTROLLABLE_OSCA"),
+        )
+        .join(
+            lw_store.select(
+                F.col("STORE_ID"),
+                F.col("OSA").alias("LW_OSA"),
+                F.col("STORE_CONTROLLABLE_OSCA").alias("LW_STORE_CONTROLLABLE_OSCA"),
+            ),
+            on=["STORE_ID"],
+            how="left",
+        )
         .join(m_store.select( F.col("STORE_ID"), F.col("OSA").alias("M_OSA")),  on=["STORE_ID"], how="left")
         .join(y_store.select( F.col("STORE_ID"), F.col("OSA").alias("Y_OSA")),  on=["STORE_ID"], how="left")
         .join(sites,                                                              on=["STORE_ID"], how="left")
-        .join(tw_cluster.select(F.col("CLUSTER_ID"), F.col("CLUSTER_OSA")),      on=["CLUSTER_ID"], how="left")
+        .join(
+            tw_cluster.select(
+                F.col("CLUSTER_ID"),
+                F.col("CLUSTER_OSA"),
+                F.col("CLUSTER_STORE_CONTROLLABLE_OSCA"),
+            ),
+            on=["CLUSTER_ID"],
+            how="left",
+        )
         .join(fb_metrics.select(
             F.col("STORE_ID"),
             F.col("ACTIONABILITY"), F.col("ALERT_COMPLIANCE"), F.col("TICK_FLICK_RATE")
@@ -434,8 +485,12 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
         m_osa   = float(row["M_OSA"]       or 0)
         y_osa   = float(row["Y_OSA"]       or 0)
         cl_osa  = float(row["CLUSTER_OSA"] or 0)
+        tw_store_osca = float(row["TW_STORE_CONTROLLABLE_OSCA"] or 0)
+        lw_store_osca = float(row["LW_STORE_CONTROLLABLE_OSCA"] or 0)
+        cl_store_osca = float(row["CLUSTER_STORE_CONTROLLABLE_OSCA"] or 0)
 
-        wow_pp  = (tw_osa - lw_osa) * 100
+        wow_pp = (tw_osa - lw_osa) * 100
+        store_osca_wow_pp = (tw_store_osca - lw_store_osca) * 100
 
         actionability    = float(row["ACTIONABILITY"]    or 0) * 100
         alert_compliance = float(row["ALERT_COMPLIANCE"] or 0) * 100
@@ -446,12 +501,19 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
         dept_lw = {r["DEPARTMENT_NAME"]: r for r in dept_lw_by_store.get(sid, [])}
 
         category_perf = []
+        store_category_perf = []
         for dname, dr in sorted(dept_tw.items()):
             dept_osa_val = float(dr["DEPT_OSA"] or 0) * 100
+            dept_store_osca_val = float(dr["DEPT_STORE_CONTROLLABLE_OSCA"] or 0) * 100
             category_perf.append({
                 "category":    dname,
                 "performance": f"{dept_osa_val:.1f}%",
                 "warning":     dept_osa_val < OSA_TARGET * 100,
+            })
+            store_category_perf.append({
+                "category": dname,
+                "performance": f"{dept_store_osca_val:.1f}%",
+                "warning": dept_store_osca_val < OSA_TARGET * 100,
             })
 
         # Top drivers: departments with highest lost sales this week, with WoW trend.
@@ -492,24 +554,36 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
         tod_store = tod_by_store.get(sid, [])
         tod_by_day: dict = {}
         for tr in tod_store:
-            tod_by_day.setdefault(tr["DAY_NAME"], {})[int(tr["REPORTING_PERIOD_ID"])] = float(tr["TOD_OSA"] or 0)
+            tod_by_day.setdefault(tr["DAY_NAME"], {})[int(tr["REPORTING_PERIOD_ID"])] = {
+                "osca": float(tr["TOD_OSA"] or 0),
+                "store_controllable_osca": float(tr["TOD_STORE_CONTROLLABLE_OSCA"] or 0),
+            }
 
         time_of_day = []
+        store_time_of_day = []
         for day_name in DAY_ORDER:
             periods = tod_by_day.get(day_name)
             if not periods:
                 continue
             day_periods = []
+            store_day_periods = []
             for pid in [1, 2, 3]:
                 if pid in periods:
-                    pct = periods[pid] * 100
+                    pct = periods[pid]["osca"] * 100
+                    store_pct = periods[pid]["store_controllable_osca"] * 100
                     day_periods.append({
                         "time_period": PERIOD_LABELS[pid],
                         "performance": f"{pct:.1f}%",
                         "rag_status":  "green" if pct >= OSA_TARGET * 100 else "red",
                     })
+                    store_day_periods.append({
+                        "time_period": PERIOD_LABELS[pid],
+                        "performance": f"{store_pct:.1f}%",
+                        "rag_status": "green" if store_pct >= OSA_TARGET * 100 else "red",
+                    })
             if day_periods:
                 time_of_day.append({"day": day_name, "performance": day_periods})
+                store_time_of_day.append({"day": day_name, "performance": store_day_periods})
 
         # Time-of-day breakdown for the TIME_OF_DAY_BREAKDOWN column
         tod_breakdown = []
@@ -520,7 +594,7 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
             entry = {"day": DAY_FULL_NAMES[day_name]}
             for pid, key in TOD_PERIOD_KEYS.items():
                 if pid in periods:
-                    entry[key] = f"{periods[pid] * 100:.1f}%"
+                    entry[key] = f"{periods[pid]['osca'] * 100:.1f}%"
             tod_breakdown.append(entry)
 
         # Top underperforming depts for Cortex prompt
@@ -580,6 +654,31 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
             "category_performance": category_perf,
             "time_of_day_analysis": time_of_day,
         }
+        osca_details = {
+            "performance_breakdown": {
+                "current_week": f"{tw_osa * 100:.1f}%",
+                "last_week": f"{lw_osa * 100:.1f}%",
+                "cluster_average": f"{cl_osa * 100:.1f}%",
+            },
+            "summary": summary,
+            "top_drivers": top_drivers,
+            "category_performance": category_perf,
+            "time_of_day_analysis": time_of_day,
+        }
+        store_osca_details = {
+            "performance_breakdown": {
+                "current_week": f"{tw_store_osca * 100:.1f}%",
+                "last_week": f"{lw_store_osca * 100:.1f}%",
+                "cluster_average": f"{cl_store_osca * 100:.1f}%",
+            },
+            "summary": (
+                f"Store-controllable availability changed {store_osca_wow_pp:+.1f}pp "
+                f"this week vs last week ({tw_store_osca * 100:.1f}% current, "
+                f"{cl_store_osca * 100:.1f}% cluster average)."
+            ),
+            "category_performance": store_category_perf,
+            "time_of_day_analysis": store_time_of_day,
+        }
 
         output_rows.append((
             run_date_str,
@@ -612,6 +711,16 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
             None,  # PROMPTED_MARKDOWN_TREND_DIRECTION
             None,  # PROMPTED_MARKDOWN_DETAILS_JSON
             tod_breakdown or None,  # TIME_OF_DAY_BREAKDOWN
+            round(tw_osa * 100, 2),
+            round(wow_pp, 2),
+            round(cl_osa * 100, 2),
+            "up" if wow_pp >= 0 else "down",
+            json.dumps(osca_details),
+            round(tw_store_osca * 100, 2),
+            round(store_osca_wow_pp, 2),
+            round(cl_store_osca * 100, 2),
+            "up" if store_osca_wow_pp >= 0 else "down",
+            json.dumps(store_osca_details),
         ))
 
     print(f"Writing {len(output_rows)} rows to {OUTPUT_TABLE}...")
@@ -645,6 +754,16 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
         StructField("PROMPTED_MARKDOWN_TREND_DIRECTION", StringType()),
         StructField("PROMPTED_MARKDOWN_DETAILS_JSON",    StringType()),
         StructField("TIME_OF_DAY_BREAKDOWN",             VariantType()),
+        StructField("OSCA_PCT",                           FloatType()),
+        StructField("OSCA_WOW_CHANGE_PP",                 FloatType()),
+        StructField("OSCA_CLUSTER_PCT",                   FloatType()),
+        StructField("OSCA_TREND_DIRECTION",               StringType()),
+        StructField("OSCA_DETAILS_JSON",                  StringType()),
+        StructField("STORE_CONTROLLABLE_OSCA_PCT",        FloatType()),
+        StructField("STORE_CONTROLLABLE_OSCA_WOW_CHANGE_PP", FloatType()),
+        StructField("STORE_CONTROLLABLE_OSCA_CLUSTER_PCT", FloatType()),
+        StructField("STORE_CONTROLLABLE_OSCA_TREND_DIRECTION", StringType()),
+        StructField("STORE_CONTROLLABLE_OSCA_DETAILS_JSON", StringType()),
     ])
 
     df = session.create_dataframe(output_rows, schema=schema)

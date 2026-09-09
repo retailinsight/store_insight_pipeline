@@ -12,9 +12,14 @@ Last updated: 2026-09-09
       synchronised those changes into this repository.
 - [x] **Upstream pipeline PR #8 merged by Dan — alert queue stage 6.** Implements the
       per-store live cap, daily admission cap, seven-day expiry and per-family suppression.
-- [ ] **Synchronise upstream PR #8 into this repository.** Implementation and tests are on
-      `sync/pipeline-alert-queue`; 749 tests pass, 2 skipped. Open the downstream PR for
-      Dan's review.
+- [x] **PR #63 merged and deployed with `queue.enabled: false`.** The scheduled Snowflake
+      handler now uses the queue-aware writer; live output and task schedules remain unchanged.
+- [x] **Additive OSCA KPI groups DEV-validated.** Added the Waste-pattern five-column groups
+      for OSCA and Store Controllable OSCA alongside the legacy Availability columns. DEV has
+      38 columns and 121/121 current rows populated, including category/time-of-day details;
+      production remains unchanged pending review and coordinated migration.
+- [ ] **Merge/synchronise the OSA_BIG_DROP date-alignment fix**, verify the scheduled path,
+      then explicitly approve Stage 6 enablement.
 
 ## Next / in flight (2026-09-03)
 
