@@ -4,6 +4,7 @@ import zipfile
 from store_insight.pipeline.config.loader import load_config
 from store_insight.pipeline.deploy import deploy
 from store_insight.pipeline.deploy.handler import _prepare_runtime, run
+from store_insight.pipeline.pipeline import run_batch
 
 
 class FakeSession:
@@ -51,6 +52,30 @@ def test_daily_handler_runs_quality_gate_and_passes_plan():
     source = inspect.getsource(run)
     assert "run_quality_gate(session, cfg, analysis_date=analysis_date)" in source
     assert "gate_plan=gate_plan" in source
+
+
+def test_daily_handler_routes_writes_through_queue_wrapper():
+    source = inspect.getsource(run)
+    assert "write_alerts_with_queue(session, cards" in source
+    assert "write_alerts(session, cards" not in source
+    assert "for _, type_config in cfg.investigation" in source
+    assert 'getattr(cfg.investigation, signal_type)' not in source
+
+
+def test_queue_wrapper_uses_standard_writer_when_disabled(monkeypatch):
+    calls = []
+    cfg = type("Config", (), {"queue": type("Queue", (), {"enabled": False})()})()
+    monkeypatch.setattr(run_batch, "write_alerts", lambda *args, **kwargs: calls.append((args, kwargs)))
+
+    run_batch.write_alerts_with_queue("session", ["card"], "2026-09-09", cfg=cfg)
+
+    assert calls == [(("session", ["card"]), {
+        "run_date": "2026-09-09",
+        "overwrite": False,
+        "full_replace": False,
+        "target_table": None,
+        "cfg": cfg,
+    })]
 
 
 def test_eastofengland_config_defaults_all_engines_to_rule_based():
