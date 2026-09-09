@@ -10,8 +10,10 @@ from store_insight.pipeline.stages._2_score import registry
 from store_insight.pipeline.stages._2_score.config import ScorerInfo
 
 EXPECTED_SCORERS = {
-    'osa', 'osa_recurring_slot', 'waste', 'waste_trim', 'markdown_sellthrough',
-    'markdown_override', 'markdown_sku', 'compliance',
+    'osa_store_actionable', 'osa_big_drop', 'osa_recurring_slot', 'waste', 'waste_trim',
+    'markdown_sellthrough', 'markdown_compliance', 'expiry_date_compliance',
+    'prompted_markdown_compliance', 'markdown_override', 'markdown_sku',
+    'compliance', 'straight_to_bin',
 }
 
 
@@ -38,8 +40,10 @@ def test_every_scorer_has_metadata():
 
 def test_signal_type_scorers_covers_all_types():
     assert set(registry.SIGNAL_TYPE_SCORERS.keys()) == {
-        'OSA', 'OSA_RECURRING_SLOT', 'WASTE', 'WASTE_TRIM',
-        'MARKDOWN_SELLTHROUGH', 'MARKDOWN_OVERRIDE', 'MARKDOWN_SKU', 'COMPLIANCE',
+        'OSA_STORE_ACTIONABLE', 'OSA_BIG_DROP', 'OSA_RECURRING_SLOT', 'WASTE', 'WASTE_TRIM',
+        'MARKDOWN_SELLTHROUGH', 'MARKDOWN_COMPLIANCE', 'EXPIRY_DATE_COMPLIANCE',
+        'PROMPTED_MARKDOWN_COMPLIANCE', 'MARKDOWN_OVERRIDE', 'MARKDOWN_SKU', 'COMPLIANCE',
+        'STRAIGHT_TO_BIN',
     }
 
 
@@ -52,7 +56,7 @@ def test_db_scorers_have_gather():
 
 
 def test_signal_only_scorers_have_no_gather():
-    for stype in ('OSA', 'WASTE', 'MARKDOWN_SELLTHROUGH'):
+    for stype in ('OSA_STORE_ACTIONABLE', 'OSA_BIG_DROP', 'WASTE', 'MARKDOWN_SELLTHROUGH', 'MARKDOWN_COMPLIANCE', 'PROMPTED_MARKDOWN_COMPLIANCE', 'STRAIGHT_TO_BIN'):
         mod = registry.SIGNAL_TYPE_SCORERS[stype]
         assert not callable(getattr(mod, 'gather', None)), (
             f'{stype} scorer has a gather() but should read from the signal dict only'

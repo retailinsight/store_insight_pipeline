@@ -30,26 +30,32 @@ Public API
     -> dict keyed by (store_id, department)
 """
 
+import datetime
 from collections import defaultdict
 
 from snowflake.snowpark import functions as F
 
-from store_insight.pipeline.pipeline._shared import build_store_dept_filter
+from store_insight.pipeline.pipeline._shared import build_store_dept_filter, sunday_first_dow
 from store_insight.pipeline.stages._3_facts.config import GathererInfo
 
 METADATA = GathererInfo(
     name         = 'osa_item_time_patterns',
-    signal_types = ['OSA'],
+    signal_types = ['OSA_STORE_ACTIONABLE'],
     facts_keys   = [
         'day_period_pattern',
         'worst_day_period',
         'repeat_item_time_patterns',
+        'day_period_grid',
+        'grid_scope',
+        'grid_start_date',
+        'grid_end_date',
+        'top_lsv_items_last_week_top5',
     ],
-    description  = 'Day-of-week / reporting-period lost-sales patterns and repeat-offender items.',
+    description  = 'Day-of-week / reporting-period patterns, repeat offenders, complete heat-map grid, and top prior-week items.',
 )
 
 
-# Snowflake DAYOFWEEK via Snowpark returns 1=Sunday … 7=Saturday (same as
+# Snowflake DAYOFWEEK is normalised to 1=Sunday … 7=Saturday (same as
 # osa_dow.py). Keep the two mappings aligned.
 _DOW_NAMES = {
     1: 'Sunday',    2: 'Monday',   3: 'Tuesday',
@@ -59,7 +65,7 @@ _DOW_NAMES = {
 # Customer-specific mapping for the reporting period ids exposed on
 # ANALYSIS.FINAL.LSM_ITEM_STORE_DAY_REPORTING_PERIOD.
 _PERIOD_LABELS = {
-    1: 'Morning (6am-12pm)',
+    1: 'Morning (Open-12pm)',
     2: 'Afternoon (12pm-6pm)',
     3: 'Evening (6pm-Close)',
 }
@@ -100,8 +106,8 @@ def _dept_day_period_pattern(osa, filt, this_week_start, this_week_end, dept_col
         .filter((F.col('DATE') >= this_week_start) & (F.col('DATE') <= this_week_end))
         .filter(filt)
         .filter(F.col('REPORTING_PERIOD_ID').is_not_null())
-        .with_column('DOW', F.dayofweek(F.col('DATE')))
-        .group_by('STORE_ID', dept_col, 'DOW', 'REPORTING_PERIOD_ID')
+        .with_column('DOW', sunday_first_dow(F.col('DATE')))
+        .group_by('STORE_ID', dept_col, 'DATE', 'DOW', 'REPORTING_PERIOD_ID')
         .agg(
             F.sum('ACTUAL_SALES_VOLUME').alias('SALES'),
             F.sum('LOST_SALES_VOLUME').alias('LSV_VOL'),
@@ -116,6 +122,7 @@ def _dept_day_period_pattern(osa, filt, this_week_start, this_week_end, dept_col
         dow = int(r['DOW'])
         rp  = int(r['REPORTING_PERIOD_ID'])
         grouped[key].append({
+            'date':       _to_date_str(r['DATE']),
             'day':        _day_name(dow),
             'dow_num':    dow,
             'period_id':  rp,
@@ -126,7 +133,63 @@ def _dept_day_period_pattern(osa, filt, this_week_start, this_week_end, dept_col
         })
 
     return {
-        key: sorted(items, key=lambda x: x['lsv'], reverse=True)[:top_n]
+        key: sorted(items, key=lambda x: x['lsv'], reverse=True)
+        for key, items in grouped.items()
+    }
+
+
+def _complete_day_period_grid(rows, start_date, end_date):
+    observed = {(row['date'], row['period_id']): row for row in rows}
+    current = datetime.date.fromisoformat(start_date)
+    end = datetime.date.fromisoformat(end_date)
+    grid = []
+    while current <= end:
+        date = current.isoformat()
+        dow = ((current.weekday() + 1) % 7) + 1
+        for period in range(1, 4):
+            grid.append(observed.get((date, period), {
+                'date': date,
+                'day': _day_name(dow),
+                'dow_num': dow,
+                'period_id': period,
+                'period_label': _period_label(period),
+                'sales': 0.0,
+                'lsv': 0.0,
+                'osa_pct': 100.0,
+            }))
+        current += datetime.timedelta(days=1)
+    return grid
+
+
+def _top_lsv_items_last_week(osa, filt, last_week_start, last_week_end, dept_col, top_n):
+    rows = (
+        osa
+        .filter((F.col('DATE') >= last_week_start) & (F.col('DATE') <= last_week_end))
+        .filter(filt)
+        .group_by(
+            'STORE_ID', dept_col, 'ITEM_CODE', 'ITEM_DESCRIPTION',
+            'ITEM_HIERARCHY_3',
+        )
+        .agg(
+            F.sum('ACTUAL_SALES_VOLUME').alias('ITEM_SALES'),
+            F.sum('LOST_SALES_VOLUME').alias('ITEM_LSV_VOL'),
+            F.sum('LOST_SALES_VALUE').alias('ITEM_LSV'),
+        )
+        .with_column('ITEM_OSA', _osa_score_col(F.col('ITEM_SALES'), F.col('ITEM_LSV_VOL')))
+        .collect()
+    )
+    grouped = defaultdict(list)
+    for row in rows:
+        grouped[(int(row['STORE_ID']), row[dept_col])].append({
+            'item_code': str(row['ITEM_CODE']),
+            'item_description': row['ITEM_DESCRIPTION'] or '',
+            'ppg': row['ITEM_HIERARCHY_3'] or '',
+            'subclass': row[dept_col] or '',
+            'lsv_last_week': round(float(row['ITEM_LSV'] or 0), 2),
+            'osa_last_week': round(float(row['ITEM_OSA'] or 0) * 100, 2),
+        })
+    return {
+        key: sorted(items, key=lambda item: (-item['lsv_last_week'], item['item_code']))[:top_n]
         for key, items in grouped.items()
     }
 
@@ -150,7 +213,7 @@ def _item_repeat_patterns(
         .filter(filt)
         .filter(F.col('LOST_SALES_VOLUME') > 0)
         .filter(F.col('REPORTING_PERIOD_ID').is_not_null())
-        .with_column('DOW',         F.dayofweek(F.col('DATE')))
+        .with_column('DOW', sunday_first_dow(F.col('DATE')))
         .with_column('WEEK_NUMBER', F.weekofyear(F.col('DATE')))
         .with_column('YEAR_NUMBER', F.year(F.col('DATE')))
         .select(
@@ -294,13 +357,22 @@ def gather(
         dept_col,
         min_recent_days, min_repeat_weeks, top_n,
     )
+    top_items = _top_lsv_items_last_week(
+        osa, filt, last_week_start, last_week_end, dept_col, 5,
+    )
 
     # Merge the two result dicts (keys may only exist in one side).
     result = {}
-    for key in set(day_period) | set(repeat):
+    for key in set(day_period) | set(repeat) | set(top_items):
+        all_periods = day_period.get(key, [])
         result[key] = {
-            'day_period_pattern':        day_period.get(key, []),
+            'day_period_pattern': all_periods[:top_n],
             'repeat_item_time_patterns': repeat.get(key, []),
+            'day_period_grid': _complete_day_period_grid(all_periods, this_week_start, this_week_end),
+            'grid_scope': 'THIS_WEEK',
+            'grid_start_date': this_week_start,
+            'grid_end_date': this_week_end,
+            'top_lsv_items_last_week_top5': top_items.get(key, []),
         }
     return result
 
@@ -312,13 +384,27 @@ def extract_facts(signal, raw_result, top_n=5):
     data = raw_result.get(key, {
         'day_period_pattern': [],
         'repeat_item_time_patterns': [],
+        'day_period_grid': [],
+        'grid_scope': 'THIS_WEEK',
+        'grid_start_date': None,
+        'grid_end_date': None,
+        'top_lsv_items_last_week_top5': [],
     })
 
     pattern = data.get('day_period_pattern', [])
     repeat  = data.get('repeat_item_time_patterns', [])
 
-    return {
-        'day_period_pattern':        pattern[:top_n],
-        'worst_day_period':          pattern[0] if pattern else None,
+    facts = {
         'repeat_item_time_patterns': repeat[:top_n],
+        'top_lsv_items_last_week_top5': data.get('top_lsv_items_last_week_top5', []),
     }
+    if signal.get('signal_type') != 'OSA_STORE_ACTIONABLE':
+        facts.update({
+            'day_period_pattern': pattern[:top_n],
+            'worst_day_period': pattern[0] if pattern else None,
+            'day_period_grid': data.get('day_period_grid', []),
+            'grid_scope': data.get('grid_scope', 'THIS_WEEK'),
+            'grid_start_date': data.get('grid_start_date'),
+            'grid_end_date': data.get('grid_end_date'),
+        })
+    return facts

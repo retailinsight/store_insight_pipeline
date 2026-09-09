@@ -185,7 +185,8 @@ def test_composite_score_missing_weight_key_treats_as_zero():
 
 def test_score_all_without_scoring_cfg_uses_raw_projected_cost():
     from store_insight.pipeline.stages._2_score.score import score_all
-    signals = [{'signal_type': 'OSA', 'trigger_types': ['WOW'], 'this_week_lsv': 300.0}]
+    signals = [{'signal_type': 'OSA_STORE_ACTIONABLE', 'trigger_types': ['WOW'],
+                'this_week_lsv': {'store_controlled': 300.0}}]
     score_all(signals, this_week_start='2025-01-06', this_week_end='2025-01-12')
     assert signals[0]['score'] == 300.0
 
@@ -194,9 +195,9 @@ def test_score_all_uses_composite_score_when_cfg_has_composite_weights():
     from store_insight.pipeline.stages._2_score.score import score_all
 
     signals = [{
-        'signal_type':   'OSA',
+        'signal_type':   'OSA_STORE_ACTIONABLE',
         'trigger_types': ['WOW', 'VS_CHAIN'],
-        'this_week_lsv': 500.0,
+        'this_week_lsv': {'store_controlled': 500.0},
         'chain_gap_pp':  -0.10,
         'wow_drift_pp':  -0.10,
     }]
@@ -211,9 +212,9 @@ def test_score_all_uses_composite_score_when_cfg_has_composite_weights():
             'historical_recency':      0.0,
             'special_cases':           0.0,
         },
-        'cost_ceilings':      {'OSA': 1000.0},
-        'benchmark_ceilings': {'OSA': 0.10},
-        'wow_ceilings':       {'OSA': 0.10},
+        'cost_ceilings':      {'OSA_STORE_ACTIONABLE': 1000.0},
+        'benchmark_ceilings': {'OSA_STORE_ACTIONABLE': 0.10},
+        'wow_ceilings':       {'OSA_STORE_ACTIONABLE': 0.10},
     }
 
     score_all(signals, this_week_start='2025-01-06', this_week_end='2025-01-12',

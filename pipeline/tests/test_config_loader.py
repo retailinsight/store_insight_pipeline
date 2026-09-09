@@ -116,7 +116,7 @@ class TestLoadConfigBaseOnly:
             wmd: 28
         detectors:
           enabled:
-            - osa.wow
+            - osa_store_actionable.wow
         gatherers:
           OSA: []
           COMPLIANCE: []
@@ -238,8 +238,8 @@ class TestLoadConfigWithClient:
             wmd: 28
         detectors:
           enabled:
-            - osa.wow
-            - osa.vs_chain
+            - osa_store_actionable.wow
+            - osa_store_actionable.vs_chain
         gatherers:
           OSA: []
           COMPLIANCE: []
@@ -318,7 +318,7 @@ class TestLoadConfigWithClient:
 
     def test_list_in_base_survives_when_not_overridden(self, patched_loader):
         cfg = patched_loader.load_config("testclient")
-        assert cfg.detectors.enabled == ["osa.wow", "osa.vs_chain"]
+        assert cfg.detectors.enabled == ["osa_store_actionable.wow", "osa_store_actionable.vs_chain"]
 
 
 # ---------------------------------------------------------------------------

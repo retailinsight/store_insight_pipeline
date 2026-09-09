@@ -53,6 +53,7 @@ from pathlib import Path
 # accepts ``osa`` transitively requires both contracts).
 PARAM_TO_CONTRACTS: dict[str, list[str]] = {
     'osa':             ['osa', 'hierarchy'],
+    'osa_full':        ['osa', 'hierarchy'],
     'feedback':        ['feedback'],
     'markdown_log':    ['markdown_log'],
     'markdown_sales':  ['markdown_sales'],

@@ -1,0 +1,28 @@
+# Meijer — client overrides
+# ==========================
+# Only settings that differ from base/default.yaml need to be listed here.
+# Everything else is inherited automatically.
+#
+# Onboarded on a separate Snowflake account (UUTQCJV-MEJR). Secrets
+# (account, user, password/key) live in this client's gitignored .env,
+# not here — see store_insight/pipeline/config/clients/meijer/.env
+# (not yet created; add before running deploy.py or config validation
+# against the real account).
+#
+# Detectors limited to OSA + recurring slot per client request — no
+# compliance/markdown/waste adapters were built.
+
+client_name: meijer
+
+connection:
+  database:  STORE_INSIGHT_DB
+  schema:    PUBLIC
+  role:      STORE_INSIGHT_ROLE
+  warehouse: STORE_INSIGHT_WH
+
+detectors:
+  enabled:
+    - osa.wow
+    - osa.vs_chain
+    - osa.repeat
+    - osa_recurring_slot.recurring_slot

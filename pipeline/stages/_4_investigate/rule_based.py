@@ -76,6 +76,25 @@ def _fmt_dow_line(dow_pattern):
     return [f"Worst day for lost sales this week: {worst['day']} (\u00a3{worst['lsv']:,.2f})"]
 
 
+def _fmt_lsv_composition_lines(composition):
+    """Return a one-line composition sentence for the OSA explanation."""
+    if not composition:
+        return []
+    buckets = composition.get("buckets", {})
+    active = []
+    for key, label in (("store_process", "store process"), ("upstream", "upstream")):
+        bucket = buckets.get(key)
+        if bucket and bucket.get("lsv", 0) > 0:
+            active.append((bucket["pct"], label, bucket["lsv"]))
+    if not active:
+        return []
+    active.sort(reverse=True)
+    parts = [f"{label} ({pct:.0f}%, \u00a3{lsv:,.2f})" for pct, label, lsv in active]
+    if len(parts) == 1:
+        return [f"The lost sales are driven entirely by {parts[0]}."]
+    return [f"The lost sales are driven by {', '.join(parts)}."]
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -93,6 +112,13 @@ def _generate_tick_and_flick(signal: dict) -> dict:
     rate_change = signal.get("tf_rate_change", 0.0)
     chain_rate = signal.get("chain_tf_rate", 0.0)
     above_chain = signal.get("above_chain_by", 0.0)
+    projected_cost = signal.get("projected_cost", 0.0) or 0.0
+    workload = signal.get("workload", {}) or {}
+    volume_classification = workload.get("volume_classification", "STABLE")
+    volume_change_pct = workload.get("volume_change_pct", 0.0)
+    facts = signal.get("facts", {})
+    driver = facts.get("driver_assessment", {}) or {}
+    likely_driver = driver.get("likely_driver", "COACHING")
 
     issue = f"{site_name}: tick-and-flick compliance declining"
 
@@ -101,19 +127,24 @@ def _generate_tick_and_flick(signal: dict) -> dict:
         f"Tick-and-flick rate rose {rate_change:+.1f}pp week-on-week "
         f"(last week: {last_rate:.1f}%, {last_tf} of {last_worked} alerts).",
         f"Store tick-and-flick rate is {above_chain:.1f}pp above the chain average of {chain_rate:.1f}%.",
+        f"Alert volume is {volume_classification.lower()} ({volume_change_pct:+.1f}% week-on-week).",
     ]
 
-    cost_if_not_fixed = (
-        "Unresolved alerts mean availability issues go unaddressed, "
-        "increasing risk of lost sales across affected departments."
-    )
+    cost_if_not_fixed = f"\u00a3{projected_cost:,.2f} per week if not fixed."
 
-    recommended_action = (
-        f"Review alert working practice with colleagues at {site_name}. "
-        f"Ensure alerts are being genuinely investigated before being closed \u2014 "
-        f"spot-check the alert types above. "
-        f"Consider a coaching session with the store manager on accurate alert feedback."
-    )
+    if likely_driver == "WORKLOAD":
+        recommended_action = (
+            f"Alert volume is up {volume_change_pct:.0f}% and alerts are being ticked without being worked. "
+            f"Area manager to review staffing and alert workload with the store manager at {site_name} "
+            f"this week before treating this as a compliance issue. "
+            f"Review in 7 days against a tick-and-flick rate of {last_rate:.2f}%."
+        )
+    else:
+        recommended_action = (
+            f"Alert volume is broadly unchanged, so the rise in tick and flick is not explained by workload. "
+            f"Area manager to discuss alert working with the store manager at {site_name} this week. "
+            f"Review in 7 days against a tick-and-flick rate of {last_rate:.2f}%."
+        )
 
     return {
         "issue": issue,
@@ -533,6 +564,368 @@ def _generate_waste_trim(signal: dict) -> dict:
     }
 
 
+def _generate_osa_store_actionable(signal: dict) -> dict:
+    dept = signal['department']
+    triggers = signal.get('trigger_types', [])
+    facts = signal.get('facts') or {}
+    lsv = signal.get('this_week_lsv') or {}
+    store_lsv = float(lsv.get('store_controlled') or 0)
+    upstream_lsv = float(lsv.get('upstream') or 0)
+    wow = abs(float(signal.get('wow_drift_pp') or 0))
+    gap = abs(float(signal.get('chain_gap_pp') or 0))
+
+    if 'WOW' in triggers and ('VS_CHAIN' not in triggers or wow >= gap):
+        issue = f'{dept}: store-controlled OSA dropped {wow:.1f}pp week-on-week.'
+    else:
+        issue = f'{dept}: store-controlled OSA is {gap:.1f}pp below the chain benchmark.'
+
+    explanation = [
+        f'The department had £{store_lsv:,.2f} of lost sales while recorded inventory was positive.'
+    ]
+    if 'WOW' in triggers:
+        explanation.append(
+            f"Store-controlled OSA moved from {signal.get('last_week_osa', 0):.1f}% "
+            f"to {signal.get('this_week_osa', 0):.1f}% ({wow:.1f}pp lower)."
+        )
+    if 'VS_CHAIN' in triggers:
+        explanation.append(
+            f"Store-controlled OSA was {signal.get('this_week_osa', 0):.1f}% versus "
+            f"{signal.get('chain_this_week_osa', 0):.1f}% for the chain ({gap:.1f}pp gap)."
+        )
+    if upstream_lsv:
+        explanation.append(
+            f'An additional £{upstream_lsv:,.2f} of lost sales occurred with non-positive inventory; '
+            'this is upstream context and is excluded from the store-owned cost of inaction.'
+        )
+
+    ppgs = facts.get('ppg_lsv_changes') or facts.get('ppg_contributors') or []
+    if ppgs:
+        ppg = ppgs[0]
+        name = ppg.get('ppg') or ppg.get('ppg_name') or ppg.get('name')
+        value = (ppg.get('latest_week_lsv') or {}).get('store_controlled', 0)
+        explanation.append(f'The leading PPG was {name} (£{value:,.2f} store-controlled LSV).')
+
+    items = facts.get('item_lsv_changes') or []
+    if items:
+        item = items[0]
+        change = (item.get('lsv_change') or {}).get('store_controlled', 0)
+        explanation.append(
+            f"The largest item offender was {item.get('item_name') or item.get('item_code')} "
+            f"with a £{change:+,.2f} change from the preceding week."
+        )
+
+    projection = facts.get('cost_projection') or {}
+    weeks = int(projection.get('projection_weeks') or facts.get('projection_weeks') or 4)
+    cost = float(projection.get('store_controlled_cost_of_inaction') or store_lsv * weeks)
+    cost_if_not_fixed = (
+        f'If this continues at the same rate, store-controlled lost sales could cost '
+        f'approximately £{cost:,.2f} over the next {weeks} weeks.'
+    )
+
+    action = [f'Prioritise shelf availability in {dept}.']
+    if items:
+        labels = []
+        for item in items[:2]:
+            identifiers = item.get('eans') or item.get('upcs') or []
+            suffix = f" ({identifiers[0]})" if identifiers else f" ({item.get('item_code')})"
+            labels.append(f"{item.get('item_name') or item.get('item_code')}{suffix}")
+        action.append(f"Check backstock, gaps, and replenishment for {', '.join(labels)}.")
+    worst_slot = facts.get('worst_day_period')
+    worst_day = facts.get('worst_day')
+    if worst_slot:
+        action.append(f"Complete checks before {worst_slot.get('day')} {worst_slot.get('period_label')}.")
+    elif worst_day:
+        action.append(f"Complete checks before the {worst_day.get('day')} trading peak.")
+
+    return {
+        'issue': issue,
+        'explanation': '\n'.join(explanation),
+        'cost_if_not_fixed': cost_if_not_fixed,
+        'recommended_action': ' '.join(action),
+    }
+
+
+def _generate_markdown_compliance(signal: dict) -> dict:
+    """Generate narrative for a MARKDOWN_COMPLIANCE alert."""
+    site_name = signal.get("site_name") or f"Store {signal['store_id']}"
+    triggers = signal.get("trigger_types", [])
+    this_due = signal.get("this_week_markdowns_due", 0)
+    this_completed = signal.get("this_week_completed_on_time", 0)
+    this_rate = signal.get("this_week_compliance_rate", 0.0)
+    last_rate = signal.get("last_week_compliance_rate")
+    wow_change = signal.get("wow_change_pp")
+    chain_rate = signal.get("chain_compliance_rate")
+    below_chain = signal.get("below_chain_pp")
+    projected_cost = signal.get("projected_cost") or 0.0
+
+    facts = signal.get("facts", {})
+    driver = facts.get("driver_assessment") or {}
+    volume_classification = driver.get("volume_classification", "STABLE")
+    volume_change_pct = driver.get("volume_change_pct")
+
+    worst_depts = [
+        row
+        for row in facts.get("worst_departments_top3", [])
+        if str(row.get("dept") or "").strip()
+    ]
+
+    parts = [site_name, "markdown on-time completion"]
+    if "WOW" in triggers and wow_change is not None and wow_change < 0:
+        parts.append(f"down {abs(wow_change):.1f}pp to {this_rate:.1f}%")
+    if "VS_CHAIN" in triggers and below_chain is not None:
+        parts.append(f"{below_chain:.1f}pp below chain average")
+    issue = ": ".join([" ".join(parts[:-1]), parts[-1]]) if len(parts) > 2 else " ".join(parts)
+
+    explanation_lines = [
+        f"{this_completed} of {this_due} markdowns were completed on time this week ({this_rate:.1f}%).",
+    ]
+    if "WOW" in triggers and last_rate is not None and wow_change is not None:
+        explanation_lines.append(
+            f"Last week the on-time rate was {last_rate:.1f}% — down {abs(wow_change):.1f}pp."
+        )
+    if "VS_CHAIN" in triggers and chain_rate is not None:
+        explanation_lines.append(
+            f"Chain average is {chain_rate:.1f}% — this store is {below_chain:.1f}pp below."
+        )
+    if worst_depts:
+        dept_list = ", ".join(
+            f"{row['dept']} ({row['compliance_pct']:.1f}%)" for row in worst_depts[:3]
+        )
+        explanation_lines.append(f"Worst departments: {dept_list}.")
+    if projected_cost:
+        explanation_lines.append(
+            f"At £{projected_cost:,.2f} per week, the four-week exposure is approximately "
+            f"£{projected_cost * 4:,.2f} if not fixed."
+        )
+
+    dept_names = [row["dept"] for row in worst_depts[:3]]
+    focus = ", ".join(dept_names) if dept_names else "the worst-performing departments"
+    target = f"{last_rate:.1f}%" if last_rate is not None else "the prior week's rate"
+
+    if volume_classification == "INCREASING" and volume_change_pct is not None:
+        action = (
+            f"Markdowns due are up {volume_change_pct:.0f}% while on-time completion has fallen "
+            f"{abs(wow_change or 0):.0f}pp. Store manager to review staffing against markdown "
+            f"workload this week, escalating to the area manager if hours cannot cover it. "
+            f"Focus on {focus}. Review in 7 days against a target of {target}."
+        )
+    elif volume_classification == "DECREASING" and volume_change_pct is not None:
+        action = (
+            f"Markdown volume is down {abs(volume_change_pct):.0f}%, so the drop is not explained "
+            f"by workload. Store manager to review the markdown routine with the team within 48 "
+            f"hours, focusing on {focus}. Review in 7 days against a target of {target}."
+        )
+    else:
+        action = (
+            f"Markdown volume is broadly unchanged, so the drop is not explained by workload. "
+            f"Store manager to review the markdown routine with the team within 48 hours, "
+            f"focusing on {focus}. Review in 7 days against a target of {target}."
+        )
+
+    cost_if_not_fixed = f"£{projected_cost:,.2f} per week if not fixed."
+
+    return {
+        "issue": issue,
+        "explanation": "\n".join(explanation_lines),
+        "cost_if_not_fixed": cost_if_not_fixed,
+        "recommended_action": action,
+    }
+
+
+def _generate_prompted_markdown_compliance(signal: dict) -> dict:
+    """Generate narrative for a PROMPTED_MARKDOWN_COMPLIANCE alert."""
+    site_name = signal.get("site_name") or f"Store {signal['store_id']}"
+    triggers = signal.get("trigger_types", [])
+    this_due = signal.get("this_week_prompts_issued", 0)
+    this_completed = signal.get("this_week_prompts_actioned_on_time", 0)
+    this_rate = signal.get("this_week_compliance_rate", 0.0)
+    last_rate = signal.get("last_week_compliance_rate")
+    wow_change = signal.get("wow_change_pp")
+    chain_rate = signal.get("chain_compliance_rate")
+    below_chain = signal.get("below_chain_pp")
+    projected_cost = signal.get("projected_cost") or 0.0
+
+    facts = signal.get("facts", {})
+    driver = facts.get("driver_assessment") or {}
+    volume_classification = driver.get("volume_classification", "STABLE")
+    volume_change_pct = driver.get("volume_change_pct")
+
+    worst_depts = [
+        row
+        for row in facts.get("worst_departments_top3", [])
+        if str(row.get("dept") or "").strip()
+    ]
+
+    parts = [site_name, "prompted-markdown response"]
+    if "WOW" in triggers and wow_change is not None and wow_change < 0:
+        parts.append(f"down {abs(wow_change):.1f}pp to {this_rate:.1f}%")
+    if "VS_CHAIN" in triggers and below_chain is not None:
+        parts.append(f"{below_chain:.1f}pp below chain average")
+    issue = ": ".join([" ".join(parts[:-1]), parts[-1]]) if len(parts) > 2 else " ".join(parts)
+
+    explanation_lines = [
+        f"{this_completed} of {this_due} prompts were actioned on time this week ({this_rate:.1f}%).",
+    ]
+    if "WOW" in triggers and last_rate is not None and wow_change is not None:
+        explanation_lines.append(
+            f"Last week the on-time rate was {last_rate:.1f}% — down {abs(wow_change):.1f}pp."
+        )
+    if "VS_CHAIN" in triggers and chain_rate is not None:
+        explanation_lines.append(
+            f"Chain average is {chain_rate:.1f}% — this store is {below_chain:.1f}pp below."
+        )
+    if worst_depts:
+        dept_list = ", ".join(
+            f"{row['dept']} ({row['compliance_pct']:.1f}%)" for row in worst_depts[:3]
+        )
+        explanation_lines.append(f"Worst departments: {dept_list}.")
+    if projected_cost:
+        explanation_lines.append(
+            f"At £{projected_cost:,.2f} per week, the four-week exposure is approximately "
+            f"£{projected_cost * 4:,.2f} if not fixed."
+        )
+
+    dept_names = [row["dept"] for row in worst_depts[:3]]
+    focus = ", ".join(dept_names) if dept_names else "the worst-performing departments"
+    target = f"{last_rate:.1f}%" if last_rate is not None else "the prior week's rate"
+
+    if volume_classification == "INCREASING" and volume_change_pct is not None:
+        action = (
+            f"Prompt volume is up {volume_change_pct:.0f}% while on-time response has fallen "
+            f"{abs(wow_change or 0):.0f}pp. Store manager to review staffing against prompt "
+            f"volume this week, escalating to the area manager if hours cannot cover it. "
+            f"Focus on {focus}. Review in 7 days against a target of {target}."
+        )
+    elif volume_classification == "DECREASING" and volume_change_pct is not None:
+        action = (
+            f"Prompt volume is down {abs(volume_change_pct):.0f}%, so the drop is not explained "
+            f"by workload. Store manager to review the prompt response routine with the team within 48 "
+            f"hours, focusing on {focus}. Review in 7 days against a target of {target}."
+        )
+    else:
+        action = (
+            f"Prompt volume is broadly unchanged, so the drop is not explained by workload. "
+            f"Store manager to review the prompt response routine with the team within 48 hours, "
+            f"focusing on {focus}. Review in 7 days against a target of {target}."
+        )
+
+    cost_if_not_fixed = f"£{projected_cost:,.2f} per week if not fixed."
+
+    return {
+        "issue": issue,
+        "explanation": "\n".join(explanation_lines),
+        "cost_if_not_fixed": cost_if_not_fixed,
+        "recommended_action": action,
+    }
+
+
+def _generate_expiry_date_compliance(signal: dict) -> dict:
+    facts = signal.get('facts') or {}
+    driver = facts.get('driver_assessment') or {}
+    departments = [row['dept'].title() for row in facts.get('worst_departments_top3', [])[:3]]
+    focus = ', '.join(departments) if departments else 'the worst-performing departments'
+    change = abs(signal.get('change_pp') or 0)
+    prior_rate = signal.get('prev_7d_compliance_rate')
+    target = f'{prior_rate:.2f}%' if prior_rate is not None else 'the prior period rate'
+    volume_change = driver.get('volume_change_pct')
+    if driver.get('likely_driver') == 'WORKLOAD':
+        action = (
+            f'Expiry check volume is up {volume_change:.0f}% while compliance has fallen {change:.0f}pp. '
+            'Store manager to review staffing and rota coverage against task volume this week, escalating '
+            f'to the area manager if hours cannot cover the volume. Focus on {focus}. Review in 7 days '
+            f'against a target of {target}.'
+        )
+    else:
+        prefix = 'Expiry check volume is broadly unchanged' if driver.get('volume_classification') == 'STABLE' else f'Expiry check volume is down {abs(volume_change or 0):.0f}%'
+        action = (
+            f'{prefix}, so the drop is not explained by workload. Store manager to review the expiry check '
+            f'routine with the team within 48 hours, focusing on {focus}. Review in 7 days against a target of {target}.'
+        )
+    projected_cost = float(signal.get('projected_cost') or 0.0)
+    return {
+        'issue': f"{signal.get('site_name')} expiry date compliance fell {change:.1f}pp",
+        'explanation': f"{signal.get('trailing_7d_checks_completed', 0)} of {signal.get('trailing_7d_checks_due', 0)} checks were completed.",
+        'cost_if_not_fixed': f'£{projected_cost:,.2f} per week if not fixed.',
+        'recommended_action': action,
+    }
+
+
+def _generate_straight_to_bin(signal: dict) -> dict:
+    """Generate narrative for a STRAIGHT_TO_BIN alert."""
+    site_name = signal.get('site_name') or f"Store {signal['store_id']}"
+    stb_value = signal.get('last_week_stb_value', 0.0)
+    stb_items = signal.get('last_week_stb_items', 0)
+    chain_avg = signal.get('chain_avg_stb_value_per_store', 0.0)
+    multiple = signal.get('vs_chain_multiple', 0.0)
+    threshold = signal.get('threshold_value', 100.0)
+    projected_cost = signal.get('projected_cost', stb_value)
+
+    facts = signal.get('facts', {})
+    daily = facts.get('stb_by_day_last_week', [])
+    worst_depts = [
+        row for row in facts.get('worst_departments_by_value_top3', [])
+        if str(row.get('dept') or '').strip().lower() not in {'', 'unknown', 'none', 'nan'}
+    ]
+
+    # Find peak days (top 2 by value)
+    peak_days = sorted(daily, key=lambda x: x.get('value', 0), reverse=True)[:2]
+    peak_day_names = [d['day'] for d in peak_days if d.get('value', 0) > 0]
+
+    # Determine high vs near-threshold narrative
+    is_high = multiple >= 2.5
+
+    if is_high:
+        issue = (
+            f"{site_name}: \u00a3{stb_value:,.2f} of stock sent straight to bin last week "
+            f"\u2014 {multiple:.1f}\u00d7 the chain average"
+        )
+    else:
+        issue = (
+            f"{site_name}: \u00a3{stb_value:,.2f} of stock sent straight to bin last week "
+            f"\u2014 just above the \u00a3{threshold:,.0f} threshold"
+        )
+
+    explanation_lines = [
+        f"{stb_items} items worth \u00a3{stb_value:,.2f} were sent straight to bin last week.",
+        f"Chain average is \u00a3{chain_avg:,.2f} per store ({multiple:.1f}\u00d7).",
+    ]
+    if peak_day_names:
+        explanation_lines.append(
+            f"Peak days: {', '.join(peak_day_names)}."
+        )
+    if worst_depts:
+        dept_list = ', '.join(
+            f"{row['dept']} (\u00a3{row['value']:,.2f})" for row in worst_depts[:3]
+        )
+        explanation_lines.append(f"Worst departments: {dept_list}.")
+
+    cost_if_not_fixed = f"\u00a3{projected_cost:,.2f} per week if not fixed."
+
+    if is_high:
+        dept_names = [row['dept'] for row in worst_depts[:3]]
+        focus = ', '.join(dept_names) if dept_names else 'the worst-performing departments'
+        peak_str = ' and '.join(peak_day_names) if peak_day_names else 'peak days'
+        action = (
+            f"Straight-to-bin value peaks on {peak_str}, when markdown compliance is at its lowest. "
+            f"Store manager to review the markdown routine on those days this week, "
+            f"focusing on {focus}. "
+            f"Review in 7 days against the chain average of \u00a3{chain_avg:,.2f} per store."
+        )
+    else:
+        action = (
+            f"Value is just above the \u00a3{threshold:,.0f} threshold. "
+            f"No action; monitor and review at next week's alert cycle. "
+            f"Escalate if straight-to-bin value exceeds \u00a3{threshold:,.0f} again."
+        )
+
+    return {
+        'issue': issue,
+        'explanation': '\n'.join(explanation_lines),
+        'cost_if_not_fixed': cost_if_not_fixed,
+        'recommended_action': action,
+    }
+
+
 def generate(signal: dict) -> dict:
     """
     Generate narrative fields for a single enriched signal using templates.
@@ -552,6 +945,22 @@ def generate(signal: dict) -> dict:
 
     signal_type = signal.get("signal_type", "")
 
+    if signal_type == "MARKDOWN_COMPLIANCE":
+        return _generate_markdown_compliance(signal)
+
+    if signal_type == "EXPIRY_DATE_COMPLIANCE":
+        return _generate_expiry_date_compliance(signal)
+
+    if signal_type == "PROMPTED_MARKDOWN_COMPLIANCE":
+        return _generate_prompted_markdown_compliance(signal)
+
+    if signal_type == "OSA_STORE_ACTIONABLE":
+        return _generate_osa_store_actionable(signal)
+
+    if signal_type == "OSA_BIG_DROP":
+        # Same signal shape as OSA_STORE_ACTIONABLE — reuse its narrative.
+        return _generate_osa_store_actionable(signal)
+
     if signal_type == "MARKDOWN_OVERRIDE":
         return _generate_markdown_override(signal)
 
@@ -569,6 +978,9 @@ def generate(signal: dict) -> dict:
 
     if signal_type == 'WASTE_TRIM':
         return _generate_waste_trim(signal)
+
+    if signal_type == 'STRAIGHT_TO_BIN':
+        return _generate_straight_to_bin(signal)
 
     dept     = signal['department']
     facts    = signal['facts']
@@ -588,6 +1000,10 @@ def generate(signal: dict) -> dict:
     explanation_lines = []
 
     explanation_lines.append(f"There has been \u00a3{lsv:,.2f} of lost sales in {dept} this week.")
+
+    comp = facts.get("lsv_composition")
+    if comp:
+        explanation_lines += _fmt_lsv_composition_lines(comp)
 
     if "WOW" in triggers and this_week_osa is not None and last_week_osa is not None:
         chain_drift_str = f" (chain moved {chain_drift:+.1f}pp)" if chain_drift is not None else ""
@@ -633,10 +1049,19 @@ def generate(signal: dict) -> dict:
             "high-velocity lines are filled before the store opens."
         )
     if "REPEAT" in triggers:
-        action_parts.append(
-            "Investigate root cause of repeated OOS items \u2014 review replenishment "
-            "parameters, supplier lead times, and on-shelf capacity."
-        )
+        repeat_items = signal.get("repeat_item_details", [])
+        if repeat_items:
+            top_names = ", ".join(item["ppg"] for item in repeat_items[:2])
+            action_parts.append(
+                f"Investigate root cause for the worst repeat offenders \u2014 starting with "
+                f"{top_names} \u2014 review replenishment parameters, supplier lead times, "
+                f"and on-shelf capacity."
+            )
+        else:
+            action_parts.append(
+                "Investigate root cause of repeated OOS items \u2014 review replenishment "
+                "parameters, supplier lead times, and on-shelf capacity."
+            )
     if facts.get("worst_day"):
         action_parts.append(
             f"Pay particular attention on {facts['worst_day']['day']}s, "

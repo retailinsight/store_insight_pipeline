@@ -103,8 +103,10 @@ def test_investigator_yaml_skill_files_exist_on_disk():
 # ---------------------------------------------------------------------------
 
 KNOWN_SIGNAL_TYPES = {
-    'OSA', 'OSA_RECURRING_SLOT', 'COMPLIANCE', 'MARKDOWN_OVERRIDE',
+    'OSA_STORE_ACTIONABLE', 'OSA_RECURRING_SLOT', 'COMPLIANCE', 'MARKDOWN_OVERRIDE',
     'WASTE', 'WASTE_TRIM', 'MARKDOWN_SELLTHROUGH', 'MARKDOWN_SKU',
+    'MARKDOWN_COMPLIANCE', 'EXPIRY_DATE_COMPLIANCE', 'PROMPTED_MARKDOWN_COMPLIANCE',
+    'STRAIGHT_TO_BIN',
 }
 
 

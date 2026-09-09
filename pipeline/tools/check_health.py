@@ -25,6 +25,27 @@ from typing import Any
 from store_insight.pipeline.contracts import list_contracts, load_contract
 
 # ---------------------------------------------------------------------------
+# Lookback window for content checks (null-rate / grain-uniqueness) on
+# time-scoped contracts — avoids full-table scans on large fact tables.
+# ---------------------------------------------------------------------------
+
+_CONTENT_CHECK_LOOKBACK_DAYS = 30
+
+
+def _date_bounds_filter(columns: dict, analysis_date: str) -> str | None:
+    """Return a ``DATE >= ... AND DATE <= ...`` fragment (no leading WHERE)
+    if the contract has a DATE column, else None (unbounded — dimension
+    tables with no time axis don't need windowing)."""
+    if 'DATE' not in columns:
+        return None
+    start = (
+        datetime.date.fromisoformat(analysis_date)
+        - datetime.timedelta(days=_CONTENT_CHECK_LOOKBACK_DAYS)
+    ).isoformat()
+    return f"DATE >= '{start}' AND DATE <= '{analysis_date}'"
+
+
+# ---------------------------------------------------------------------------
 # Contract name → TablesConfig field name mapping (until rename PR lands)
 # ---------------------------------------------------------------------------
 
@@ -177,8 +198,8 @@ def check_health(
             continue
 
         contract_def = load_contract(name)
-        _check_null_rates(actual_runner, table_fqn, name, contract_def, report)
-        _check_grain_uniqueness(actual_runner, table_fqn, name, contract_def, report)
+        _check_null_rates(actual_runner, table_fqn, name, contract_def, report, analysis_date)
+        _check_grain_uniqueness(actual_runner, table_fqn, name, contract_def, report, analysis_date)
         _check_freshness(actual_runner, table_fqn, name, contract_def, analysis_date, report)
         _check_referential_integrity(actual_runner, table_fqn, name, contract_def, cfg, report)
         _check_date_gaps(actual_runner, table_fqn, name, contract_def, analysis_date, report)
@@ -187,12 +208,16 @@ def check_health(
     return report
 
 
-def _check_null_rates(runner, table_fqn, contract_name, contract_def, report):
+def _check_null_rates(runner, table_fqn, contract_name, contract_def, report, analysis_date):
     """Check NULL rates on required columns."""
     columns = contract_def.get('columns', {})
+    date_filter = _date_bounds_filter(columns, analysis_date)
 
     # Get total row count
-    rows = runner(f'SELECT COUNT(*) AS TOTAL FROM {table_fqn}')
+    total_sql = f'SELECT COUNT(*) AS TOTAL FROM {table_fqn}'
+    if date_filter:
+        total_sql += f' WHERE {date_filter}'
+    rows = runner(total_sql)
     total = rows[0]['TOTAL'] if rows else 0
     if total == 0:
         return
@@ -200,9 +225,10 @@ def _check_null_rates(runner, table_fqn, contract_name, contract_def, report):
     for col_name, col_spec in columns.items():
         if not col_spec.get('required', False):
             continue
-        null_rows = runner(
-            f'SELECT COUNT(*) AS NULL_COUNT FROM {table_fqn} WHERE {col_name} IS NULL'
-        )
+        null_sql = f'SELECT COUNT(*) AS NULL_COUNT FROM {table_fqn} WHERE {col_name} IS NULL'
+        if date_filter:
+            null_sql += f' AND {date_filter}'
+        null_rows = runner(null_sql)
         null_count = null_rows[0]['NULL_COUNT'] if null_rows else 0
         if null_count > 0:
             report.findings.append({
@@ -215,22 +241,26 @@ def _check_null_rates(runner, table_fqn, contract_name, contract_def, report):
             })
 
 
-def _check_grain_uniqueness(runner, table_fqn, contract_name, contract_def, report):
+def _check_grain_uniqueness(runner, table_fqn, contract_name, contract_def, report, analysis_date):
     """Check that grain columns form a unique key."""
     grain = contract_def.get('grain', [])
     if not grain:
         return
 
     grain_cols = ', '.join(grain)
+    columns = contract_def.get('columns', {})
+    date_filter = _date_bounds_filter(columns, analysis_date)
+    where_clause = f' WHERE {date_filter}' if date_filter else ''
 
-    rows = runner(f'SELECT COUNT(*) AS TOTAL FROM {table_fqn}')
+    total_sql = f'SELECT COUNT(*) AS TOTAL FROM {table_fqn}' + where_clause
+    rows = runner(total_sql)
     total = rows[0]['TOTAL'] if rows else 0
     if total == 0:
         return
 
     distinct_rows = runner(
         f'SELECT COUNT(*) AS DISTINCT_COUNT FROM '
-        f'(SELECT DISTINCT {grain_cols} FROM {table_fqn})'
+        f'(SELECT DISTINCT {grain_cols} FROM {table_fqn}{where_clause})'
     )
     distinct = distinct_rows[0]['DISTINCT_COUNT'] if distinct_rows else 0
 

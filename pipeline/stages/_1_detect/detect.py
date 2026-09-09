@@ -64,6 +64,7 @@ def _detector_module_name(mod) -> str:
 # given type.  All other fields use "last non-None wins" semantics.
 _MERGE_MAX_FIELDS: dict[str, set[str]] = {
     'OSA': {'this_week_lsv'},
+    'OSA_BIG_DROP': {'this_week_lsv'},
 }
 
 
@@ -97,7 +98,9 @@ def _merge_signals(all_signals):
             for field in (
                 # OSA fields
                 'last_week_osa', 'this_week_osa', 'wow_drift_pp',
-                'this_week_lsv', 'chain_this_week_osa',
+                'this_week_lsv', 'last_week_lsv', 'lsv_change',
+                'total_last_week_osa', 'total_this_week_osa',
+                'chain_this_week_osa', 'total_chain_this_week_osa',
                 'chain_gap_pp', 'chain_wow_drift_pp',
                 # WASTE fields
                 'last_week_stb_rate', 'this_week_stb_rate', 'wow_change_pp',
@@ -111,6 +114,26 @@ def _merge_signals(all_signals):
                 # COMPLIANCE fields
                 'last_week_tf_rate', 'this_week_tf_rate', 'tf_rate_change',
                 'chain_tf_rate', 'above_chain_by',
+                # MARKDOWN_COMPLIANCE fields
+                'this_week_markdowns_due', 'this_week_completed_on_time',
+                'this_week_compliance_rate', 'last_week_compliance_rate',
+                'wow_change_pp', 'chain_compliance_rate', 'below_chain_pp',
+                'this_week_at_risk_value',
+                # EXPIRY_DATE_COMPLIANCE fields
+                'trailing_7d_compliance_rate', 'prev_7d_compliance_rate',
+                'change_pp', 'chain_trailing_7d_compliance_rate',
+                'chain_change_pp', 'trailing_7d_checks_due',
+                'trailing_7d_checks_completed', 'trailing_7d_at_risk_value',
+                'workload',
+                # PROMPTED_MARKDOWN_COMPLIANCE fields
+                'this_week_prompts_issued', 'this_week_prompts_actioned_on_time',
+                'this_week_compliance_rate', 'last_week_compliance_rate',
+                'wow_change_pp', 'chain_compliance_rate', 'below_chain_pp',
+                'median_response_minutes', 'this_week_at_risk_value',
+                'workload',
+                # STRAIGHT_TO_BIN fields
+                'threshold_value', 'last_week_stb_value', 'last_week_stb_items',
+                'chain_avg_stb_value_per_store', 'vs_chain_multiple',
                 # Data-quality gate (stage 0)
                 'data_quality_flag',
             ):
@@ -123,6 +146,8 @@ def _merge_signals(all_signals):
                     )
                 else:
                     existing[field] = sig[field]
+            if sig.get('quality'):
+                existing['quality'] = {**(existing.get('quality') or {}), **sig['quality']}
             if sig.get('repeat_item_count') is not None:
                 existing['repeat_item_count'] = sig['repeat_item_count']
                 existing['repeat_item_details'] = sig['repeat_item_details']
@@ -145,6 +170,7 @@ def detect_signals(
     markdown_log=None,
     markdown_sales=None,
     wastage=None,
+    straight_to_bin=None,
     item_hierarchy=None,
     store_hierarchy=None,
     config: DetectorConfig = None,
@@ -208,12 +234,18 @@ def detect_signals(
 
     data = osa if store_ids is None else osa.filter(F.col('STORE_ID').isin(store_ids))
 
+    # Detectors that benchmark against the chain need the full-chain DataFrame,
+    # not the store-filtered subset.  Pass both so each detector can choose the
+    # right one: filtered data for store-level work, unfiltered data for chain
+    # baselines.
     _context = dict(
         osa=data,
+        osa_full_chain=osa,
         feedback=feedback,
         markdown_log=markdown_log,
         markdown_sales=markdown_sales,
         wastage=wastage,
+        straight_to_bin=straight_to_bin,
         item_hierarchy=item_hierarchy,
         store_hierarchy=store_hierarchy,
         last_week_start=last_week_start,

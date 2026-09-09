@@ -14,7 +14,7 @@ from store_insight.pipeline.stages._1_detect import detect as detect_mod
 from store_insight.pipeline.stages._1_detect import registry as detect_registry
 from store_insight.pipeline.stages._1_detect.signals import (
     make_compliance_signal,
-    make_osa_signal,
+    make_osa_store_actionable_signal,
 )
 from store_insight.pipeline.stages._2_score.score import score_all
 from store_insight.pipeline.stages._3_facts import facts as facts_mod
@@ -25,15 +25,15 @@ from store_insight.pipeline.stages._4_investigate import investigate as inv_mod
 @pytest.fixture()
 def synthetic_pipeline(monkeypatch, make_detector, make_gatherer):
     """Patch both registries with deterministic fake detectors and gatherers."""
-    osa_sig_store1 = make_osa_signal(
+    osa_sig_store1 = make_osa_store_actionable_signal(
         store_id=1, department='CHILLED', trigger_types=['WOW'],
-        this_week_lsv=500.0, this_week_osa=90.0, last_week_osa=95.0,
-        wow_drift_pp=-5.0,
+        this_week_lsv={'store_controlled': 500.0}, this_week_osa=90.0,
+        last_week_osa=95.0, wow_drift_pp=-5.0,
     )
-    osa_sig_store2 = make_osa_signal(
+    osa_sig_store2 = make_osa_store_actionable_signal(
         store_id=2, department='BAKERY', trigger_types=['WOW'],
-        this_week_lsv=100.0, this_week_osa=92.0, last_week_osa=96.0,
-        wow_drift_pp=-4.0,
+        this_week_lsv={'store_controlled': 100.0}, this_week_osa=92.0,
+        last_week_osa=96.0, wow_drift_pp=-4.0,
     )
     compliance_sig = make_compliance_signal(
         store_id=1, trigger_types=['TICK_AND_FLICK'],
@@ -42,8 +42,8 @@ def synthetic_pipeline(monkeypatch, make_detector, make_gatherer):
         tf_rate_change=20.0, chain_tf_rate=10.0, above_chain_by=30.0,
     )
 
-    d_osa = make_detector('osa.wow', [osa_sig_store1, osa_sig_store2])
-    d_osa.__name__ = 'store_insight.pipeline.stages._1_detect.detectors.osa.wow'
+    d_osa = make_detector('osa_store_actionable.wow', [osa_sig_store1, osa_sig_store2])
+    d_osa.__name__ = 'store_insight.pipeline.stages._1_detect.detectors.osa_store_actionable.wow'
 
     d_comp = make_detector('compliance.tick_and_flick', [compliance_sig])
     d_comp.__name__ = (
@@ -54,8 +54,12 @@ def synthetic_pipeline(monkeypatch, make_detector, make_gatherer):
 
     # --- Gatherers ------------------------------------------------------
     def osa_facts(sig, _raw):
+        lsv = (sig.get('this_week_lsv') or {}).get('store_controlled') or 0
         return {
-            'cost_projection': (sig.get('this_week_lsv') or 0) * 4,
+            'cost_projection': {
+                'projection_weeks': 4,
+                'store_controlled_cost_of_inaction': lsv * 4,
+            },
             'projection_weeks': 4,
             'subclass_contributors': [],
             'subclass_changes': [],
@@ -68,11 +72,11 @@ def synthetic_pipeline(monkeypatch, make_detector, make_gatherer):
     def comp_facts(_sig, _raw):
         return {'tf_by_alert_type': []}
 
-    g_osa = make_gatherer('osa_fake', signal_types=['OSA'], facts_from=osa_facts)
+    g_osa = make_gatherer('osa_fake', signal_types=['OSA_STORE_ACTIONABLE'], facts_from=osa_facts)
     g_comp = make_gatherer('comp_fake', signal_types=['COMPLIANCE'], facts_from=comp_facts)
 
     monkeypatch.setattr(facts_registry, 'SIGNAL_TYPE_GATHERERS', {
-        'OSA': [g_osa], 'COMPLIANCE': [g_comp],
+        'OSA_STORE_ACTIONABLE': [g_osa], 'COMPLIANCE': [g_comp],
     })
 
     return {
@@ -120,7 +124,7 @@ def test_happy_path_produces_sorted_alert_cards(synthetic_pipeline, fake_osa_df)
 
 def test_osa_cards_scored_by_lsv_times_triggers(synthetic_pipeline, fake_osa_df):
     cards = _run(fake_osa_df)
-    osa_cards = [c for c in cards if c['signal_type'] == 'OSA']
+    osa_cards = [c for c in cards if c['signal_type'] == 'OSA_STORE_ACTIONABLE']
     # store 1 has lsv=500 * 1 trigger = 500; store 2 has lsv=100 * 1 = 100.
     scores = {c['store_id']: c['score'] for c in osa_cards}
     assert scores[1] == 500.0

@@ -123,6 +123,19 @@ def _build_compliance_context(signal):
     return "\n".join(lines)
 
 
+def _fmt_lsv_composition_line(composition: dict) -> str:
+    """Format the upstream / store-process split for the OSA context."""
+    buckets = composition.get("buckets", {})
+    parts = []
+    for key, label in (("store_process", "store process"), ("upstream", "upstream")):
+        bucket = buckets.get(key)
+        if bucket and bucket.get("lsv", 0) > 0:
+            parts.append(f"{label} {bucket['pct']:.1f}% (\u00a3{bucket['lsv']:.2f})")
+    if not parts:
+        return ""
+    return "Lost Sales Composition: " + ", ".join(parts)
+
+
 def _build_osa_context(signal):
     """Build context block for an OSA availability signal."""
     facts = signal["facts"]
@@ -130,6 +143,10 @@ def _build_osa_context(signal):
         f"Department: {signal['department']}",
         f"This Week Lost Sales: \u00a3{signal['this_week_lsv']:.2f}",
     ]
+    if facts.get("lsv_composition"):
+        comp_line = _fmt_lsv_composition_line(facts["lsv_composition"])
+        if comp_line:
+            lines.append(comp_line)
     if signal.get("this_week_osa"):
         lines.append(f"Store OSA: {signal['this_week_osa']:.1f}%")
     if signal.get("last_week_osa"):
@@ -142,6 +159,31 @@ def _build_osa_context(signal):
         lines.append(f"Week-on-Week OSA Change: {signal['wow_drift_pp']:+.1f}pp")
     if "REPEAT" in signal["trigger_types"] and signal.get("repeat_item_count"):
         lines.append(f"Repeat Alert Items: {signal['repeat_item_count']}")
+        repeat_items = signal.get("repeat_item_details", [])
+        if repeat_items:
+            lines.append("Top Repeat Offender Items:")
+            for item in repeat_items[:5]:
+                lines.append(
+                    f"  {item['ppg']} ({item['subclass']}): triggered {item['alert_weeks']} weeks, "
+                    f"\u00a3{item['cumulative_lsv']:,.2f} cumulative lost sales, "
+                    f"avg alert-week OSA {item['avg_alert_osa']:.1f}%"
+                )
+    contributors = facts.get("subclass_contributors", [])
+    if contributors:
+        lines.append("Top Subclasses by This-Week Lost Sales:")
+        for item in contributors[:5]:
+            lines.append(
+                f"  {item['subclass_name']}: \u00a3{item['this_week_lsv']:,.2f} this week "
+                f"(last week \u00a3{item['last_week_lsv']:,.2f}, {item['lsv_change']:+,.2f} change)"
+            )
+    changes = facts.get("subclass_changes", [])
+    if changes:
+        lines.append("Subclasses With Biggest Week-on-Week Lost Sales Increase:")
+        for item in changes[:5]:
+            lines.append(
+                f"  {item['subclass_name']}: {item['lsv_change']:+,.2f} change "
+                f"(\u00a3{item['this_week_lsv']:,.2f} this week)"
+            )
     if facts.get("worst_day"):
         lines.append(
             f"Worst Day: {facts['worst_day']['day']} (\u00a3{facts['worst_day']['lsv']:.2f})"
@@ -344,7 +386,12 @@ def generate(
         '  "explanation"         \u2014 summary sentence + worst day callout\n'
         '  "cost_if_not_fixed"   \u2014 cost panel sentence\n'
         '  "recommended_action"  \u2014 action panel (2\u20134 sentences)\n\n'
-        "Do not include subclass contributor lists \u2014 those are rendered from structured data.\n"
+        "Do not restate the full subclass contributor or repeat-offender item lists as a "
+        "bulleted list \u2014 those are rendered separately from structured data. However, you "
+        "should use them to make the recommended_action specific: name the 1\u20132 worst "
+        "subclasses or repeat-offender items by name (e.g. 'starting with BEERS & LAGERS' or "
+        "'especially the 4238 CITRUS line') so the manager knows exactly where to look first. "
+        "Never fabricate a name that is not present in the signal data above.\n"
         "Output raw JSON only. Do not wrap in markdown fences."
     )
 

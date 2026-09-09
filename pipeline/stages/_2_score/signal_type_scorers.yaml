@@ -11,9 +11,13 @@
 #
 # Displayed in the pipeline docs and QC notebooks.
 
-OSA:
-  name: osa
-  description: projected_cost = this_week_lsv (direct £ — no DB query)
+OSA_STORE_ACTIONABLE:
+  name: osa_store_actionable
+  description: projected_cost = this_week_lsv.store_controlled
+
+OSA_BIG_DROP:
+  name: osa_big_drop
+  description: projected_cost = this_week_lsv.store_controlled
 
 OSA_RECURRING_SLOT:
   name: osa_recurring_slot
@@ -31,6 +35,18 @@ MARKDOWN_SELLTHROUGH:
   name: markdown_sellthrough
   description: projected_cost = this_week_markdown_value × (1 − sellthrough_rate / 100)
 
+MARKDOWN_COMPLIANCE:
+  name: markdown_compliance
+  description: projected_cost = this_week_at_risk_value (pre-computed from the canonical synthetic DataFrame)
+
+EXPIRY_DATE_COMPLIANCE:
+  name: expiry_date_compliance
+  description: projected_cost = trailing_7d_at_risk_value (pre-computed from the canonical synthetic DataFrame)
+
+PROMPTED_MARKDOWN_COMPLIANCE:
+  name: prompted_markdown_compliance
+  description: projected_cost = this_week_at_risk_value (pre-computed from the canonical synthetic DataFrame)
+
 MARKDOWN_OVERRIDE:
   name: markdown_override
   description: projected_cost = this_week_overrides × avg_£_per_markdown_event (queried from markdown_log + markdown_sales)
@@ -38,6 +54,10 @@ MARKDOWN_OVERRIDE:
 MARKDOWN_SKU:
   name: markdown_sku
   description: projected_cost = (override_count / lookback_weeks) × avg_unit_markdown_value (queried from markdown_sales)
+
+STRAIGHT_TO_BIN:
+  name: straight_to_bin
+  description: projected_cost = last_week_stb_value (total £ straight-to-bin value last week — no DB query)
 
 COMPLIANCE:
   name: compliance

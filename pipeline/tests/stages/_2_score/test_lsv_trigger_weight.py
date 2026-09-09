@@ -14,20 +14,21 @@ from store_insight.pipeline.stages._2_score.scorers import (
     markdown_override,
     markdown_sellthrough,
     markdown_sku,
-    osa,
+    osa_store_actionable,
     waste,
 )
 
 # ---------------------------------------------------------------------------
-# OSA
+# OSA_STORE_ACTIONABLE
 # ---------------------------------------------------------------------------
 
-def test_osa_returns_this_week_lsv():
-    assert osa.projected_cost({'this_week_lsv': 123.45}) == 123.45
+def test_osa_store_actionable_returns_store_controlled_lsv():
+    assert osa_store_actionable.projected_cost(
+        {'this_week_lsv': {'store_controlled': 123.45}}) == 123.45
 
 
-def test_osa_none_lsv_returns_zero():
-    assert osa.projected_cost({'this_week_lsv': None}) == 0.0
+def test_osa_store_actionable_none_lsv_returns_zero():
+    assert osa_store_actionable.projected_cost({'this_week_lsv': None}) == 0.0
 
 
 # ---------------------------------------------------------------------------

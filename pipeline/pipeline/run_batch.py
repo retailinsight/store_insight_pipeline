@@ -78,6 +78,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 from snowflake.snowpark import functions as F
 
 from store_insight.pipeline.config.loader import load_config
+from store_insight.pipeline.pipeline.capabilities import discover_capabilities
 from store_insight.pipeline.pipeline.capabilities import validate as validate_capabilities
 from store_insight.pipeline.pipeline.pipeline import (
     derive_windows,
@@ -107,11 +108,18 @@ from store_insight.pipeline.stages._5_outcomes.outcomes import measure_outcomes
 # window and applies pipeline-level joins / NULL filters.
 
 
-def load_feedback(session, last_week_start, this_week_end, cfg=None):
+def load_feedback(session, last_week_start, this_week_end, cfg=None, capabilities=None):
     """
     Load and cache alert feedback for the two-week window.
     Used by the TICK_AND_FLICK detector and fact gatherer.
+
+    Returns None (without querying Snowflake) if ``capabilities`` is given
+    and doesn't include 'feedback' — the client has no adapter view for it,
+    and no enabled detector/gatherer needs it (already confirmed by
+    validate_capabilities() at startup).
     """
+    if capabilities is not None and "feedback" not in capabilities:
+        return None
     return (
         session.table(cfg.tables.feedback if cfg else "FEEDBACK_V1")
         .filter(F.col("DATE") >= last_week_start)
@@ -145,13 +153,18 @@ def load_osa(session, lookback_start, analysis_date, cfg=None):
     )
 
 
-def load_wmd(session, wmd_lookback, analysis_date, cfg=None):
+def load_wmd(session, wmd_lookback, analysis_date, cfg=None, capabilities=None):
     """
     Load and cache all WMD tables (markdown log, markdown sales, wastage,
     item hierarchy, store hierarchy) for the 4-week lookback window.
 
     Used by MARKDOWN_OVERRIDE / MARKDOWN_SELLTHROUGH / MARKDOWN_SKU / WASTE
     detectors and their fact gatherers.
+
+    Any table whose contract isn't in ``capabilities`` (when given) is
+    returned as None instead of being queried — the client has no adapter
+    view for it, and no enabled detector/gatherer needs it (already
+    confirmed by validate_capabilities() at startup).
 
     Returns
     -------
@@ -160,30 +173,43 @@ def load_wmd(session, wmd_lookback, analysis_date, cfg=None):
     """
     tables = cfg.tables if cfg else None
 
+    def _has(contract: str) -> bool:
+        return capabilities is None or contract in capabilities
+
     markdown_log = (
         session.table(tables.markdown_log if tables else "MARKDOWN_LOG_V1")
         .filter(F.col("DATE") >= wmd_lookback)
         .filter(F.col("DATE") <= analysis_date)
         .cache_result()
+        if _has("markdown_log")
+        else None
     )
     markdown_sales = (
         session.table(tables.markdown_sales if tables else "MARKDOWN_SALES_V1")
         .filter(F.col("DATE") >= wmd_lookback)
         .filter(F.col("DATE") <= analysis_date)
         .cache_result()
+        if _has("markdown_sales")
+        else None
     )
     wastage = (
         session.table(tables.wastage if tables else "WASTAGE_V1")
         .filter(F.col("DATE") >= wmd_lookback)
         .filter(F.col("DATE") <= analysis_date)
         .cache_result()
+        if _has("wastage")
+        else None
     )
-    item_hierarchy = session.table(
-        tables.wmd_hierarchy if tables else "WMD_HIERARCHY_V1"
-    ).cache_result()
-    store_hierarchy = session.table(
-        tables.store_hierarchy if tables else "STORE_HIERARCHY_V1"
-    ).cache_result()
+    item_hierarchy = (
+        session.table(tables.wmd_hierarchy if tables else "WMD_HIERARCHY_V1").cache_result()
+        if _has("wmd_item_hierarchy")
+        else None
+    )
+    store_hierarchy = (
+        session.table(tables.store_hierarchy if tables else "STORE_HIERARCHY_V1").cache_result()
+        if _has("wmd_store_hierarchy")
+        else None
+    )
 
     return {
         "markdown_log": markdown_log,
@@ -264,21 +290,33 @@ def run_single_date(
     print("[run_batch] Stage 0: source data-quality gate...")
     gate_plan = run_quality_gate(session, cfg, analysis_date=analysis_date)
 
+    capabilities = discover_capabilities(client) if cfg else None
+
     print("[run_batch] Loading OSA data...")
     osa = load_osa(session, w["lookback_start"], w["this_week_end"], cfg=cfg)
     print(f"[run_batch] OSA rows loaded & cached : {osa.count():,}")
 
+    def _count_or_skip(label: str, df) -> None:
+        if df is None:
+            print(f"[run_batch] {label:<19}: (no adapter for this client — skipped)")
+        else:
+            print(f"[run_batch] {label:<19}: {df.count():,}")
+
     print("[run_batch] Loading feedback data...")
-    feedback = load_feedback(session, w["last_week_start"], w["this_week_end"], cfg=cfg)
-    print(f"[run_batch] Feedback rows loaded & cached: {feedback.count():,}")
+    feedback = load_feedback(
+        session, w["last_week_start"], w["this_week_end"], cfg=cfg, capabilities=capabilities
+    )
+    _count_or_skip("Feedback rows loaded & cached", feedback)
 
     print("[run_batch] Loading WMD data (markdown log/sales, wastage, hierarchies)...")
-    wmd = load_wmd(session, w["wmd_lookback"], w["this_week_end"], cfg=cfg)
-    print(f"[run_batch] Markdown log    rows : {wmd['markdown_log'].count():,}")
-    print(f"[run_batch] Markdown sales  rows : {wmd['markdown_sales'].count():,}")
-    print(f"[run_batch] Wastage         rows : {wmd['wastage'].count():,}")
-    print(f"[run_batch] Item hierarchy  rows : {wmd['item_hierarchy'].count():,}")
-    print(f"[run_batch] Store hierarchy rows : {wmd['store_hierarchy'].count():,}")
+    wmd = load_wmd(
+        session, w["wmd_lookback"], w["this_week_end"], cfg=cfg, capabilities=capabilities
+    )
+    _count_or_skip("Markdown log    rows", wmd["markdown_log"])
+    _count_or_skip("Markdown sales  rows", wmd["markdown_sales"])
+    _count_or_skip("Wastage         rows", wmd["wastage"])
+    _count_or_skip("Item hierarchy  rows", wmd["item_hierarchy"])
+    _count_or_skip("Store hierarchy rows", wmd["store_hierarchy"])
 
     pipeline_result = run_pipeline(
         osa,

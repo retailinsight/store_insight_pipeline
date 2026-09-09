@@ -20,10 +20,39 @@ output:
   # sign-off; top_n_per_store stays at 10 until then.
   max_per_type_per_store: 2
 
+detectors:
+  enabled:
+    - osa_store_actionable.wow
+    - osa_store_actionable.vs_chain
+    - osa_big_drop.big_drop
+    - osa_recurring_slot.recurring_slot
+    - compliance.tick_and_flick
+    - markdown_override.vs_chain
+    - markdown_override.wow
+    - waste.vs_chain
+    - waste.wow
+    - waste_trim.trim
+    - markdown_sellthrough.vs_chain
+    - markdown_sellthrough.wow
+    - markdown_sku.repeat_request
+    - markdown_sku.excessive_override
+
+detector_config:
+  thresholds:
+    OSA_STORE_ACTIONABLE:
+      min_actionable_wow_drop:        0.01
+      min_actionable_chain_gap:       0.02
+      min_actionable_lsv:             200.0
+      min_actionable_positive_rows:   10
+      max_actionable_unknown_row_pct: 10.0
+
+    OSA_BIG_DROP:
+      min_actionable_big_drop:        0.05
+      min_osa_big_drop_lsv:           50.0
+      min_big_drop_positive_rows:     5
+      max_actionable_unknown_row_pct: 10.0
+
 investigation:
-  OSA:
-    engine: rule_based
-    skill_file: skills/osa_investigation_skill.md
   COMPLIANCE:
     engine: rule_based
     skill_file: skills/compliance_investigation_skill.md

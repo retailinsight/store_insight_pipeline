@@ -20,10 +20,10 @@ def main() -> int:
     WITH crosswalk AS (
         SELECT DISTINCT
             UPC::VARCHAR AS WMD_UPC,
+            EAN::VARCHAR AS WMD_EAN,
             OSA_ITEM_CODE::VARCHAR AS OSA_ITEM_CODE
         FROM STORE_INSIGHT_DB.PUBLIC.WMD_HIERARCHY_V1
-        WHERE UPC IS NOT NULL
-          AND OSA_ITEM_CODE IS NOT NULL
+        WHERE OSA_ITEM_CODE IS NOT NULL
     ),
     wmd_cardinality AS (
         SELECT WMD_UPC, COUNT(*) AS mapping_count
@@ -38,7 +38,10 @@ def main() -> int:
     SELECT
         (SELECT COUNT(*) FROM crosswalk) AS DISTINCT_PAIRS,
         (SELECT COUNT(DISTINCT WMD_UPC) FROM crosswalk) AS WMD_UPCS,
+        (SELECT COUNT(DISTINCT WMD_EAN) FROM crosswalk) AS WMD_EANS,
         (SELECT COUNT(DISTINCT OSA_ITEM_CODE) FROM crosswalk) AS OSA_ITEM_CODES,
+        (SELECT COUNT(DISTINCT CASE WHEN WMD_UPC IS NOT NULL THEN OSA_ITEM_CODE END) FROM crosswalk) AS OSA_WITH_UPC,
+        (SELECT COUNT(DISTINCT CASE WHEN WMD_EAN IS NOT NULL THEN OSA_ITEM_CODE END) FROM crosswalk) AS OSA_WITH_EAN,
         (SELECT COUNT(*) FROM wmd_cardinality WHERE mapping_count = 1) AS WMD_ONE_TO_ONE,
         (SELECT COUNT(*) FROM wmd_cardinality WHERE mapping_count > 1) AS WMD_ONE_TO_MANY,
         (SELECT MAX(mapping_count) FROM wmd_cardinality) AS MAX_OSA_PER_WMD,
@@ -49,7 +52,10 @@ def main() -> int:
     row = session.sql(sql).collect()[0]
     print(f"distinct pairs: {row['DISTINCT_PAIRS']:,}")
     print(f"WMD UPCs: {row['WMD_UPCS']:,}")
+    print(f"WMD EANs: {row['WMD_EANS']:,}")
     print(f"OSA item codes: {row['OSA_ITEM_CODES']:,}")
+    print(f"OSA item codes with UPC: {row['OSA_WITH_UPC']:,}")
+    print(f"OSA item codes with EAN: {row['OSA_WITH_EAN']:,}")
     print(f"WMD UPCs with exactly one OSA code: {row['WMD_ONE_TO_ONE']:,}")
     print(f"WMD UPCs with multiple OSA codes: {row['WMD_ONE_TO_MANY']:,}")
     print(f"maximum OSA codes per WMD UPC: {row['MAX_OSA_PER_WMD']:,}")

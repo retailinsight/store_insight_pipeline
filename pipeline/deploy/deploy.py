@@ -56,6 +56,7 @@ _SI_PKG = _PKG_DIR.parent  # store_insight/
 _ZIP_ROOT = _SI_PKG.parent  # workspace parent (zip arcname root)
 
 _ENV_PATH = _PKG_DIR / ".env"
+_CLIENTS_DIR = _PKG_DIR / "config" / "clients"
 _ZIP_NAME = "store_insight.zip"
 
 
@@ -64,11 +65,22 @@ _ZIP_NAME = "store_insight.zip"
 # ---------------------------------------------------------------------------
 
 
-def _load_env():
-    """Load .env into os.environ (same logic as session.py)."""
-    if not _ENV_PATH.exists():
-        raise FileNotFoundError(f".env not found: {_ENV_PATH}")
-    with open(_ENV_PATH) as f:
+def _load_env(client: str = None):
+    """Load .env into os.environ (same logic as session.py).
+
+    Prefers ``config/clients/<client>/.env`` when ``client`` is given
+    (matches ``config.loader.load_config``'s per-client secrets location);
+    falls back to the shared ``store_insight/pipeline/.env``.
+    """
+    env_path = _ENV_PATH
+    if client:
+        client_env = _CLIENTS_DIR / client / ".env"
+        if client_env.exists():
+            env_path = client_env
+
+    if not env_path.exists():
+        raise FileNotFoundError(f".env not found: {env_path}")
+    with open(env_path) as f:
         for line in f:
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
@@ -274,7 +286,7 @@ def main():
         "--task-off", action="store_true", help="Register SP only — do not create/replace the Task"
     )
     args = parser.parse_args()
-    _load_env()
+    _load_env(args.client)
 
     # ── Load config ─────────────────────────────────────────────────────
     from store_insight.pipeline.config.loader import load_config

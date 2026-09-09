@@ -10,9 +10,12 @@ from __future__ import annotations
 from store_insight.pipeline.stages._1_detect.detect import _merge_signals
 from store_insight.pipeline.stages._1_detect.signals import (
     make_compliance_signal,
+    make_markdown_compliance_signal,
     make_markdown_override_signal,
     make_markdown_sku_signal,
     make_osa_signal,
+    make_osa_store_actionable_signal,
+    make_prompted_markdown_compliance_signal,
 )
 
 # ---------------------------------------------------------------------------
@@ -175,3 +178,75 @@ def test_markdown_sku_signals_merge_only_on_same_store_and_item():
     assert len(merged) == 2
     ab = next(m for m in merged if m['item_id'] == 10)
     assert set(ab['trigger_types']) == {'REPEAT_REQUEST', 'EXCESSIVE_OVERRIDE'}
+
+
+def test_actionable_signals_merge_without_merging_with_osa():
+    lsv = {'total': 100.0, 'store_controlled': 80.0, 'upstream': 20.0, 'unknown': 0.0}
+    wow = make_osa_store_actionable_signal(
+        store_id=1, department='D', trigger_types=['WOW'], this_week_lsv=lsv,
+        wow_drift_pp=-3.0, quality={'this_week': {'row_count': 20}},
+    )
+    chain = make_osa_store_actionable_signal(
+        store_id=1, department='D', trigger_types=['VS_CHAIN'], this_week_lsv=lsv,
+        chain_gap_pp=-4.0, quality={'chain_this_week': {'row_count': 100}},
+    )
+    osa = make_osa_signal(store_id=1, department='D', trigger_types=['WOW'])
+    merged = _merge_signals([wow, chain, osa])
+    assert len(merged) == 2
+    actionable = next(signal for signal in merged if signal['signal_type'] == 'OSA_STORE_ACTIONABLE')
+    assert actionable['trigger_types'] == ['WOW', 'VS_CHAIN']
+    assert actionable['wow_drift_pp'] == -3.0
+    assert actionable['chain_gap_pp'] == -4.0
+    assert set(actionable['quality']) == {'this_week', 'chain_this_week'}
+
+
+def test_markdown_compliance_wow_and_vs_chain_merge():
+    base = {
+        'this_week_markdowns_due': 100,
+        'this_week_completed_on_time': 70,
+        'this_week_compliance_rate': 70.0,
+        'last_week_compliance_rate': 80.0,
+        'chain_compliance_rate': 85.0,
+        'below_chain_pp': 15.0,
+        'this_week_at_risk_value': 100.0,
+        'workload': {'volume_classification': 'STABLE'},
+    }
+    wow = make_markdown_compliance_signal(
+        store_id=10, trigger_types=['WOW'], wow_change_pp=-10.0, **base,
+    )
+    vs_chain = make_markdown_compliance_signal(
+        store_id=10, trigger_types=['VS_CHAIN'], **base,
+    )
+    merged = _merge_signals([wow, vs_chain])
+    assert len(merged) == 1
+    assert merged[0]['trigger_types'] == ['WOW', 'VS_CHAIN']
+    assert merged[0]['wow_change_pp'] == -10.0
+    assert merged[0]['below_chain_pp'] == 15.0
+    assert merged[0]['this_week_markdowns_due'] == 100
+
+
+def test_prompted_markdown_compliance_wow_and_vs_chain_merge():
+    base = {
+        'this_week_prompts_issued': 100,
+        'this_week_prompts_actioned_on_time': 70,
+        'this_week_compliance_rate': 70.0,
+        'last_week_compliance_rate': 80.0,
+        'chain_compliance_rate': 85.0,
+        'below_chain_pp': 15.0,
+        'median_response_minutes': 74.0,
+        'this_week_at_risk_value': 100.0,
+        'workload': {'volume_classification': 'STABLE'},
+    }
+    wow = make_prompted_markdown_compliance_signal(
+        store_id=10, trigger_types=['WOW'], wow_change_pp=-10.0, **base,
+    )
+    vs_chain = make_prompted_markdown_compliance_signal(
+        store_id=10, trigger_types=['VS_CHAIN'], **base,
+    )
+    merged = _merge_signals([wow, vs_chain])
+    assert len(merged) == 1
+    assert merged[0]['trigger_types'] == ['WOW', 'VS_CHAIN']
+    assert merged[0]['wow_change_pp'] == -10.0
+    assert merged[0]['below_chain_pp'] == 15.0
+    assert merged[0]['this_week_prompts_issued'] == 100
+    assert merged[0]['median_response_minutes'] == 74.0
