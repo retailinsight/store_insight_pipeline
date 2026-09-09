@@ -130,9 +130,13 @@ def _r(check_id, status, details='d'):
             'details': details, 'owner': 'owner'}
 
 
-def test_notification_silent_when_all_ok():
+def test_notification_all_clear_sends_green_message():
     results = [_r('C1', 'OK'), _r('C2', 'OK')]
-    assert pm.build_notification(results, [], '2026-09-02', 'RUN1') is None
+    msg = pm.build_notification(results, [], '2026-09-02', 'RUN1')
+    assert msg is not None
+    assert 'green' in msg
+    assert '2/2' in msg
+    assert 'No action needed' in msg
 
 
 def test_notification_on_fail_lists_check_and_owner():
@@ -163,3 +167,75 @@ def test_notification_recovery_only():
     msg = pm.build_notification(results, ['C3'], '2026-09-02', 'RUN1')
     assert 'Recovered' in msg
     assert 'C3' in msg
+    assert 'green' in msg  # all-clear line still shown alongside recovery
+
+
+# ── update_incidents (WARN/UNKNOWN open incidents so recovery is reported) ──
+
+def test_incident_warn_opens_and_ok_resolves():
+    calls = []
+
+    def runner(sql):
+        calls.append(sql)
+        if sql.startswith('SELECT INCIDENT_KEY'):
+            return [{'INCIDENT_KEY': 'C1'}]
+        return []
+
+    resolved = pm.update_incidents(
+        runner, 'DB', 'RUN1', [_r('C1', 'OK'), _r('C2', 'WARN')])
+    assert resolved == ['C1']
+    assert any('MERGE INTO' in c and 'C2' in c and "'WARN'" in c
+               for c in calls)
+    assert any('RESOLVED' in c and 'C1' in c for c in calls)
+
+
+def test_incident_unknown_opens_too():
+    calls = []
+
+    def runner(sql):
+        calls.append(sql)
+        return []
+
+    pm.update_incidents(runner, 'DB', 'RUN1', [_r('C7', 'UNKNOWN')])
+    assert any('MERGE INTO' in c and 'C7' in c and "'UNKNOWN'" in c
+               for c in calls)
+
+
+def test_incident_ok_with_none_open_resolves_nothing():
+    calls = []
+
+    def runner(sql):
+        calls.append(sql)
+        return []  # no open incident
+
+    resolved = pm.update_incidents(runner, 'DB', 'RUN1', [_r('C1', 'OK')])
+    assert resolved == []
+    assert not any('MERGE INTO' in c for c in calls)
+
+
+def test_notification_shows_missing_owner():
+    results = [_r('C1', 'FAIL', 'short feed')]
+    results[0]['owner'] = ''
+    msg = pm.build_notification(results, [], '2026-09-02', 'RUN1')
+    assert 'Owner not yet agreed' in msg
+    assert 'short feed' in msg
+    assert 'C1' in msg
+
+
+def test_notification_warn_has_required_fields():
+    results = [_r('C4', 'WARN', 'volume below baseline')]
+    msg = pm.build_notification(results, [], '2026-09-02', 'RUN1')
+    assert 'what is wrong' in msg
+    assert 'affected' in msg
+    assert 'what stores may see' in msg
+    assert 'first check' in msg
+    assert 'data date / run' in msg
+    assert 'owner' in msg
+    assert '2026-09-02' in msg
+    assert 'RUN1' in msg
+
+
+def test_tests_do_not_post_to_slack():
+    # build_notification is pure string formatting; these unit tests never
+    # call send_notification, so no test can post to the live channel.
+    assert True

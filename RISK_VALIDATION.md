@@ -3,8 +3,44 @@
 Living document: re-validate before each deployment step and after each production run.
 Validation helpers: `scripts/validate_deploy_risks.py`, `scripts/check_run_output.py`, `scripts/spot_check_cards.py`, `scripts/migrate_alerts_table_schema.py`, `scripts/validate_lineage_populated.py`, `scripts/validate_merge_snowflake.py`, `scripts/check_task_history.py` (read-only except migration; VPN required).
 
-Last live-Snowflake validation: **2026-09-04 (4 Sep morning gate OK at lag 2, 644 alerts, all monitoring checks OK; C1/C7 3 Sep incidents resolved; prod monitoring SP + task deployed at 12:14 UK and verified Slack notification at 12:27 via forced FAIL/recovery; `KPI_AVAILABILITY_REFRESH_TASK` deployed 12:50 (daily 11:45 UK, option A run-timing per Dan/Dave) and verified by manual SP call — 121 rows replaced, no duplicates)** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
-Requirements/code review updated: **2026-09-03 (PR #60 `GATE_LAG_DAYS` merged to `main`)**
+Last live-Snowflake validation: **2026-09-04 (4 Sep morning gate OK at lag 2, 644 alerts, all monitoring checks OK; C1/C7 3 Sep incidents resolved; prod monitoring SP + task deployed at 12:14 UK and verified Slack notification at 12:27 via forced FAIL/recovery; `KPI_AVAILABILITY_REFRESH_TASK` deployed 12:50 (daily 11:45 UK, option A run-timing per Dan/Dave) and verified by manual SP call — 121 rows replaced, no duplicates; 14:26 supervised monitoring run re-deployed the SP with the new view and verified all checks OK, C1 owner correctly shows 'Owner not yet agreed', and the new `LATEST_SYSTEM_HEALTH` columns are populated; 14:32 forced FAIL/recovery Slack message test sent to #store-insight-pilot-alerts — 2026-07-10 run produced C1 UNKNOWN, C3 FAIL, C6 FAIL and C7 UNKNOWN; 2026-09-04 run resolved C3/C6 and confirmed recovery message format)** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
+Requirements/code review updated: **2026-09-04 (monitoring view enriched with plain-English descriptions, colours, impact and first-response; Slack warnings re-structured into compact FAIL/WARN/UNKNOWN blocks with summary counts; recovery lines now carry plain-English titles; non-technical pinned channel guide rewritten; pinned schedule/support gaps documented; live Streamlit dashboard `PILOT_HEALTH_DASHBOARD` deployed at 15:05 UK reading `LATEST_SYSTEM_HEALTH` + alert volume/mix; monitoring SP redeployed with the new Slack format; 26 monitoring unit tests pass, ruff clean)**
+
+---
+
+## ✅ Monitoring now posts daily — 7 Sep: all-green heartbeat + WARN recovery
+
+Per Elaheh's request after the 6 Sep WARN silently cleared: `pilot_monitoring.py`
+changed so a Slack message is sent **every** run, and incidents open on any
+non-OK status (not just FAIL).
+
+- `update_incidents()` now opens/refreshes an incident on FAIL/WARN/UNKNOWN and
+  stores the real severity; an OK run resolves it → recovery line in Slack.
+- `build_notification()` no longer returns `None` on all-OK — it appends
+  `:large_green_circle: All N/N checks green … No action needed today.`
+- Docs updated: `CHANNEL_GUIDE.md` + `RUNBOOK.md` now say no message = monitor
+  did not run (previously "silent when all OK").
+- Redeployed `STORE_INSIGHT_DB.PUBLIC.SP_RUN_MONITORING` + `MONITORING_TASK`
+  (resumed, daily 07:00 UK). Verified live: manual run `MON_2026-09-07_cb3f93b4`
+  returned all-OK with `slack sent`; no open incidents.
+- 29 monitoring unit tests pass (3 new: WARN opens incident, UNKNOWN opens,
+  all-clear message).
+
+---
+
+## ✅ RESOLVED same day — 6 Sep: feedback feed short at 06:00 gate (C1/C7 WARN, self-recovered)
+
+Sunday 06:00 gate flagged `feedback` SUSPECT for CHECK_DATE 3 Sep: 1,145 rows vs
+baseline 1,569 (~73%). `ACTION_TAKEN = FLAGGED` (signals marked SUSPECT; detectors
+NOT skipped), so the run still shipped a normal 584 alerts across all types.
+
+- The 11:30 source-volume check the same day showed feedback recovered (1,190
+  rows, OK) — a late/short landing, not data loss. `FEEDBACK_V1` has rows through
+  5 Sep.
+- 7 Sep run fully clean: all five feeds OK at both 06:00 and 11:30, all 7
+  monitoring checks green, 584 alert rows.
+- No rerun needed (gate flagged, did not skip). If feedback shorts again at
+  06:00, chase the feed-load owner (still TBC — Dan naming).
 
 ---
 
