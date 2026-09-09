@@ -4,7 +4,21 @@ Living document: re-validate before each deployment step and after each producti
 Validation helpers: `scripts/validate_deploy_risks.py`, `scripts/check_run_output.py`, `scripts/spot_check_cards.py`, `scripts/migrate_alerts_table_schema.py`, `scripts/validate_lineage_populated.py`, `scripts/validate_merge_snowflake.py`, `scripts/check_task_history.py` (read-only except migration; VPN required).
 
 Last live-Snowflake validation: **2026-09-04 (4 Sep morning gate OK at lag 2, 644 alerts, all monitoring checks OK; C1/C7 3 Sep incidents resolved; prod monitoring SP + task deployed at 12:14 UK and verified Slack notification at 12:27 via forced FAIL/recovery; `KPI_AVAILABILITY_REFRESH_TASK` deployed 12:50 (daily 11:45 UK, option A run-timing per Dan/Dave) and verified by manual SP call — 121 rows replaced, no duplicates; 14:26 supervised monitoring run re-deployed the SP with the new view and verified all checks OK, C1 owner correctly shows 'Owner not yet agreed', and the new `LATEST_SYSTEM_HEALTH` columns are populated; 14:32 forced FAIL/recovery Slack message test sent to #store-insight-pilot-alerts — 2026-07-10 run produced C1 UNKNOWN, C3 FAIL, C6 FAIL and C7 UNKNOWN; 2026-09-04 run resolved C3/C6 and confirmed recovery message format)** (account `UUTQCJV-UKCOOP`, `STORE_INSIGHT_DB.PUBLIC`)
-Requirements/code review updated: **2026-09-04 (monitoring view enriched with plain-English descriptions, colours, impact and first-response; Slack warnings re-structured into compact FAIL/WARN/UNKNOWN blocks with summary counts; recovery lines now carry plain-English titles; non-technical pinned channel guide rewritten; pinned schedule/support gaps documented; live Streamlit dashboard `PILOT_HEALTH_DASHBOARD` deployed at 15:05 UK reading `LATEST_SYSTEM_HEALTH` + alert volume/mix; monitoring SP redeployed with the new Slack format; 26 monitoring unit tests pass, ruff clean)**
+Requirements/code review updated: **2026-09-09 (additive OSCA KPI schema and DEV validation)**
+
+## ✅ OSCA KPI columns added and populated in DEV only — 2026-09-09
+
+- Dan approved adding, not replacing, two Waste-pattern KPI groups: OSCA and Store Controllable
+  OSCA (`PCT`, `WOW_CHANGE_PP`, `CLUSTER_PCT`, `TREND_DIRECTION`, `DETAILS_JSON`).
+- Deployment adds all ten columns idempotently before registering the KPI SP. Production was not
+  altered; only `STORE_INSIGHT_DEV.PUBLIC.KPI_AVAILABILITY_SUMMARY` now has the 38-column schema.
+- First DEV call failed before delete/write because the live source column is `INVENTORY`, not
+  `PERPETUAL_INVENTORY_QUANTITY`; the loader alias was corrected and the SP redeployed.
+- Approved retry replaced only 9 Sep DEV rows: 121 rows / 121 stores, all ten scalar/JSON columns
+  populated. Both details JSON fields have category and time-of-day structures on 121/121 rows.
+- Existing Availability columns remain for API compatibility. DEV task remains suspended.
+- Production gate: PR review, API contract check, idempotent production column migration, SP/task
+  deploy with parent restoration, then watched KPI run and monitoring verification.
 
 ---
 
