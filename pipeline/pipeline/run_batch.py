@@ -347,15 +347,50 @@ def run_single_date(
         cards = pipeline_result
         raw_signals = enriched_signals = None
 
-    write_alerts(
-        session,
-        cards,
-        run_date=run_date,
-        overwrite=overwrite,
-        full_replace=full_replace,
-        target_table=target_table,
-        cfg=cfg,
-    )
+    queue_settings = getattr(cfg, "queue", None) if cfg else None
+    if queue_settings and queue_settings.enabled:
+        from store_insight.pipeline.stages._6_queue.apply import apply_queue, write_queue
+        from store_insight.pipeline.stages._6_queue.plan import QueueConfig
+
+        alerts_table = target_table or (
+            cfg.output.alerts if not isinstance(cfg, dict) else cfg["output"]["alerts"]
+        )
+        queue_cfg = QueueConfig(
+            max_live_per_store=queue_settings.max_live_per_store,
+            max_new_per_day=queue_settings.max_new_per_day,
+            expiry_days=queue_settings.expiry_days,
+            suppression_days=queue_settings.suppression_days,
+            no_suppression_types=frozenset(queue_settings.no_suppression_types),
+        )
+        live_cards, carried_ids, prev_run_date, plan = apply_queue(
+            session,
+            cards,
+            run_date,
+            alerts_table,
+            action_status_table=queue_settings.action_status_table,
+            queue_cfg=queue_cfg,
+        )
+        write_queue(
+            session,
+            live_cards,
+            carried_ids,
+            prev_run_date,
+            plan,
+            run_date,
+            alerts_table,
+            write_alerts_fn=write_alerts,
+            cfg=cfg,
+        )
+    else:
+        write_alerts(
+            session,
+            cards,
+            run_date=run_date,
+            overwrite=overwrite,
+            full_replace=full_replace,
+            target_table=target_table,
+            cfg=cfg,
+        )
 
     if deterministic:
         stats = capture_run_stats(cards, raw_signals, enriched_signals)

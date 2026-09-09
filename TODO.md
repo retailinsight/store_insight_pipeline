@@ -1,6 +1,20 @@
 # Store Insight — TODO
 
-Last updated: 2026-09-04
+Last updated: 2026-09-09
+
+## Done / current (2026-09-09)
+
+- [x] **PR #61 merged by Dan — pilot monitoring dashboard.** Added the live pilot health
+      dashboard, plain-English Slack alerts and channel guide, daily all-green heartbeat,
+      and WARN/UNKNOWN recovery notifications.
+- [x] **Upstream pipeline PRs #6 and #7 merged.** Replaced the broad `OSA` alert with
+      `OSA_STORE_ACTIONABLE` and added the standalone `OSA_BIG_DROP` alert. PR #62 then
+      synchronised those changes into this repository.
+- [x] **Upstream pipeline PR #8 merged by Dan — alert queue stage 6.** Implements the
+      per-store live cap, daily admission cap, seven-day expiry and per-family suppression.
+- [ ] **Synchronise upstream PR #8 into this repository.** Implementation and tests are on
+      `sync/pipeline-alert-queue`; 749 tests pass, 2 skipped. Open the downstream PR for
+      Dan's review.
 
 ## Next / in flight (2026-09-03)
 

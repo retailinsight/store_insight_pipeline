@@ -358,6 +358,7 @@ def _card_schema(emit_affected_products: bool = False):
             StructField("QUALITY_REASON", StringType()),
             StructField("SKILL_FILE_USED", StringType()),
             StructField("FALLBACK_USED", StringType()),
+            StructField("FIRST_SENT_DATE", StringType()),
     ]
     if emit_affected_products:
         fields.append(StructField("AFFECTED_PRODUCTS", VariantType()))
@@ -567,6 +568,7 @@ def _card_to_row(card: dict, run_date: str, emit_affected_products: bool = False
         card.get("quality_reason", ""),
         card.get("skill_file_used", ""),
         "TRUE" if card.get("fallback_used") else "FALSE",
+        card.get("first_sent_date", run_date),
     )
     if emit_affected_products:
         row = row + (_affected_products(card),)

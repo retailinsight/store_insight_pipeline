@@ -368,3 +368,31 @@ logging:
   write_signals:  false
   write_enriched: false
   write_run_log:  false
+
+# ── Alert queue (stage 6) ────────────────────────────────────────────────────
+# Suppression, expiry and daily admission caps. Rules agreed with Daniel,
+# 9 Sep 2026 (see prds/prd-alert-suppression-and-queue.md).
+#
+# ALERTS_PIPELINE carries only the live queue, re-written under each day's
+# RUN_DATE (the store app reads everything at the latest RUN_DATE per store).
+# Suppressed / expired / actioned / not-admitted alerts go to
+# <alerts_table>_QUEUE_LOG instead.
+#
+#   enabled              : master switch — off until the client is ready
+#   max_live_per_store   : hard ceiling on live alerts per store
+#   max_new_per_day      : newly admitted alerts per store per day (hard cap;
+#                          freed slots do not raise it). Cold-start stores
+#                          fill straight to max_live_per_store instead
+#   expiry_days          : unactioned alerts expire after this many days
+#                          (in_progress alerts are exempt)
+#   suppression_days     : re-alert window for suppressed families
+#   no_suppression_types : signal types that may re-fire immediately
+#   action_status_table  : where the store app records completed/in_progress
+queue:
+  enabled:              false
+  max_live_per_store:   8
+  max_new_per_day:      3
+  expiry_days:          7
+  suppression_days:     7
+  no_suppression_types: [OSA_BIG_DROP, OSA_RECURRING_SLOT, COMPLIANCE]
+  action_status_table:  "STORE_INSIGHT_DB.PUBLIC.ACTION_STATUS"
