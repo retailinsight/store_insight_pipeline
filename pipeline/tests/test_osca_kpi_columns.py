@@ -1,10 +1,15 @@
 import sys
+from pathlib import Path
 from types import ModuleType
 
 import pytest
 from snowflake.snowpark import Session
 
-from kpi import kpi_availability_batch as kb
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from kpi import kpi_availability_batch as kb  # noqa: E402
 
 credentials_module = ModuleType("snowflake_credentials")
 
