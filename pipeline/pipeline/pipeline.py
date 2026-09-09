@@ -314,7 +314,10 @@ def _build_card(
     }
 
 
-def _card_schema(emit_affected_products: bool = False):
+def _card_schema(
+    emit_affected_products: bool = False,
+    emit_first_sent_date: bool = False,
+):
     """Snowflake output-table schema. Kept adjacent to ``_card_to_row`` — if
     you add a column, edit both.
 
@@ -359,6 +362,8 @@ def _card_schema(emit_affected_products: bool = False):
             StructField("SKILL_FILE_USED", StringType()),
             StructField("FALLBACK_USED", StringType()),
     ]
+    if emit_first_sent_date:
+        fields.append(StructField("FIRST_SENT_DATE", StringType()))
     if emit_affected_products:
         fields.append(StructField("AFFECTED_PRODUCTS", VariantType()))
     return StructType(fields)
@@ -537,7 +542,12 @@ def _write_investigations_debug_table(session, table_name, results, run_date, cf
     print(f"[pipeline] {len(rows)} investigations written → {table_name}")
 
 
-def _card_to_row(card: dict, run_date: str, emit_affected_products: bool = False) -> tuple:
+def _card_to_row(
+    card: dict,
+    run_date: str,
+    emit_affected_products: bool = False,
+    emit_first_sent_date: bool = False,
+) -> tuple:
     """Serialise one card dict to a row tuple matching ``_card_schema``."""
     row = (
         run_date,
@@ -568,6 +578,8 @@ def _card_to_row(card: dict, run_date: str, emit_affected_products: bool = False
         card.get("skill_file_used", ""),
         "TRUE" if card.get("fallback_used") else "FALSE",
     )
+    if emit_first_sent_date:
+        row = row + (card.get("first_sent_date", run_date),)
     if emit_affected_products:
         row = row + (_affected_products(card),)
     return row
@@ -1053,13 +1065,23 @@ def write_alerts(
         return
 
     emit_affected_products = _emit_affected_products(cfg)
+    emit_first_sent_date = bool(getattr(getattr(cfg, "queue", None), "enabled", False))
     rows = [
-        _card_to_row(c, run_date, emit_affected_products=emit_affected_products)
+        _card_to_row(
+            c,
+            run_date,
+            emit_affected_products=emit_affected_products,
+            emit_first_sent_date=emit_first_sent_date,
+        )
         for c in cards
     ]
     table = target_table or _output_table(cfg)
     df = session.create_dataframe(
-        rows, schema=_card_schema(emit_affected_products=emit_affected_products)
+        rows,
+        schema=_card_schema(
+            emit_affected_products=emit_affected_products,
+            emit_first_sent_date=emit_first_sent_date,
+        ),
     )
 
     if full_replace:

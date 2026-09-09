@@ -415,6 +415,25 @@ class ScoringConfig(BaseModel):
     wow_ceilings: dict[str, float] = {}
 
 
+class QueueSettings(BaseModel):
+    """Alert queue — suppression, expiry and daily admission caps (stage 6).
+
+    Rules agreed with Daniel, 9 Sep 2026. ``no_suppression_types`` alerts may
+    re-fire immediately; everything else is suppressed for
+    ``suppression_days`` after a send.
+    """
+
+    enabled: bool = False
+    max_live_per_store: int = 8
+    max_new_per_day: int = 3
+    expiry_days: int = 7
+    suppression_days: int = 7
+    no_suppression_types: list[str] = [
+        "OSA_BIG_DROP", "OSA_RECURRING_SLOT", "COMPLIANCE",
+    ]
+    action_status_table: str = "STORE_INSIGHT_DB.PUBLIC.ACTION_STATUS"
+
+
 class LoggingConfig(BaseModel):
     """Logging and intermediate write configuration."""
 
@@ -477,6 +496,7 @@ class PipelineConfig(BaseModel):
     schedule: ScheduleConfig
     scoring: ScoringConfig
     logging: LoggingConfig
+    queue: QueueSettings = QueueSettings()
     data_quality: DataQualityConfig = DataQualityConfig()
     client_name: str = "default"
 

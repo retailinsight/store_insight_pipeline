@@ -251,6 +251,62 @@ def _date_range(start: datetime.date, end: datetime.date):
         current += datetime.timedelta(days=1)
 
 
+def write_alerts_with_queue(
+    session,
+    cards,
+    run_date: str,
+    overwrite: bool = False,
+    full_replace: bool = False,
+    target_table: str | None = None,
+    cfg=None,
+):
+    """Write cards through Stage 6 when enabled, otherwise use the standard writer."""
+    queue_settings = getattr(cfg, "queue", None) if cfg else None
+    if not queue_settings or not queue_settings.enabled:
+        return write_alerts(
+            session,
+            cards,
+            run_date=run_date,
+            overwrite=overwrite,
+            full_replace=full_replace,
+            target_table=target_table,
+            cfg=cfg,
+        )
+
+    from store_insight.pipeline.stages._6_queue.apply import apply_queue, write_queue
+    from store_insight.pipeline.stages._6_queue.plan import QueueConfig
+
+    alerts_table = target_table or (
+        cfg.output.alerts if not isinstance(cfg, dict) else cfg["output"]["alerts"]
+    )
+    queue_cfg = QueueConfig(
+        max_live_per_store=queue_settings.max_live_per_store,
+        max_new_per_day=queue_settings.max_new_per_day,
+        expiry_days=queue_settings.expiry_days,
+        suppression_days=queue_settings.suppression_days,
+        no_suppression_types=frozenset(queue_settings.no_suppression_types),
+    )
+    live_cards, carried_ids, prev_run_date, plan = apply_queue(
+        session,
+        cards,
+        run_date,
+        alerts_table,
+        action_status_table=queue_settings.action_status_table,
+        queue_cfg=queue_cfg,
+    )
+    return write_queue(
+        session,
+        live_cards,
+        carried_ids,
+        prev_run_date,
+        plan,
+        run_date,
+        alerts_table,
+        write_alerts_fn=write_alerts,
+        cfg=cfg,
+    )
+
+
 def run_single_date(
     session,
     analysis_date: datetime.date,
@@ -347,7 +403,7 @@ def run_single_date(
         cards = pipeline_result
         raw_signals = enriched_signals = None
 
-    write_alerts(
+    write_alerts_with_queue(
         session,
         cards,
         run_date=run_date,
