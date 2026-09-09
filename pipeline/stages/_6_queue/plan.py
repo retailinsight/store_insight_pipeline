@@ -26,7 +26,6 @@ Rules (Daniel, Slack 9 Sep 2026 — see the monorepo PRD
 import datetime
 from dataclasses import dataclass, field
 
-
 NO_SUPPRESSION_TYPES = frozenset({
     'OSA_BIG_DROP',
     'OSA_RECURRING_SLOT',
