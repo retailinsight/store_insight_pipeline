@@ -13,7 +13,6 @@ Rules confirmed by Daniel (Slack, 9 Sep 2026), captured in the monorepo PRD
 """
 
 import pytest
-
 from store_insight.pipeline.stages._6_queue.plan import QueueConfig, plan_queue
 
 

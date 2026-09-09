@@ -139,7 +139,10 @@ def write_queue_log(session, alerts_table: str, run_date: str, log: list) -> Non
         f"DELETE FROM {table} WHERE RUN_DATE = '{run_date}'"
     ).collect()
     from snowflake.snowpark.types import (
-        IntegerType, StringType, StructField, StructType,
+        IntegerType,
+        StringType,
+        StructField,
+        StructType,
     )
     schema = StructType([
         StructField('RUN_DATE', StringType()),
