@@ -31,6 +31,36 @@ def local_session():
     session.close()
 
 
+def test_tod_osa_carries_the_analysis_date_per_day(local_session):
+    """CRT displays a date next to each day in Performance by Time of Day, so
+    the time-of-day aggregation must expose the day's ANALYSIS_DATE."""
+    osa = local_session.create_dataframe(
+        [
+            (1, "2026-09-03", 1, "Wed", 80.0, 20.0, 5.0),
+            (1, "2026-09-03", 2, "Wed", 60.0, 40.0, 5.0),
+            (1, "2026-09-04", 1, "Thu", 90.0, 10.0, 5.0),
+        ],
+        schema=[
+            "STORE_ID",
+            "ANALYSIS_DATE",
+            "REPORTING_PERIOD_ID",
+            "DAY_NAME",
+            "ACTUAL_SALES_VOLUME",
+            "LOST_SALES_VOLUME",
+            "INVENTORY_QTY",
+        ],
+    )
+
+    rows = kb._tod_osa(osa, "2026-09-01", "2026-09-07").collect()
+
+    dates = {(r["DAY_NAME"], int(r["REPORTING_PERIOD_ID"])): str(r["TOD_DATE"])[:10] for r in rows}
+    assert dates == {
+        ("Wed", 1): "2026-09-03",
+        ("Wed", 2): "2026-09-03",
+        ("Thu", 1): "2026-09-04",
+    }
+
+
 def test_store_osca_separates_total_and_store_controllable_lost_sales(local_session):
     osa = local_session.create_dataframe(
         [
