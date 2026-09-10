@@ -325,6 +325,7 @@ def _tod_osa(osa, start: str, end: str):
             F.sum("ACTUAL_SALES_VOLUME").alias("TOD_SALES"),
             F.sum("LOST_SALES_VOLUME").alias("TOD_LSV"),
             _store_controlled_lsv().alias("TOD_STORE_CONTROLLED_LSV"),
+            F.max("ANALYSIS_DATE").alias("TOD_DATE"),
         )
         .with_column("TOD_OSA", _osa_pct(F.col("TOD_SALES"), F.col("TOD_LSV")))
         .with_column(
@@ -603,11 +604,14 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
         # Time of day analysis
         tod_store = tod_by_store.get(sid, [])
         tod_by_day: dict = {}
+        tod_date_by_day: dict = {}
         for tr in tod_store:
             tod_by_day.setdefault(tr["DAY_NAME"], {})[int(tr["REPORTING_PERIOD_ID"])] = {
                 "osca": float(tr["TOD_OSA"] or 0),
                 "store_controllable_osca": float(tr["TOD_STORE_CONTROLLABLE_OSCA"] or 0),
             }
+            if tr["TOD_DATE"] is not None:
+                tod_date_by_day[tr["DAY_NAME"]] = str(tr["TOD_DATE"])[:10]
 
         time_of_day = []
         store_time_of_day = []
@@ -632,8 +636,14 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
                         "rag_status": "green" if store_pct >= OSA_TARGET * 100 else "red",
                     })
             if day_periods:
-                time_of_day.append({"day": day_name, "performance": day_periods})
-                store_time_of_day.append({"day": day_name, "performance": store_day_periods})
+                day_entry = {"day": day_name, "performance": day_periods}
+                store_day_entry = {"day": day_name, "performance": store_day_periods}
+                day_date = tod_date_by_day.get(day_name)
+                if day_date:
+                    day_entry["date"] = day_date
+                    store_day_entry["date"] = day_date
+                time_of_day.append(day_entry)
+                store_time_of_day.append(store_day_entry)
 
         # Time-of-day breakdown for the TIME_OF_DAY_BREAKDOWN column
         tod_breakdown = []
@@ -642,6 +652,9 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
             if not periods:
                 continue
             entry = {"day": DAY_FULL_NAMES[day_name]}
+            day_date = tod_date_by_day.get(day_name)
+            if day_date:
+                entry["date"] = day_date
             for pid, key in TOD_PERIOD_KEYS.items():
                 if pid in periods:
                     entry[key] = f"{periods[pid]['osca'] * 100:.1f}%"
