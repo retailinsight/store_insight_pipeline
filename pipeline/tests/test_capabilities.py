@@ -61,9 +61,9 @@ def test_required_contracts_handles_real_osa_wow_detector():
 
 
 def test_required_contracts_handles_real_tick_and_flick_detector():
-    from store_insight.pipeline.stages._1_detect.detectors.compliance import tick_and_flick
+    from store_insight.pipeline.stages._1_detect.detectors.compliance import tick_and_flick_wow
 
-    assert caps.required_contracts(tick_and_flick.detect) == {'feedback'}
+    assert caps.required_contracts(tick_and_flick_wow.detect) == {'feedback'}
 
 
 def test_required_contracts_handles_real_waste_dept_breakdown_gatherer():
@@ -159,7 +159,8 @@ def test_validate_disabled_signal_type_skips_its_gatherers():
         'detectors': {
             'enabled': [
                 'osa_store_actionable.wow', 'osa_store_actionable.vs_chain',
-                'compliance.tick_and_flick',
+                'compliance.tick_and_flick_wow',
+                'compliance.tick_and_flick_vs_chain',
             ],
         },
         'gatherers': {},  # No gatherers to avoid validation errors

@@ -177,15 +177,15 @@ class ThresholdsConfig(BaseModel):
     @classmethod
     def validate_compliance_thresholds(cls, v: dict[str, Any]) -> dict[str, Any]:
         """Validate COMPLIANCE threshold ranges."""
-        if "min_wow_increase" in v:
-            if not 0.0 <= v["min_wow_increase"] <= 1.0:
+        if "min_compliance_wow_drop" in v:
+            if not 0.0 <= v["min_compliance_wow_drop"] <= 1.0:
                 raise ValueError(
-                    f"COMPLIANCE.min_wow_increase must be between 0.0 and 1.0, got {v['min_wow_increase']}"
+                    f"COMPLIANCE.min_compliance_wow_drop must be between 0.0 and 1.0, got {v['min_compliance_wow_drop']}"
                 )
-        if "min_chain_outperform" in v:
-            if not 0.0 <= v["min_chain_outperform"] <= 1.0:
+        if "min_compliance_chain_gap" in v:
+            if not 0.0 <= v["min_compliance_chain_gap"] <= 1.0:
                 raise ValueError(
-                    f"COMPLIANCE.min_chain_outperform must be between 0.0 and 1.0, got {v['min_chain_outperform']}"
+                    f"COMPLIANCE.min_compliance_chain_gap must be between 0.0 and 1.0, got {v['min_compliance_chain_gap']}"
                 )
         return v
 

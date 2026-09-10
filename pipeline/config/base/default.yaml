@@ -69,7 +69,8 @@ detectors:
   enabled:
     - osa_big_drop.big_drop
     - osa_recurring_slot.recurring_slot
-    - compliance.tick_and_flick
+    - compliance.tick_and_flick_wow
+    - compliance.tick_and_flick_vs_chain
     - markdown_compliance.wow
     - markdown_compliance.vs_chain
     - markdown_override.vs_chain
@@ -109,9 +110,9 @@ detector_config:
       min_items:             2        # min qualifying items in the slot to fire
 
     COMPLIANCE:
-      min_wow_increase:        0.10   # TICK_AND_FLICK — min WoW rise
-      min_chain_outperform:    0.05   # TICK_AND_FLICK — min gap above chain
-      min_alerts_worked:       5      # TICK_AND_FLICK — min alerts worked
+      min_compliance_wow_drop:   0.10   # TICK_AND_FLICK — min WoW rise in TF rate
+      min_compliance_chain_gap:  0.05   # TICK_AND_FLICK — min gap above chain TF rate
+      min_alerts_worked:         5      # TICK_AND_FLICK — min alerts worked
 
     MARKDOWN_COMPLIANCE:
       min_markdown_compliance_wow_drop:    0.05 # WOW — min WoW drop (ratio)

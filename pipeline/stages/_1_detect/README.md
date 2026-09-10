@@ -23,7 +23,8 @@ _1_detect/
     │   ├── vs_chain.py
     │   └── repeat.py
     ├── compliance/
-    │   └── tick_and_flick.py
+    │   ├── tick_and_flick_wow.py
+    │   └── tick_and_flick_vs_chain.py
     ├── markdown_override/
     │   ├── wow.py
     │   └── vs_chain.py
@@ -85,8 +86,9 @@ for the same store-department and will be merged into one signal.
 
 ### Compliance signal — `make_compliance_signal()`
 
-Produced by `compliance/tick_and_flick`.  
-`merge_key = ('COMPLIANCE', store_id)` — store-level, no department.
+Produced by `compliance/tick_and_flick_wow` and `compliance/tick_and_flick_vs_chain`.
+`merge_key = ('COMPLIANCE', store_id)` — store-level, no department; the two
+sub-detectors merge into a single signal when both fire.
 
 | Field | Type | Description |
 |---|---|---|
@@ -240,9 +242,9 @@ The function automatically detects the input type and handles detector filtering
 | `min_alert_weeks` | `4` | OSA REPEAT |
 | `min_osa_drop` | `0.05` | OSA REPEAT |
 | `min_weekly_lsv` | `50.0` | OSA REPEAT |
-| `min_wow_increase` | `0.10` | TICK_AND_FLICK |
-| `min_chain_outperform` | `0.05` | TICK_AND_FLICK |
-| `min_alerts_worked` | `5` | TICK_AND_FLICK |
+| `min_compliance_wow_drop` | `0.10` | TICK_AND_FLICK WOW |
+| `min_compliance_chain_gap` | `0.05` | TICK_AND_FLICK VS_CHAIN |
+| `min_alerts_worked` | `5` | TICK_AND_FLICK (both) |
 | `min_override_chain_gap` | `0.05` | MARKDOWN_OVERRIDE VS_CHAIN |
 | `min_override_wow_increase` | `0.05` | MARKDOWN_OVERRIDE WOW |
 | `min_total_markdowns` | `10` | MARKDOWN_OVERRIDE (both) |

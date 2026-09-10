@@ -83,7 +83,8 @@ def test_registry_mapping_matches_known_consumers():
         det.__name__.split('detectors.')[-1]: detector_sources(det)
         for det in registry.ALL_DETECTORS
     }
-    assert by_name['compliance.tick_and_flick'] == frozenset({'feedback'})
+    assert by_name['compliance.tick_and_flick_wow'] == frozenset({'feedback'})
+    assert by_name['compliance.tick_and_flick_vs_chain'] == frozenset({'feedback'})
     assert 'markdown_sales' in by_name['waste_trim.trim']
     assert by_name['osa_store_actionable.wow'] == frozenset({'osa'})
     assert by_name['osa_big_drop.big_drop'] == frozenset({'osa'})
