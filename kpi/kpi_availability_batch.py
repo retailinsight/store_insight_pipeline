@@ -677,6 +677,11 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
         }
         osca_details = {
             "performance_breakdown": {
+                "OSCA": f"{tw_osa * 100:.1f}%",
+                "STORE_CONTROLLABLE_OSCA": f"{tw_store_osca * 100:.1f}%",
+                "actionability": f"{actionability:.1f}%",
+                "Alert_compliance": f"{alert_compliance:.1f}%",
+                "tick_flick": f"{tick_flick:.1f}%",
                 "current_week": f"{tw_osa * 100:.1f}%",
                 "last_week": f"{lw_osa * 100:.1f}%",
                 "cluster_average": f"{cl_osa * 100:.1f}%",
@@ -688,6 +693,11 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
         }
         store_osca_details = {
             "performance_breakdown": {
+                "OSCA": f"{tw_osa * 100:.1f}%",
+                "STORE_CONTROLLABLE_OSCA": f"{tw_store_osca * 100:.1f}%",
+                "actionability": f"{actionability:.1f}%",
+                "Alert_compliance": f"{alert_compliance:.1f}%",
+                "tick_flick": f"{tick_flick:.1f}%",
                 "current_week": f"{tw_store_osca * 100:.1f}%",
                 "last_week": f"{lw_store_osca * 100:.1f}%",
                 "cluster_average": f"{cl_store_osca * 100:.1f}%",
