@@ -7,7 +7,7 @@ from store_insight.pipeline.stages._3_facts.config import GathererInfo
 
 METADATA = GathererInfo(
     name='expiry_date_compliance_facts',
-    signal_types=['EXPIRY_DATE_COMPLIANCE'],
+    signal_types=['EXPIRY_DATE_COMPLIANCE', 'BIG_DROP_EXPIRY_DATE_COMPLIANCE'],
     facts_keys=['chain_comparison', 'daily_performance_last_7d', 'worst_departments_top3',
                 'expiry_markdown_volume_dod', 'driver_assessment'],
     description='Trailing expiry compliance evidence from canonical synthetic rows.',
@@ -27,6 +27,8 @@ def _dates(start: str, end: str):
 
 def _classification(signal: dict) -> tuple[str, str]:
     store_change = signal.get('change_pp')
+    if store_change is None and signal.get('drop_pp') is not None:
+        store_change = -signal['drop_pp']
     chain_change = signal.get('chain_change_pp')
     if chain_change is not None and store_change is not None and abs(chain_change) < 1 and store_change < -5:
         return 'STORE_SPECIFIC', 'ABS_CHAIN_CHANGE_LT_1PP_AND_STORE_CHANGE_LT_NEG5PP'
@@ -38,6 +40,8 @@ def _classification(signal: dict) -> tuple[str, str]:
 def _driver(signal: dict) -> dict:
     workload = signal.get('workload') or {}
     change = signal.get('change_pp')
+    if change is None and signal.get('drop_pp') is not None:
+        change = -signal['drop_pp']
     direction = 'DETERIORATING' if change is not None and change < 0 else ('IMPROVING' if change is not None and change > 0 else 'STABLE')
     volume = workload.get('volume_classification', 'STABLE')
     deteriorating = direction == 'DETERIORATING'
@@ -58,7 +62,7 @@ def gather(expiry_date_compliance=None, signals=None, this_week_start=None, this
     rows = list(expiry_date_compliance.collect())
     result = {}
     for signal in signals:
-        if signal.get('signal_type') != 'EXPIRY_DATE_COMPLIANCE':
+        if signal.get('signal_type') not in METADATA.signal_types:
             continue
         sid = signal['store_id']
         store_rows = [row for row in rows if int(row['STORE_ID']) == sid]
@@ -93,11 +97,16 @@ def gather(expiry_date_compliance=None, signals=None, this_week_start=None, this
                           'compliance_pct': round(values['completed'] / values['due'] * 100, 2) if values['due'] else 0.0,
                           'checks_due': values['due'], 'missed': values['due'] - values['completed']})
         classification, rule = _classification(signal)
+        store_rate = signal.get('trailing_7d_compliance_rate', signal.get('this_day_compliance_rate'))
+        chain_rate = signal.get('chain_trailing_7d_compliance_rate', signal.get('chain_compliance_rate'))
+        store_change = signal.get('change_pp')
+        if store_change is None and signal.get('drop_pp') is not None:
+            store_change = -signal['drop_pp']
         result[sid] = {
-            'chain_comparison': {'store_trailing_7d_rate': signal.get('trailing_7d_compliance_rate'),
-                                 'chain_trailing_7d_rate': signal.get('chain_trailing_7d_compliance_rate'),
+            'chain_comparison': {'store_trailing_7d_rate': store_rate,
+                                 'chain_trailing_7d_rate': chain_rate,
                                  'gap_pp': -signal['below_chain_pp'] if signal.get('below_chain_pp') is not None else None,
-                                 'store_change_pp': signal.get('change_pp'), 'chain_change_pp': signal.get('chain_change_pp'),
+                                 'store_change_pp': store_change, 'chain_change_pp': signal.get('chain_change_pp'),
                                  'classification': classification, 'classification_rule': rule},
             'daily_performance_last_7d': performance,
             'worst_departments_top3': sorted(worst, key=lambda item: (item['compliance_pct'], -item['checks_due'], item['dept']))[:top_n],

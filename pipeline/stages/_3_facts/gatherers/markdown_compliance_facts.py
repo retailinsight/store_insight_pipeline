@@ -29,7 +29,7 @@ from store_insight.pipeline.stages._3_facts.config import GathererInfo
 
 METADATA = GathererInfo(
     name='markdown_compliance_facts',
-    signal_types=['MARKDOWN_COMPLIANCE'],
+    signal_types=['MARKDOWN_COMPLIANCE', 'BIG_DROP_MARKDOWN_COMPLIANCE'],
     facts_keys=['daily_performance_last_7d', 'worst_departments_top3', 'driver_assessment'],
     description=(
         'Daily on-time completion breakdown for the current week, '
@@ -106,6 +106,8 @@ def _build_worst_departments(rows: list[dict], store_id: int, week_start: str, w
 def _build_driver_assessment(signal: dict) -> dict:
     workload = signal.get('workload') or {}
     wow_change_pp = signal.get('wow_change_pp')
+    if wow_change_pp is None and signal.get('drop_pp') is not None:
+        wow_change_pp = -signal['drop_pp']
     volume_classification = workload.get('volume_classification', 'STABLE')
     volume_change_pct = workload.get('volume_change_pct')
 
@@ -166,7 +168,7 @@ def gather(markdown_compliance=None, signals=None, this_week_start=None, this_we
     rows = list(markdown_compliance.collect())
     result = {}
     for signal in signals:
-        if signal.get('signal_type') != 'MARKDOWN_COMPLIANCE':
+        if signal.get('signal_type') not in METADATA.signal_types:
             continue
         sid = signal['store_id']
         result[sid] = {

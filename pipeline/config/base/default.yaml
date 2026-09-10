@@ -129,6 +129,18 @@ detector_config:
       min_prompted_markdown_compliance_chain_gap:   0.05 # VS_CHAIN — min gap below chain (ratio)
       min_prompted_markdown_compliance_volume:        50   # min prompts issued this week
 
+    BIG_DROP_MARKDOWN_COMPLIANCE:
+      min_big_drop_markdown_compliance_drop:         0.05
+      min_big_drop_markdown_compliance_volume:         10
+
+    BIG_DROP_EXPIRY_DATE_COMPLIANCE:
+      min_big_drop_expiry_compliance_drop:           0.05
+      min_big_drop_expiry_compliance_volume:           10
+
+    BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE:
+      min_big_drop_prompted_markdown_compliance_drop: 0.05
+      min_big_drop_prompted_markdown_compliance_volume: 10
+
     MARKDOWN_OVERRIDE:
       min_override_chain_gap:    0.05 # pp — min gap vs chain to fire VS_CHAIN
       min_override_wow_increase: 0.05 # pp — min WoW rise to fire WOW

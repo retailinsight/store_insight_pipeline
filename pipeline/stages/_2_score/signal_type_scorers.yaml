@@ -47,6 +47,18 @@ PROMPTED_MARKDOWN_COMPLIANCE:
   name: prompted_markdown_compliance
   description: projected_cost = this_week_at_risk_value (pre-computed from the canonical synthetic DataFrame)
 
+BIG_DROP_MARKDOWN_COMPLIANCE:
+  name: big_drop_markdown_compliance
+  description: projected_cost = this_day_at_risk_value
+
+BIG_DROP_EXPIRY_DATE_COMPLIANCE:
+  name: big_drop_expiry_date_compliance
+  description: projected_cost = this_day_at_risk_value
+
+BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE:
+  name: big_drop_prompted_markdown_compliance
+  description: projected_cost = this_day_at_risk_value
+
 MARKDOWN_OVERRIDE:
   name: markdown_override
   description: projected_cost = this_week_overrides × avg_£_per_markdown_event (queried from markdown_log + markdown_sales)

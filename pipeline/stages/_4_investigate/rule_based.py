@@ -850,6 +850,98 @@ def _generate_expiry_date_compliance(signal: dict) -> dict:
     }
 
 
+def _generate_big_drop_compliance(signal: dict, label: str, due_key: str, completed_key: str,
+                                  completed_label: str, routine: str, volume_label: str) -> dict:
+    site_name = signal.get('site_name') or f"Store {signal['store_id']}"
+    due = signal.get(due_key, 0)
+    completed = signal.get(completed_key, 0)
+    rate = signal.get('this_day_compliance_rate', 0.0)
+    previous_rate = signal.get('prev_day_compliance_rate')
+    drop = signal.get('drop_pp') or 0.0
+    chain_rate = signal.get('chain_compliance_rate')
+    below_chain = signal.get('below_chain_pp')
+    facts = signal.get('facts') or {}
+    driver = facts.get('driver_assessment') or {}
+    worst_depts = [
+        row for row in facts.get('worst_departments_top3', [])
+        if str(row.get('dept') or '').strip()
+    ]
+
+    explanation_lines = [
+        f'{completed} of {due} {completed_label} today ({rate:.1f}%).',
+    ]
+    if previous_rate is not None:
+        explanation_lines.append(
+            f'The previous available day was {previous_rate:.1f}% — a drop of {drop:.1f}pp.'
+        )
+    if chain_rate is not None and below_chain is not None:
+        explanation_lines.append(
+            f'Chain average is {chain_rate:.1f}% — this store is {below_chain:.1f}pp below.'
+        )
+    if worst_depts:
+        dept_list = ', '.join(
+            f"{row['dept']} ({row['compliance_pct']:.1f}%)" for row in worst_depts[:3]
+        )
+        explanation_lines.append(f'Worst departments this week: {dept_list}.')
+
+    focus = ', '.join(row['dept'] for row in worst_depts[:3]) or 'the worst-performing departments'
+    target = f'{previous_rate:.1f}%' if previous_rate is not None else 'the previous-day rate'
+    volume = driver.get('volume_classification', 'STABLE')
+    volume_change = driver.get('volume_change_pct')
+    if driver.get('likely_driver') == 'WORKLOAD' and volume_change is not None:
+        action = (
+            f'{volume_label} volume is up {volume_change:.0f}% while compliance dropped {drop:.0f}pp. '
+            f'Store manager to review staffing and task coverage today, focusing on {focus}. '
+            f'Review tomorrow against {target}.'
+        )
+    else:
+        volume_context = (
+            f'{volume_label} volume is down {abs(volume_change):.0f}%'
+            if volume == 'DECREASING' and volume_change is not None
+            else f'{volume_label} volume is broadly unchanged'
+        )
+        action = (
+            f'{volume_context}, so workload does not explain the sudden drop. Store manager to review '
+            f'the {routine} with the team today, focusing on {focus}. Review tomorrow against {target}.'
+        )
+
+    at_risk = float(signal.get('this_day_at_risk_value') or 0.0)
+    cost = (
+        f'£{at_risk:,.2f} is at risk from today’s missed activity.'
+        if at_risk else f'The sudden fall in {label.lower()} increases immediate waste and availability risk.'
+    )
+    return {
+        'issue': f'{site_name}: {label} dropped {drop:.1f}pp to {rate:.1f}%',
+        'explanation': '\n'.join(explanation_lines),
+        'cost_if_not_fixed': cost,
+        'recommended_action': action,
+    }
+
+
+def _generate_big_drop_prompted_markdown_compliance(signal: dict) -> dict:
+    return _generate_big_drop_compliance(
+        signal, 'prompted-markdown compliance', 'this_day_prompts_issued',
+        'this_day_prompts_actioned_on_time', 'prompts were actioned on time',
+        'prompt response routine', 'Prompt',
+    )
+
+
+def _generate_big_drop_markdown_compliance(signal: dict) -> dict:
+    return _generate_big_drop_compliance(
+        signal, 'markdown compliance', 'this_day_markdowns_due',
+        'this_day_completed_on_time', 'markdowns were completed on time',
+        'markdown routine', 'Markdown',
+    )
+
+
+def _generate_big_drop_expiry_date_compliance(signal: dict) -> dict:
+    return _generate_big_drop_compliance(
+        signal, 'expiry-date compliance', 'this_day_checks_due',
+        'this_day_checks_completed', 'expiry checks were completed',
+        'expiry-check routine', 'Expiry check',
+    )
+
+
 def _generate_straight_to_bin(signal: dict) -> dict:
     """Generate narrative for a STRAIGHT_TO_BIN alert."""
     site_name = signal.get('site_name') or f"Store {signal['store_id']}"
@@ -978,6 +1070,15 @@ def generate(signal: dict) -> dict:
 
     if signal_type == 'WASTE_TRIM':
         return _generate_waste_trim(signal)
+
+    if signal_type == 'BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE':
+        return _generate_big_drop_prompted_markdown_compliance(signal)
+
+    if signal_type == 'BIG_DROP_MARKDOWN_COMPLIANCE':
+        return _generate_big_drop_markdown_compliance(signal)
+
+    if signal_type == 'BIG_DROP_EXPIRY_DATE_COMPLIANCE':
+        return _generate_big_drop_expiry_date_compliance(signal)
 
     if signal_type == 'STRAIGHT_TO_BIN':
         return _generate_straight_to_bin(signal)
