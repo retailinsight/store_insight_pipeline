@@ -2,7 +2,7 @@
 -- ===============================================
 -- Implements the canonical `feedback` contract for EoE by aliasing
 -- LSM_ALERT_FEEDBACK into the canonical column shape consumed by the
--- compliance.tick_and_flick detector and its breakdown gatherer.
+-- compliance.tick_and_flick_wow / compliance.tick_and_flick_vs_chain detectors and their breakdown gatherer.
 --
 -- ALERT_ANALYSIS_DATE filtering (to a two-week window) happens at pipeline
 -- runtime, not here.

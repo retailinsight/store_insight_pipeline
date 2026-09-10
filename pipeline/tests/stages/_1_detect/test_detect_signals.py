@@ -173,8 +173,8 @@ def test_detector_only_receives_declared_kwargs(patched_registry, fake_osa_df):
 
 @pytest.mark.parametrize('modname, expected', [
     ('store_insight.pipeline.stages._1_detect.detectors.osa.wow', 'osa.wow'),
-    ('store_insight.pipeline.stages._1_detect.detectors.compliance.tick_and_flick',
-     'compliance.tick_and_flick'),
+    ('store_insight.pipeline.stages._1_detect.detectors.compliance.tick_and_flick_wow',
+     'compliance.tick_and_flick_wow'),
     ('something.unusual', 'unusual'),
 ])
 def test_detector_module_name(modname, expected):

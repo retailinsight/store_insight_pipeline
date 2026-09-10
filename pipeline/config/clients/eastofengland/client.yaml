@@ -26,7 +26,8 @@ detectors:
     - osa_store_actionable.vs_chain
     - osa_big_drop.big_drop
     - osa_recurring_slot.recurring_slot
-    - compliance.tick_and_flick
+    - compliance.tick_and_flick_wow
+    - compliance.tick_and_flick_vs_chain
     - markdown_override.vs_chain
     - markdown_override.wow
     - waste.vs_chain

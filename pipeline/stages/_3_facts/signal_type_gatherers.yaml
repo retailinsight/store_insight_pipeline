@@ -51,7 +51,7 @@ OSA_RECURRING_SLOT:
 
 COMPLIANCE:
   - name: tick_and_flick_breakdown
-    description: Tick-and-flick alert-type breakdown for each flagged store (requires feedback DataFrame)
+    description: Tick-and-flick alert-type breakdown, seven-day trailing tick-and-flick count series, and driver assessment for each flagged store (requires feedback DataFrame)
 
 MARKDOWN_COMPLIANCE:
   - name: markdown_compliance_facts

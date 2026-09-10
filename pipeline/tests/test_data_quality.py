@@ -185,7 +185,7 @@ def test_feedback_required_when_compliance_enabled():
 
     class Cfg:
         class detectors:
-            enabled = ['compliance.tick_and_flick']
+            enabled = ['compliance.tick_and_flick_wow']
 
     issues = validate_source_data(
         osa=_make_df(100, _osa_fields()),

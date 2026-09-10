@@ -20,7 +20,8 @@ file that exposes a ``detect`` callable is loaded automatically by the registry.
     repeat.py       REPEAT         Items in store-dept have persistent weekly failures
 
   detectors/compliance/
-    tick_and_flick.py  TICK_AND_FLICK  Store tick-and-flick rate rising above chain average
+    tick_and_flick_wow.py       WOW       Store tick-and-flick rate rose week-on-week
+    tick_and_flick_vs_chain.py  VS_CHAIN  Store tick-and-flick rate above chain average
 
 Adding a New Detector
 ---------------------

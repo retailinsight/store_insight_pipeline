@@ -45,9 +45,9 @@ def synthetic_pipeline(monkeypatch, make_detector, make_gatherer):
     d_osa = make_detector('osa_store_actionable.wow', [osa_sig_store1, osa_sig_store2])
     d_osa.__name__ = 'store_insight.pipeline.stages._1_detect.detectors.osa_store_actionable.wow'
 
-    d_comp = make_detector('compliance.tick_and_flick', [compliance_sig])
+    d_comp = make_detector('compliance.tick_and_flick_wow', [compliance_sig])
     d_comp.__name__ = (
-        'store_insight.pipeline.stages._1_detect.detectors.compliance.tick_and_flick'
+        'store_insight.pipeline.stages._1_detect.detectors.compliance.tick_and_flick_wow'
     )
 
     monkeypatch.setattr(detect_registry, 'ALL_DETECTORS', [d_osa, d_comp])
@@ -146,7 +146,7 @@ def test_determinism_same_inputs_produce_same_outputs(synthetic_pipeline, fake_o
 
 
 def test_cfg_can_disable_detector_shrinking_output(synthetic_pipeline, fake_osa_df):
-    cfg = {'detectors': {'enabled': ['compliance.tick_and_flick']}}
+    cfg = {'detectors': {'enabled': ['compliance.tick_and_flick_wow']}}
     cards = _run(fake_osa_df, cfg=cfg)
     assert len(cards) == 1
     assert cards[0]['signal_type'] == 'COMPLIANCE'

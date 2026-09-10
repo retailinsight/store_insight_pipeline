@@ -56,10 +56,10 @@ class DetectorConfig:
     min_item_pattern_lsv: float  = 100.0
     min_items: int               = 2
 
-    # ---- TICK_AND_FLICK ------------------------------------------------
-    min_wow_increase: float     = 0.10
-    min_chain_outperform: float = 0.05
-    min_alerts_worked: int      = 5
+    # ---- TICK_AND_FLICK / COMPLIANCE -----------------------------------
+    min_compliance_wow_drop: float  = 0.10
+    min_compliance_chain_gap: float = 0.05
+    min_alerts_worked: int          = 5
 
     # ---- MARKDOWN_OVERRIDE ---------------------------------------------
     min_override_chain_gap: float   = 0.05

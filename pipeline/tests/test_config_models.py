@@ -128,7 +128,8 @@ class TestDetectorNameValidation:
             enabled=[
                 "osa_store_actionable.wow",
                 "osa_store_actionable.vs_chain",
-                "compliance.tick_and_flick",
+                "compliance.tick_and_flick_wow",
+                "compliance.tick_and_flick_vs_chain",
             ]
         )
         assert "osa_store_actionable.wow" in detectors.enabled
