@@ -146,6 +146,25 @@ def _store_controlled_lsv():
     )
 
 
+def _availability_performance_breakdown(
+    osca: float,
+    store_controllable_osca: float | None,
+    actionability: float,
+    alert_compliance: float,
+    tick_flick: float,
+):
+    return {
+        "OSCA": f"{osca:.1f}%",
+        "STORE_CONTROLLABLE_OSCA": (
+            f"{store_controllable_osca:.1f}%"
+            if store_controllable_osca is not None else None
+        ),
+        "actionability": f"{actionability:.1f}%",
+        "Alert_compliance": f"{alert_compliance:.1f}%",
+        "tick_flick": f"{tick_flick:.1f}%",
+    }
+
+
 def _date_range(end_date: date, days: int):
     start = end_date - timedelta(days=days - 1)
     return str(start), str(end_date)
@@ -644,11 +663,13 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
         }
 
         availability_details = {
-            "performance_breakdown": {
-                "actionability":    f"{actionability:.1f}%",
-                "Alert_compliance": f"{alert_compliance:.1f}%",
-                "tick_flick":       f"{tick_flick:.1f}%",
-            },
+            "performance_breakdown": _availability_performance_breakdown(
+                tw_osa * 100,
+                tw_store_osca * 100,
+                actionability,
+                alert_compliance,
+                tick_flick,
+            ),
             "summary":              summary,
             "top_drivers":          top_drivers,
             "category_performance": category_perf,

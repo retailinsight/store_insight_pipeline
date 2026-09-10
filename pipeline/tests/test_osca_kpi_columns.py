@@ -77,3 +77,20 @@ def test_osca_schema_migration_is_additive_and_complete():
     assert {statement.split(" EXISTS ", 1)[1].split()[0] for statement in session.statements} == set(
         deploy_kpi.OSCA_COLUMNS
     )
+
+
+def test_availability_performance_breakdown_includes_all_five_metrics():
+    assert kb._availability_performance_breakdown(89.64, 81.96, 85.2, 92.4, 25.0) == {
+        "OSCA": "89.6%",
+        "STORE_CONTROLLABLE_OSCA": "82.0%",
+        "actionability": "85.2%",
+        "Alert_compliance": "92.4%",
+        "tick_flick": "25.0%",
+    }
+
+
+def test_availability_performance_breakdown_preserves_missing_store_controllable_osca():
+    breakdown = kb._availability_performance_breakdown(89.64, None, 0.0, 0.0, 0.0)
+
+    assert breakdown["OSCA"] == "89.6%"
+    assert breakdown["STORE_CONTROLLABLE_OSCA"] is None
