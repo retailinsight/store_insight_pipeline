@@ -54,7 +54,23 @@ def test_signal_type_gatherers_populated():
         'OSA_STORE_ACTIONABLE', 'OSA_BIG_DROP', 'OSA_RECURRING_SLOT', 'COMPLIANCE', 'MARKDOWN_COMPLIANCE',
         'EXPIRY_DATE_COMPLIANCE', 'PROMPTED_MARKDOWN_COMPLIANCE', 'MARKDOWN_OVERRIDE', 'WASTE', 'WASTE_TRIM',
         'MARKDOWN_SELLTHROUGH', 'MARKDOWN_SKU', 'STRAIGHT_TO_BIN',
+        'BIG_DROP_MARKDOWN_COMPLIANCE', 'BIG_DROP_EXPIRY_DATE_COMPLIANCE',
+        'BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE',
     }
+
+
+def test_big_drop_compliance_types_reuse_matching_gatherers():
+    expected = {
+        'BIG_DROP_MARKDOWN_COMPLIANCE': 'markdown_compliance_facts',
+        'BIG_DROP_EXPIRY_DATE_COMPLIANCE': 'expiry_date_compliance_facts',
+        'BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE': 'prompted_markdown_compliance_facts',
+    }
+    for signal_type, gatherer_name in expected.items():
+        assert [
+            module.__name__.rsplit('.', 1)[-1]
+            for module in registry.SIGNAL_TYPE_GATHERERS[signal_type]
+        ] == [gatherer_name]
+        assert signal_type in registry.SIGNAL_TYPE_GATHERERS[signal_type][0].METADATA.signal_types
 
 
 def test_osa_dispatch_order_matches_yaml():

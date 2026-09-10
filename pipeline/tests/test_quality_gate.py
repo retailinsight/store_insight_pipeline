@@ -63,6 +63,9 @@ UNGATED_SOURCE_FAMILIES = (
     'expiry_date_compliance.',
     'markdown_compliance.',
     'prompted_markdown_compliance.',
+    'big_drop_expiry_date_compliance.',
+    'big_drop_markdown_compliance.',
+    'big_drop_prompted_markdown_compliance.',
     'straight_to_bin.',
 )
 

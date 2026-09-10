@@ -22,6 +22,48 @@ def _assert_card_keys(out):
         assert isinstance(v, str) and v, f"Field {k} is empty"
 
 
+@pytest.mark.parametrize(
+    ('signal_type', 'due_key', 'completed_key', 'label'),
+    [
+        ('BIG_DROP_MARKDOWN_COMPLIANCE', 'this_day_markdowns_due', 'this_day_completed_on_time', 'markdown compliance'),
+        ('BIG_DROP_EXPIRY_DATE_COMPLIANCE', 'this_day_checks_due', 'this_day_checks_completed', 'expiry-date compliance'),
+        ('BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE', 'this_day_prompts_issued', 'this_day_prompts_actioned_on_time', 'prompted-markdown compliance'),
+    ],
+)
+def test_big_drop_compliance_narratives(signal_type, due_key, completed_key, label):
+    signal = {
+        'signal_type': signal_type,
+        'store_id': 276,
+        'site_name': 'Manningtree',
+        'trigger_types': ['BIG_DROP'],
+        due_key: 40,
+        completed_key: 20,
+        'this_day_compliance_rate': 50.0,
+        'prev_day_compliance_rate': 80.0,
+        'drop_pp': 30.0,
+        'chain_compliance_rate': 85.0,
+        'below_chain_pp': 35.0,
+        'this_day_at_risk_value': 125.5,
+        'facts': {
+            'driver_assessment': {
+                'volume_classification': 'STABLE',
+                'likely_driver': 'COACHING',
+            },
+            'worst_departments_top3': [
+                {'dept': 'PRODUCE', 'compliance_pct': 25.0},
+            ],
+        },
+    }
+    out = generate(signal)
+    _assert_card_keys(out)
+    assert f'{label} dropped 30.0pp to 50.0%' in out['issue']
+    assert '20 of 40' in out['explanation']
+    assert '35.0pp below' in out['explanation']
+    assert 'PRODUCE (25.0%)' in out['explanation']
+    assert '£125.50' in out['cost_if_not_fixed']
+    assert 'PRODUCE' in out['recommended_action']
+
+
 # ---------------------------------------------------------------------------
 # OSA
 # ---------------------------------------------------------------------------

@@ -39,6 +39,21 @@ def test_score_all_stamps_score_on_sellthrough_signal():
     assert signals[0]['score'] == 4_000.0
 
 
+@pytest.mark.parametrize(
+    'signal_type',
+    [
+        'BIG_DROP_MARKDOWN_COMPLIANCE',
+        'BIG_DROP_EXPIRY_DATE_COMPLIANCE',
+        'BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE',
+    ],
+)
+def test_score_all_stamps_big_drop_compliance_cost(signal_type):
+    signals = [{'signal_type': signal_type, 'trigger_types': ['BIG_DROP'],
+                'this_day_at_risk_value': 125.5}]
+    score_all(signals, **_WEEK)
+    assert signals[0]['score'] == 125.5
+
+
 def test_score_all_multiple_signals_all_stamped():
     signals = [
         {'signal_type': 'OSA_STORE_ACTIONABLE', 'trigger_types': ['WOW'],

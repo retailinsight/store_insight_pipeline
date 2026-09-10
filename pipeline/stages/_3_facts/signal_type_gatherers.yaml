@@ -57,11 +57,23 @@ MARKDOWN_COMPLIANCE:
   - name: markdown_compliance_facts
     description: Daily on-time completion breakdown, worst departments, and workload/coaching driver assessment (requires canonical synthetic DataFrame)
 
+BIG_DROP_MARKDOWN_COMPLIANCE:
+  - name: markdown_compliance_facts
+    description: Daily on-time completion breakdown, worst departments, and workload/coaching driver assessment (requires canonical synthetic DataFrame)
+
 EXPIRY_DATE_COMPLIANCE:
   - name: expiry_date_compliance_facts
     description: Chain movement, complete daily performance, worst departments, expiry markdown movement, and driver assessment from synthetic rows
 
+BIG_DROP_EXPIRY_DATE_COMPLIANCE:
+  - name: expiry_date_compliance_facts
+    description: Chain movement, complete daily performance, worst departments, expiry markdown movement, and driver assessment from synthetic rows
+
 PROMPTED_MARKDOWN_COMPLIANCE:
+  - name: prompted_markdown_compliance_facts
+    description: Daily on-time actioned breakdown, worst departments, and workload/coaching driver assessment from synthetic rows
+
+BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE:
   - name: prompted_markdown_compliance_facts
     description: Daily on-time actioned breakdown, worst departments, and workload/coaching driver assessment from synthetic rows
 

@@ -90,6 +90,14 @@ class DetectorConfig:
     min_prompted_markdown_compliance_chain_gap: float = 0.05
     min_prompted_markdown_compliance_volume: int = 50
 
+    # ---- COMPLIANCE BIG DROP -------------------------------------------
+    min_big_drop_markdown_compliance_drop: float = 0.05
+    min_big_drop_markdown_compliance_volume: int = 10
+    min_big_drop_expiry_compliance_drop: float = 0.05
+    min_big_drop_expiry_compliance_volume: int = 10
+    min_big_drop_prompted_markdown_compliance_drop: float = 0.05
+    min_big_drop_prompted_markdown_compliance_volume: int = 10
+
     # ---- MARKDOWN_SELLTHROUGH ------------------------------------------
     min_sellthrough_chain_gap: float = 0.05
     min_sellthrough_wow_drop: float  = 0.05

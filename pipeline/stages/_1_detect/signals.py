@@ -161,6 +161,61 @@ class PromptedMarkdownComplianceSignal(TypedDict):
     workload: dict
 
 
+class BigDropPromptedMarkdownComplianceSignal(TypedDict):
+    """Typed shape for a day-on-day prompted-markdown-compliance big-drop signal."""
+    signal_type: str                # always 'BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE'
+    merge_key: tuple[str, int]      # ('BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE', store_id)
+    store_id: int
+    site_name: str
+    trigger_types: list[str]
+    this_day_prompts_issued: int
+    this_day_prompts_actioned_on_time: int
+    this_day_compliance_rate: float
+    prev_day_compliance_rate: float | None
+    drop_pp: float | None
+    chain_compliance_rate: float | None
+    below_chain_pp: float | None
+    median_response_minutes: float | None
+    this_day_at_risk_value: float
+    workload: dict
+
+
+class BigDropMarkdownComplianceSignal(TypedDict):
+    """Typed shape for a day-on-day markdown-compliance big-drop signal."""
+    signal_type: str                # always 'BIG_DROP_MARKDOWN_COMPLIANCE'
+    merge_key: tuple[str, int]      # ('BIG_DROP_MARKDOWN_COMPLIANCE', store_id)
+    store_id: int
+    site_name: str
+    trigger_types: list[str]
+    this_day_markdowns_due: int
+    this_day_completed_on_time: int
+    this_day_compliance_rate: float
+    prev_day_compliance_rate: float | None
+    drop_pp: float | None
+    chain_compliance_rate: float | None
+    below_chain_pp: float | None
+    this_day_at_risk_value: float
+    workload: dict
+
+
+class BigDropExpiryDateComplianceSignal(TypedDict):
+    """Typed shape for a day-on-day expiry-date-compliance big-drop signal."""
+    signal_type: str                # always 'BIG_DROP_EXPIRY_DATE_COMPLIANCE'
+    merge_key: tuple[str, int]      # ('BIG_DROP_EXPIRY_DATE_COMPLIANCE', store_id)
+    store_id: int
+    site_name: str
+    trigger_types: list[str]
+    this_day_checks_due: int
+    this_day_checks_completed: int
+    this_day_compliance_rate: float
+    prev_day_compliance_rate: float | None
+    drop_pp: float | None
+    chain_compliance_rate: float | None
+    below_chain_pp: float | None
+    this_day_at_risk_value: float
+    workload: dict
+
+
 class MarkdownOverrideSignal(TypedDict):
     """Typed shape for a markdown-override detection signal."""
     signal_type:              str                  # always 'MARKDOWN_OVERRIDE'
@@ -284,6 +339,9 @@ Signal = (
     | ComplianceSignal
     | MarkdownComplianceSignal
     | PromptedMarkdownComplianceSignal
+    | BigDropPromptedMarkdownComplianceSignal
+    | BigDropMarkdownComplianceSignal
+    | BigDropExpiryDateComplianceSignal
     | MarkdownOverrideSignal
     | WasteSignal
     | MarkdownSellthroughSignal
@@ -839,6 +897,104 @@ def make_prompted_markdown_compliance_signal(
         'median_response_minutes':             median_response_minutes,
         'this_week_at_risk_value':             this_week_at_risk_value,
         'workload':                            workload or {},
+    }
+
+
+def make_big_drop_prompted_markdown_compliance_signal(
+    store_id: int,
+    trigger_types: list[str],
+    site_name: str | None = None,
+    this_day_prompts_issued: int = 0,
+    this_day_prompts_actioned_on_time: int = 0,
+    this_day_compliance_rate: float = 0.0,
+    prev_day_compliance_rate: float | None = None,
+    drop_pp: float | None = None,
+    chain_compliance_rate: float | None = None,
+    below_chain_pp: float | None = None,
+    median_response_minutes: float | None = None,
+    this_day_at_risk_value: float = 0.0,
+    workload: dict | None = None,
+) -> BigDropPromptedMarkdownComplianceSignal:
+    return {
+        'signal_type':                         'BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE',
+        'merge_key':                           ('BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE', store_id),
+        'store_id':                            store_id,
+        'site_name':                           site_name or f'Store {store_id}',
+        'trigger_types':                       list(trigger_types),
+        'this_day_prompts_issued':             this_day_prompts_issued,
+        'this_day_prompts_actioned_on_time':   this_day_prompts_actioned_on_time,
+        'this_day_compliance_rate':            this_day_compliance_rate,
+        'prev_day_compliance_rate':            prev_day_compliance_rate,
+        'drop_pp':                             drop_pp,
+        'chain_compliance_rate':               chain_compliance_rate,
+        'below_chain_pp':                      below_chain_pp,
+        'median_response_minutes':             median_response_minutes,
+        'this_day_at_risk_value':              this_day_at_risk_value,
+        'workload':                            workload or {},
+    }
+
+
+def make_big_drop_markdown_compliance_signal(
+    store_id: int,
+    trigger_types: list[str],
+    site_name: str | None = None,
+    this_day_markdowns_due: int = 0,
+    this_day_completed_on_time: int = 0,
+    this_day_compliance_rate: float = 0.0,
+    prev_day_compliance_rate: float | None = None,
+    drop_pp: float | None = None,
+    chain_compliance_rate: float | None = None,
+    below_chain_pp: float | None = None,
+    this_day_at_risk_value: float = 0.0,
+    workload: dict | None = None,
+) -> BigDropMarkdownComplianceSignal:
+    return {
+        'signal_type':                 'BIG_DROP_MARKDOWN_COMPLIANCE',
+        'merge_key':                   ('BIG_DROP_MARKDOWN_COMPLIANCE', store_id),
+        'store_id':                    store_id,
+        'site_name':                   site_name or f'Store {store_id}',
+        'trigger_types':               list(trigger_types),
+        'this_day_markdowns_due':      this_day_markdowns_due,
+        'this_day_completed_on_time':  this_day_completed_on_time,
+        'this_day_compliance_rate':    this_day_compliance_rate,
+        'prev_day_compliance_rate':    prev_day_compliance_rate,
+        'drop_pp':                     drop_pp,
+        'chain_compliance_rate':       chain_compliance_rate,
+        'below_chain_pp':              below_chain_pp,
+        'this_day_at_risk_value':      this_day_at_risk_value,
+        'workload':                    workload or {},
+    }
+
+
+def make_big_drop_expiry_date_compliance_signal(
+    store_id: int,
+    trigger_types: list[str],
+    site_name: str | None = None,
+    this_day_checks_due: int = 0,
+    this_day_checks_completed: int = 0,
+    this_day_compliance_rate: float = 0.0,
+    prev_day_compliance_rate: float | None = None,
+    drop_pp: float | None = None,
+    chain_compliance_rate: float | None = None,
+    below_chain_pp: float | None = None,
+    this_day_at_risk_value: float = 0.0,
+    workload: dict | None = None,
+) -> BigDropExpiryDateComplianceSignal:
+    return {
+        'signal_type':                 'BIG_DROP_EXPIRY_DATE_COMPLIANCE',
+        'merge_key':                   ('BIG_DROP_EXPIRY_DATE_COMPLIANCE', store_id),
+        'store_id':                    store_id,
+        'site_name':                   site_name or f'Store {store_id}',
+        'trigger_types':               list(trigger_types),
+        'this_day_checks_due':         this_day_checks_due,
+        'this_day_checks_completed':   this_day_checks_completed,
+        'this_day_compliance_rate':    this_day_compliance_rate,
+        'prev_day_compliance_rate':    prev_day_compliance_rate,
+        'drop_pp':                     drop_pp,
+        'chain_compliance_rate':       chain_compliance_rate,
+        'below_chain_pp':              below_chain_pp,
+        'this_day_at_risk_value':      this_day_at_risk_value,
+        'workload':                    workload or {},
     }
 
 
