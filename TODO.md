@@ -1,8 +1,184 @@
 # Store Insight — TODO
 
-Last updated: 2026-09-04
+Last updated: 2026-09-10
 
-## Next / in flight (2026-09-03)
+## EOD pilot readiness — Dave's four outcomes (2026-09-10)
+
+### 1. See examples of ALL actions in CRT
+
+- [ ] **Dan:** commit the remaining action types and confirm the final list/payload contract.
+      This is the input needed before test rows can be built accurately.
+- [ ] **Elaheh:** after Dan's payloads land, seed clearly marked fabricated examples into
+      `STORE_INSIGHT_DEV` for action types that cannot trigger from current source data,
+      including prompted-markdown and any Waste examples. Never seed synthetic rows in PROD.
+- [ ] **Elaheh + Cornelious + Imran:** prove each action through Snowflake → CRT API → UI and
+      capture one visible example per action type for sign-off.
+
+### 2. Full alert pipeline for all trial stores
+
+- [x] PR #65 merged (`OSA_BIG_DROP` latest-two-available-dates fix).
+- [x] Upstream PR #11 merged (Compliance split into `WOW` and `VS_CHAIN`).
+- [x] Downstream Tick-and-flick sync implemented and validated on branch
+      `sync/split-tick-and-flick` (commit `16f0b69`): 758 tests passed, 2 skipped, Ruff clean.
+- [x] Downstream Tick-and-flick PR #66 merged into `store_insight/main`.
+- [x] **Upstream PR #13 reviewed and updated.** Dan confirmed the three new
+      `BIG_DROP_*_COMPLIANCE` types should be in `NO_SUPPRESSION_TYPES`, should display as
+      separate CRT cards, use `0.05`/`10` thresholds, and real feeds do not yet exist.
+- [x] **Downstream sync branch `sync/big-drop-compliance` pushed, reviewed and merged**
+      (PR #69). Merges PR #13 into `store_insight/main`, adds `NO_SUPPRESSION_TYPES` update
+      and `test_quality_gate.py` exemptions. Tests: `771 passed, 2 skipped`; Ruff clean on
+      changed files.
+- [x] **Combined alert pipeline deployed to PROD** with `queue.enabled: false` and
+      `--task-off` from latest `main` (cef6a9d). Stored procedure `RUN_ALERTS_PIPELINE`
+      re-registered; existing tasks remain STARTED. No manual alert rows inserted.
+- [ ] **Validate the next scheduled alert run** (06:00 UK) for raw signal types,
+      `OSA_STORE_ACTIONABLE`, `OSA_BIG_DROP`, compliance WOW/VS_CHAIN, and the three new
+      big-drop compliance types.
+- [ ] **Seed clearly marked DEV/CRT synthetic examples** for markdown/expiry/prompted-markdown
+      big-drop and any other action types without real feeds.
+- [ ] Validate scheduled output: `OSA_STORE_ACTIONABLE`, `OSA_BIG_DROP`, Compliance
+      `WOW`/`VS_CHAIN`, populated Compliance facts, trial-store coverage, and green
+      alerts/KPI/monitoring tasks. Exact trial-store IDs must come from the agreed pilot list.
+
+### 3. KPI tiles and panels populated
+
+- [x] PR #64 merged: additive OSCA and Store Controllable OSCA five-column groups.
+- [x] DEV validated: 38 columns, 121/121 stores populated, category/time-of-day JSON present.
+- [x] Production schema/SP/tasks deployed; first scheduled 10 Sep run succeeded with 121/121
+      OSCA and Store Controllable OSCA values populated.
+- [x] **Upstream PR #12 + downstream PR #67 merged:** Availability
+      `performance_breakdown` now carries all five headline metrics (`OSCA`,
+      `STORE_CONTROLLABLE_OSCA`, actionability, alert compliance and tick-and-flick).
+- [x] **PR #67 deployed and validated in DEV/CRT.** DEV KPI SP updated; task remains
+      suspended. Approved idempotent run wrote 121 rows / 121 stores for 10 Sep, and all 121
+      contain `OSCA`, `STORE_CONTROLLABLE_OSCA`, actionability, alert compliance and tick-and-flick
+      in `AVAILABILITY_DETAILS_JSON.performance_breakdown`. Store 204 spot-check passed.
+- [x] **PR #68 merged into `store_insight/main`.** Adds `_osca_series_performance_breakdown`
+      helper and a targeted test asserting the CRT contract. Targeted tests and Ruff pass.
+- [x] **Production KPI SP/tasks deployed from merged PR #68.** `SP_KPI_AVAILABILITY_BATCH`,
+      `KPI_AVAILABILITY_BATCH_TASK` and `KPI_AVAILABILITY_REFRESH_TASK` are STARTED; the
+      next scheduled run will populate the five-key `performance_breakdown` in production.
+      Existing production KPI rows were not manually replaced.
+- [x] **Cornelious/Imran CRT feedback addressed 11 Sep.** `date` added to each day in
+      `time_of_day_analysis` (and `TIME_OF_DAY_BREAKDOWN`) on branch `fix/kpi-tod-dates`
+      (commit `9500d3b`). `rag_status` logic left untouched per Dan's instruction; Imran will
+      grey out the front-end RAG background for now.
+- [x] Monitoring task succeeded 10 Sep at 07:00 with no task error.
+- [x] KPI 11:45 refresh succeeded 10 Sep (completed 11:54, no task error).
+- [x] **Pilot health dashboard compatibility reviewed:** no immediate code/schema change is
+      required for OSA, split Tick-and-flick or additive OSCA columns; existing TYPE buckets and
+      task names remain compatible.
+- [ ] **After the final combined pipeline deployment:** refresh `PILOT_HEALTH_DASHBOARD`, confirm
+      C1–C9/latest business date/task health, and query raw `SIGNAL_JSON.signal_type` separately
+      for `OSA_STORE_ACTIONABLE`, `OSA_BIG_DROP` and Compliance `WOW`/`VS_CHAIN` because the
+      dashboard only shows aggregate TYPE mix.
+- [ ] **When Stage 6 is enabled:** recalibrate C4's historical alert-volume baseline and add
+      live/admitted/suppressed/expired queue monitoring. No queue dashboard change before then.
+- [ ] **Imran:** integrate and validate the new tiles/panels after Cornelious confirms the
+      five-value CRT API response.
+- [ ] Waste/prompted-markdown cannot be called real-data validated yet: Dan has Waste code but
+      no source data/tests; prompted-markdown has no real source feed. Use clearly marked CRT-only
+      samples for the UI journey and keep the real-data limitation visible.
+
+### 4. All users set up in the app
+
+- [ ] **Cornelious/Imran/auth owner:** confirm ownership, create all CRT users, assign their
+      store access, and provide login evidence. This is outside the Snowflake pipeline scope.
+- [ ] **Dave/app team:** confirm where the final user/access list is recorded so completeness
+      can be checked rather than assumed.
+
+### Dan's answers to PR #13 review questions
+
+1. **Final for now** — more signal types may come later, but this is the last batch for the
+   current pilot slice.
+2. **Yes** — add the three `BIG_DROP_*_COMPLIANCE` types to `NO_SUPPRESSION_TYPES`.
+3. **No** — markdown, expiry and prompted-markdown feeds do not yet exist for EoE stores;
+   CRT will need clearly labelled DEV/CRT synthetic examples.
+4. **Yes for now** — `0.05` drop and `10` volume defaults are the agreed pilot thresholds.
+5. **Separate** — CRT should display them as three top-level action cards.
+
+### Status of PR #13 sync
+
+- [x] Added the three `BIG_DROP_*_COMPLIANCE` types to `NO_SUPPRESSION_TYPES` in the upstream
+      PR branch (`feature/compliance-big-drops-only`) and pushed the update.
+- [x] Upstream full test suite: `714 passed, 2 skipped`.
+- [x] Downstream sync branch `sync/big-drop-compliance` created from `store_insight/main`;
+      merged the upstream PR #13 changes, added the gate-family exemptions in
+      `pipeline/tests/test_quality_gate.py`, and preserved downstream data-quality gate
+      settings in `default.yaml`/`config.py`.
+- [x] Downstream tests: `771 passed, 2 skipped`; Ruff clean on changed files.
+- [x] Production SP `RUN_ALERTS_PIPELINE` deployed with `--task-off`; queue remains disabled
+      (`queue.enabled: false`).
+- [ ] Validate the next scheduled 06:00 run for all alert types and trial-store coverage.
+- [ ] Seed clearly marked DEV/CRT synthetic examples for the three new action types (and any
+      other action types without real feeds).
+
+### Elaheh's remaining actions — in dependency order
+
+1. **Merge PR for `fix/kpi-tod-dates`** so the date field reaches production on the next
+   KPI scheduled run. No manual re-run of existing KPI rows; validate CRT picks it up
+   from the next batch.
+2. Review Dan's upstream PR #13 — completed, merged, and synced downstream (PR #69).
+3. Deploy the final combined alert pipeline — completed; `RUN_ALERTS_PIPELINE` SP re-registered
+   with `queue.enabled: false` and `--task-off`. Next: validate the 06:00 scheduled run,
+   raw signal types, trial-store coverage and the health dashboard.
+4. Seed clearly marked fabricated DEV examples only after Dan's final payload contracts are
+   stable; never seed synthetic production data.
+5. Coordinate Cornelious/Imran's CRT user setup evidence and share the final dependency/status
+   checkpoint with Dave.
+
+## Done / current (2026-09-09)
+
+- [x] **PR #61 merged by Dan — pilot monitoring dashboard.** Added the live pilot health
+      dashboard, plain-English Slack alerts and channel guide, then added the daily all-green
+      heartbeat and WARN/UNKNOWN recovery notifications. Supporting runbook, risk-validation
+      notes and monitoring tests were updated.
+- [x] **Upstream OSA split merged in `store_insight_pipeline`.** PR #6 replaced the broad
+      `OSA` alert with `OSA_STORE_ACTIONABLE`; PR #7 added the standalone `OSA_BIG_DROP`
+      alert and its review fixes, including rule-based narrative and investigator routing.
+- [x] **PR #62 merged by Dan — vendored pipeline synchronised.** Brought the upstream OSA
+      changes into this repository, so the local pipeline now uses `OSA_STORE_ACTIONABLE`
+      and `OSA_BIG_DROP` instead of the previous broad `OSA` type.
+- [x] **Upstream alert queue PR #8 + downstream PR #63 merged.** Stage 6 suppression,
+      seven-day expiry and daily admission caps are synchronised; the Snowflake SP was deployed
+      9 Sep with `queue.enabled: false`, so live output and schedules remain unchanged.
+- [x] **OSA API integration data prepared in PROD + DEV test tables.** Both
+      `ALERTS_PIPELINE_OSA_INTEGRATION_20260909` tables contain 115
+      `OSA_STORE_ACTIONABLE`, 32 `OSA_BIG_DROP` and 29 `OSA_RECURRING_SLOT` rows with
+      `SIGNAL_JSON`/`FACTS_JSON`; `STOREINSIGHT` has SELECT. Canonical tables were untouched.
+- [x] **Cornelious integration-table schema error fixed 10 Sep.** Added nullable
+      `AFFECTED_PRODUCTS VARIANT` to both OSA integration tables after the .NET query failed on
+      `A.AFFECTED_PRODUCTS`; query now compiles. Values remain NULL until real product output is
+      enabled, so the API must treat NULL as an empty list.
+- [x] **Upstream pipeline PR #9 merged — OSA_BIG_DROP date alignment.** The detector now
+      compares the latest two available OSA dates, as Dan confirmed; upstream validation passed
+      with 702 tests (2 skipped) and produced 34 detector signals / 32 final test cards.
+- [x] **PR #65 merged — downstream OSA_BIG_DROP date-alignment sync.** The two-file sync
+      commit `9c97b79` passed 754 tests (2 skipped). It is now on `store_insight/main` and will
+      be included in the next combined pipeline SP deployment with `queue.enabled: false`.
+- [x] **PR #64 merged — additive OSCA KPI groups.** Added OSCA and Store Controllable OSCA
+      using the existing five-column KPI pattern while preserving legacy Availability columns.
+      DEV validation passed: 38 columns, 121/121 rows and category/time-of-day JSON populated.
+- [x] **Production KPI schema/SP/tasks deployed from merged PR #64.** Production now has the
+      38-column schema; alerts parent, chained KPI task and 11:45 refresh were restored STARTED.
+      Existing 2,058 KPI rows were not rewritten, so the ten new columns remain NULL until the
+      next scheduled KPI execution.
+- [x] **First scheduled post-PR #64 run verified 10 Sep.** Chained KPI task succeeded;
+      121 rows / 121 stores have OSCA and Store Controllable OSCA populated. Existing
+      Subcategory/When details remain populated. Still verify the 11:45 refresh and monitoring.
+- [x] **Upstream Tick-and-flick PR #11 merged.** The clean integration preserves current
+      OSA/Waste/queue behavior, splits Compliance into independent `WOW` and `VS_CHAIN`
+      detectors, fixes fact gathering for the new triggers, and passed 704 tests (2 skipped).
+      Original conflicted PR #10 is superseded.
+- [x] **Downstream Tick-and-flick PR #66 merged.** Commit `16f0b69`; 758 tests passed,
+      2 skipped, Ruff clean. Final deployment is intentionally waiting for Dan's remaining
+      facts/investigations changes so all final alert payloads can be deployed once.
+- [ ] **Post-deploy validation:** confirm `OSA_BIG_DROP`, Compliance `WOW`/`VS_CHAIN` triggers
+      and Compliance facts in scheduled output; confirm alerts/KPI/monitoring tasks remain green.
+- [ ] **Prompted markdown API sample:** no real prompted source data yet; Dan approved a clearly
+      marked DEV-only synthetic sample. Do not insert synthetic prompted data into production.
+
+## Next / in flight (2026-09-09)
 
 High priority:
 - [x] **INCIDENT 3 Sep RESOLVED same day — gate false-FAILED osa/markdown_log at 06:00** —
