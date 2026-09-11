@@ -11,7 +11,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-
 from store_insight.pipeline.stages._1_detect import registry
 from store_insight.pipeline.stages._1_detect.detector_info import DetectorInfo
 

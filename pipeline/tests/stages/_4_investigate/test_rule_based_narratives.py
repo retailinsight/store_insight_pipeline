@@ -10,7 +10,6 @@ branches (triggers, chain/WoW specifics, optional facts).
 from __future__ import annotations
 
 import pytest
-
 from store_insight.pipeline.stages._4_investigate.rule_based import generate
 
 REQUIRED_KEYS = {"issue", "explanation", "cost_if_not_fixed", "recommended_action"}
