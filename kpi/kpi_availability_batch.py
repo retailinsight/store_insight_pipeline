@@ -171,29 +171,15 @@ def _osca_series_performance_breakdown(
     actionability: float,
     alert_compliance: float,
     tick_flick: float,
-    current_week: float,
-    last_week: float,
-    cluster_average: float,
 ):
-    """Build the performance_breakdown object stored in OSCA_DETAILS_JSON and
-    STORE_CONTROLLABLE_OSCA_DETAILS_JSON.
-
-    The CRT API expects the five headline values plus the series-specific
-    current_week/last_week/cluster_average trend values.
-    """
-    breakdown = _availability_performance_breakdown(
+    """Build the exact five-field CRT performance breakdown."""
+    return _availability_performance_breakdown(
         osca,
         store_controllable_osca,
         actionability,
         alert_compliance,
         tick_flick,
     )
-    breakdown.update({
-        "current_week": f"{current_week:.1f}%",
-        "last_week": f"{last_week:.1f}%",
-        "cluster_average": f"{cluster_average:.1f}%",
-    })
-    return breakdown
 
 
 def _date_range(end_date: date, days: int):
@@ -726,9 +712,6 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
                 actionability,
                 alert_compliance,
                 tick_flick,
-                tw_osa * 100,
-                lw_osa * 100,
-                cl_osa * 100,
             ),
             "summary": summary,
             "top_drivers": top_drivers,
@@ -742,9 +725,6 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
                 actionability,
                 alert_compliance,
                 tick_flick,
-                tw_store_osca * 100,
-                lw_store_osca * 100,
-                cl_store_osca * 100,
             ),
             "summary": (
                 f"Store-controllable availability changed {store_osca_wow_pp:+.1f}pp "
