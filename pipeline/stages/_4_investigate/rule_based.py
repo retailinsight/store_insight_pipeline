@@ -1033,7 +1033,7 @@ def generate(signal: dict) -> dict:
     triggers = signal["trigger_types"]
     signal_type = signal.get("signal_type", "")
 
-    if signal_type == "COMPLIANCE" or "TICK_AND_FLICK" in triggers:
+    if signal_type == "COMPLIANCE":
         return _generate_tick_and_flick(signal)
 
     if signal_type == "MARKDOWN_COMPLIANCE":
@@ -1044,6 +1044,9 @@ def generate(signal: dict) -> dict:
 
     if signal_type == "PROMPTED_MARKDOWN_COMPLIANCE":
         return _generate_prompted_markdown_compliance(signal)
+
+    if "TICK_AND_FLICK" in triggers:
+        return _generate_tick_and_flick(signal)
 
     if signal_type == "OSA_STORE_ACTIONABLE":
         return _generate_osa_store_actionable(signal)

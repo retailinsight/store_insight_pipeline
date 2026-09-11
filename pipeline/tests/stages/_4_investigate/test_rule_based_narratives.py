@@ -681,6 +681,14 @@ def test_markdown_compliance_coaching_narrative():
     assert '84.1%' in out['recommended_action']
 
 
+def test_markdown_compliance_keeps_specific_narrative_with_tick_and_flick_trigger():
+    out = generate(_markdown_compliance(trigger_types=['TICK_AND_FLICK']))
+    _assert_card_keys(out)
+    assert 'Manningtree' in out['issue']
+    assert 'markdown' in out['recommended_action'].lower()
+    assert 'tick-and-flick' not in out['issue'].lower()
+
+
 # ---------------------------------------------------------------------------
 # PROMPTED_MARKDOWN_COMPLIANCE
 # ---------------------------------------------------------------------------
