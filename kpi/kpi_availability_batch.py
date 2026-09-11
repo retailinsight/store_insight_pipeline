@@ -2,8 +2,8 @@
 KPI Availability Batch Script
 ==============================
 Joins source tables, aggregates all Availability KPI metrics per store per week,
-calls Snowflake Cortex to generate key insights, and writes the result to the
-table named by the KPI_OUTPUT_TABLE env var (default:
+builds a deterministic three-sentence availability narrative, and writes the
+result to the table named by the KPI_OUTPUT_TABLE env var (default:
 STORE_INSIGHT_DB.PUBLIC.KPI_AVAILABILITY_SUMMARY).
 
 Run manually (from the repo root):
@@ -20,7 +20,10 @@ yesterday). The script computes KPIs over the 7-day window ending on that date
 
 Writes are idempotent per run date: existing rows for the run date are deleted
 and the new rows appended. The table is never dropped or recreated, so columns
-maintained by other processes (waste/markdown/prompted-markdown/TOD) survive.
+maintained by other processes (waste) survive. Markdown compliance is computed
+here from the real COMPLIANCE_REPORTING source; prompted-markdown compliance
+falls back to a deterministic placeholder until its source table is ingested
+(see kpi_markdown_compliance.py).
 """
 
 import argparse
@@ -47,6 +50,14 @@ try:  # python-dotenv is not available inside Snowflake stored procedures
     load_dotenv(dotenv_path=Path(__file__).parent.parent / "api2" / ".env")
 except ImportError:
     pass
+
+from store_insight.kpi.availability_narrative_temp import (
+    DepartmentCandidate,
+    NarrativeConfig,
+    OsaSnapshot,
+    build_narrative,
+)
+from store_insight.pipeline.pipeline._shared import quality_is_valid
 
 _session: Session | None = None
 
@@ -116,7 +127,6 @@ HIERARCHY_TABLE = "ANALYSIS.FINAL.LSM_ITEM_HIERARCHY"
 SITE_TABLE      = "ANALYSIS.FINAL.LSM_SITE_HIERARCHY"
 FEEDBACK_TABLE  = "ANALYSIS.FINAL.LSM_ALERT_FEEDBACK"
 OUTPUT_TABLE    = os.getenv("KPI_OUTPUT_TABLE", "STORE_INSIGHT_DB.PUBLIC.KPI_AVAILABILITY_SUMMARY")
-CORTEX_MODEL    = os.getenv("KPI_CORTEX_MODEL", "mistral-large2")
 
 # RAG threshold
 OSA_TARGET = 0.90
@@ -150,7 +160,7 @@ def _availability_performance_breakdown(
     osca: float,
     store_controllable_osca: float | None,
     actionability: float,
-    alert_compliance: float,
+    alert_compliance: float | None,
     tick_flick: float,
 ):
     return {
@@ -160,7 +170,12 @@ def _availability_performance_breakdown(
             if store_controllable_osca is not None else None
         ),
         "actionability": f"{actionability:.1f}%",
-        "Alert_compliance": f"{alert_compliance:.1f}%",
+        # No real definition/data source exists for this yet (it previously
+        # duplicated ACTIONABILITY's formula, which was incorrect) — left
+        # null until a genuine "completed on time" field is available.
+        "Alert_compliance": (
+            f"{alert_compliance:.1f}%" if alert_compliance is not None else None
+        ),
         "tick_flick": f"{tick_flick:.1f}%",
     }
 
@@ -169,7 +184,7 @@ def _osca_series_performance_breakdown(
     osca: float,
     store_controllable_osca: float | None,
     actionability: float,
-    alert_compliance: float,
+    alert_compliance: float | None,
     tick_flick: float,
 ):
     """Build the exact five-field CRT performance breakdown."""
@@ -232,7 +247,7 @@ def _load_feedback(session: Session, week_start: str, week_end: str):
         .select(
             F.col("SITE_ID").alias("STORE_ID"),
             F.col("TICK_AND_FLICK_FLAG"),
-            F.col("INTERVENTION_NAME"),
+            F.col("INTERVENTION_ID"),
             F.col("ALERT_ANALYSIS_DATE"),
         )
         .cache_result()
@@ -282,7 +297,7 @@ def _cluster_osa(osa, sites, start: str, end: str):
 
 
 def _dept_osa(osa, start: str, end: str):
-    """OSA % per store+department for a date window."""
+    """OSA % per store+department for a date window, plus quality counts."""
     return (
         osa.filter((F.col("ANALYSIS_DATE") >= start) & (F.col("ANALYSIS_DATE") <= end))
         .filter(F.col("DEPARTMENT_NAME").is_not_null())
@@ -292,6 +307,9 @@ def _dept_osa(osa, start: str, end: str):
             F.sum("LOST_SALES_VOLUME").alias("DEPT_LSV"),
             _store_controlled_lsv().alias("DEPT_STORE_CONTROLLED_LSV"),
             F.sum("LOST_SALES_VALUE").alias("DEPT_LSV_VALUE"),
+            F.count("*").alias("DEPT_ROW_COUNT"),
+            F.sum(F.when(F.col("INVENTORY_QTY") > 0, F.lit(1)).otherwise(F.lit(0))).alias("DEPT_POSITIVE_ROWS"),
+            F.sum(F.when(F.col("INVENTORY_QTY").is_null(), F.lit(1)).otherwise(F.lit(0))).alias("DEPT_UNKNOWN_ROWS"),
         )
         .with_column("DEPT_OSA", _osa_pct(F.col("DEPT_SALES"), F.col("DEPT_LSV")))
         .with_column(
@@ -322,10 +340,19 @@ def _tod_osa(osa, start: str, end: str):
 
 
 def _feedback_metrics(feedback):
-    """Actionability, alert compliance, tick & flick per store."""
+    """Actionability and tick & flick per store.
+
+    An alert is "actionable"/worked when INTERVENTION_ID is neither 0 nor 1
+    (those two values mean no real intervention was logged).
+
+    NOTE: Alert Compliance ("alert completed on time") has no real data
+    source or definition yet — it previously duplicated ACTIONABILITY's
+    formula, which was wrong. It is left out here and passed through as
+    None in run_batch until a genuine "completed on time" field exists.
+    """
     total = feedback.group_by("STORE_ID").agg(F.count("*").alias("TOTAL_ALERTS"))
     worked = (
-        feedback.filter(F.col("INTERVENTION_NAME").is_not_null())
+        feedback.filter(~F.col("INTERVENTION_ID").isin(0, 1))
         .group_by("STORE_ID")
         .agg(F.count("*").alias("WORKED_ALERTS"))
     )
@@ -341,78 +368,18 @@ def _feedback_metrics(feedback):
         .with_column("WORKED_ALERTS", F.coalesce(F.col("WORKED_ALERTS"), F.lit(0)))
         .with_column("TAF_ALERTS",    F.coalesce(F.col("TAF_ALERTS"),    F.lit(0)))
         .with_column("ACTIONABILITY",     F.col("WORKED_ALERTS") / F.col("TOTAL_ALERTS"))
-        .with_column("ALERT_COMPLIANCE",  F.col("WORKED_ALERTS") / F.col("TOTAL_ALERTS"))
         .with_column("TICK_FLICK_RATE",   F.col("TAF_ALERTS")    / F.col("TOTAL_ALERTS"))
     )
 
 
 # ---------------------------------------------------------------------------
-# Cortex key insights
+# Deterministic narrative generation
 # ---------------------------------------------------------------------------
 
-def _generate_key_insights(session: Session, store_id: int, facts: dict) -> list[str]:
-    """
-    Call Snowflake Cortex COMPLETE to generate 3 key insight bullets
-    from the aggregated KPI facts for a store.
-
-    The prompt enforces a JSON array response schema so output can be
-    parsed deterministically. Falls back to rule-based strings on any
-    Cortex or parse failure.
-
-    Returns a list of exactly 3 strings.
-    """
-    prompt = (
-        "You are a retail performance analyst. "
-        "Based on the store KPI data below, generate exactly 3 concise insight sentences "
-        "for a store manager. "
-        "You MUST respond with a valid JSON array of exactly 3 strings and nothing else. "
-        "Example format: [\"Insight one.\", \"Insight two.\", \"Insight three.\"] "
-        "Do not include any text outside the JSON array.\n\n"
-        "Store KPI data:\n"
-        f"- Current week OSA: {facts['current_week_osa_pct']:.1f}%\n"
-        f"- Last week OSA: {facts['last_week_osa_pct']:.1f}%\n"
-        f"- Week-on-week change: {facts['wow_change_pp']:+.1f}pp\n"
-        f"- Cluster average OSA: {facts['cluster_osa_pct']:.1f}%\n"
-        f"- Rolling 28-day OSA: {facts['month_avg_osa_pct']:.1f}%\n"
-        f"- Rolling 365-day OSA: {facts['year_avg_osa_pct']:.1f}%\n"
-        f"- Availability target: 90%\n"
-        f"- Top underperforming departments: {facts['top_underperforming_depts']}\n"
-    )
-
-    try:
-        escaped = prompt.replace("'", "\\'")
-        result = session.sql(
-            f"SELECT SNOWFLAKE.CORTEX.COMPLETE('{CORTEX_MODEL}', '{escaped}') AS RESPONSE"
-        ).collect()
-        raw = result[0]["RESPONSE"].strip()
-
-        # Strip any markdown code fences the model may add
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-            raw = raw.strip()
-
-        parsed = json.loads(raw)
-
-        if not isinstance(parsed, list):
-            raise ValueError(f"Expected JSON array, got {type(parsed)}")
-
-        insights = [str(item).strip() for item in parsed if str(item).strip()][:3]
-        while len(insights) < 3:
-            insights.append("")
-        return insights
-
-    except Exception as e:
-        print(f"  Warning: Cortex call failed for store {store_id}: {e}")
-        wow_dir = "up" if facts["wow_change_pp"] >= 0 else "down"
-        vs_target = facts["current_week_osa_pct"] - 90.0
-        vs_cluster = facts["current_week_osa_pct"] - facts["cluster_osa_pct"]
-        return [
-            f"Availability is {'above' if vs_target >= 0 else 'below'} the 90% target by {abs(vs_target):.1f}pp.",
-            f"Week-on-week trend is {wow_dir} ({facts['wow_change_pp']:+.1f}pp vs last week).",
-            f"Store is {'ahead of' if vs_cluster >= 0 else 'behind'} cluster average by {abs(vs_cluster):.1f}pp.",
-        ]
+# The three-sentence manager-facing summary is built by build_narrative
+# from store_insight.kpi.availability_narrative_temp. It replaces a
+# previous Snowflake Cortex COMPLETE call so every output is reproducible
+# and derived from validated, pre-ranked facts.
 
 
 # ---------------------------------------------------------------------------
@@ -457,6 +424,11 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
 
     fb_metrics = _feedback_metrics(feedback)
 
+    # Markdown / prompted-markdown compliance are disabled for now — the real
+    # COMPLIANCE_REPORTING source doesn't exist yet, so this was writing an
+    # always-0% value for markdown and a synthetic placeholder for prompted.
+    # See kpi_markdown_compliance.py.
+
     # Join store scores
     store_joined = (
         tw_store.select(
@@ -487,7 +459,7 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
         )
         .join(fb_metrics.select(
             F.col("STORE_ID"),
-            F.col("ACTIONABILITY"), F.col("ALERT_COMPLIANCE"), F.col("TICK_FLICK_RATE")
+            F.col("ACTIONABILITY"), F.col("TICK_FLICK_RATE")
         ), on=["STORE_ID"], how="left")
     )
 
@@ -530,8 +502,9 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
         store_osca_wow_pp = (tw_store_osca - lw_store_osca) * 100
 
         actionability    = float(row["ACTIONABILITY"]    or 0) * 100
-        alert_compliance = float(row["ALERT_COMPLIANCE"] or 0) * 100
         tick_flick       = float(row["TICK_FLICK_RATE"]  or 0) * 100
+        # No real data source/definition for this yet — see _feedback_metrics.
+        alert_compliance = None
 
         # Department performance
         dept_tw = {r["DEPARTMENT_NAME"]: r for r in dept_tw_by_store.get(sid, [])}
@@ -646,30 +619,57 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
                     entry[key] = f"{periods[pid]['osca'] * 100:.1f}%"
             tod_breakdown.append(entry)
 
-        # Top underperforming depts for Cortex prompt
-        underperforming = [
-            cp["category"] for cp in category_perf if cp["warning"]
-        ][:3]
+        # Build deterministic narrative candidates from validated department facts
+        narrative_cfg = NarrativeConfig()
+        department_candidates = []
+        for dname, dr in sorted(dept_tw.items()):
+            lw_dr = dept_lw.get(dname)
+            if lw_dr is None:
+                continue
+            row_count = int(dr["DEPT_ROW_COUNT"] or 0)
+            positive_rows = int(dr["DEPT_POSITIVE_ROWS"] or 0)
+            unknown_rows = int(dr["DEPT_UNKNOWN_ROWS"] or 0)
+            quality = {
+                "row_count": row_count,
+                "positive_inventory_rows": positive_rows,
+                "unknown_inventory_rows": unknown_rows,
+                "unknown_inventory_row_pct": round(
+                    (unknown_rows / row_count * 100) if row_count else 0.0, 2
+                ),
+            }
+            department_candidates.append(
+                DepartmentCandidate(
+                    department=dname,
+                    current_osa_pct=float(dr["DEPT_OSA"] or 0) * 100,
+                    previous_osa_pct=float(lw_dr["DEPT_OSA"] or 0) * 100,
+                    lost_sales_value=float(dr["DEPT_LSV_VALUE"] or 0),
+                    quality_valid=quality_is_valid(
+                        quality,
+                        narrative_cfg.min_positive_rows,
+                        narrative_cfg.max_unknown_row_pct,
+                    ),
+                )
+            )
 
-        # WoW summary sentence
-        direction = "increased" if wow_pp >= 0 else "decreased"
-        summary = (
-            f"Availability {direction} {abs(wow_pp):.1f}pp this week vs last week "
-            f"(store OSA: {tw_osa*100:.1f}%, cluster average: {cl_osa*100:.1f}%)."
+        print(f"  Generating deterministic narrative for store {sid}...")
+        key_insights = build_narrative(
+            store_controllable=OsaSnapshot(
+                current_pct=tw_store_osca * 100,
+                previous_pct=lw_store_osca * 100,
+            ),
+            overall=OsaSnapshot(
+                current_pct=tw_osa * 100,
+                previous_pct=lw_osa * 100,
+            ),
+            cluster_pct=cl_osa * 100,
+            departments=department_candidates,
+            cfg=narrative_cfg,
         )
-
-        facts = {
-            "current_week_osa_pct":  tw_osa * 100,
-            "last_week_osa_pct":     lw_osa * 100,
-            "wow_change_pp":         wow_pp,
-            "cluster_osa_pct":       cl_osa * 100,
-            "month_avg_osa_pct":     m_osa * 100,
-            "year_avg_osa_pct":      y_osa * 100,
-            "top_underperforming_depts": ", ".join(underperforming) if underperforming else "none",
-        }
-
-        print(f"  Generating insights for store {sid}...")
-        key_insights = _generate_key_insights(session, sid, facts)
+        # Flattened narrative: join the three deterministic sentences into a
+        # single "summary" string, used everywhere narrative appears (instead
+        # of a separate multi-sentence "Key_insights" array plus a
+        # first-sentence-only "summary" field).
+        summary = " ".join(key_insights)
 
         # Assemble JSON blobs for storage
         overall_details = {
@@ -689,7 +689,7 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
                 "month_average": f"{m_osa*100:.1f}%",
                 "year_average":  f"{y_osa*100:.1f}%",
             },
-            "Key_insights": key_insights,
+            "summary": summary,
         }
 
         availability_details = {
@@ -726,11 +726,7 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
                 alert_compliance,
                 tick_flick,
             ),
-            "summary": (
-                f"Store-controllable availability changed {store_osca_wow_pp:+.1f}pp "
-                f"this week vs last week ({tw_store_osca * 100:.1f}% current, "
-                f"{cl_store_osca * 100:.1f}% cluster average)."
-            ),
+            "summary": summary,
             "category_performance": store_category_perf,
             "time_of_day_analysis": store_time_of_day,
         }
@@ -748,13 +744,14 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
             "up" if wow_pp >= 0 else "down",
             json.dumps(overall_details),
             json.dumps(availability_details),
-            # Waste / markdown / prompted-markdown metrics are not computed by
-            # this batch yet — write None so existing column data is preserved.
+            # Waste metrics are maintained by a separate process — leave NULL.
             None,  # WASTE_PCT
             None,  # WASTE_WOW_CHANGE_PP
             None,  # WASTE_CLUSTER_PCT
             None,  # WASTE_TREND_DIRECTION
             None,  # WASTE_DETAILS_JSON
+            # Markdown / prompted-markdown compliance are disabled for now —
+            # see the comment above the (removed) compute call in run_batch().
             None,  # MARKDOWN_PCT
             None,  # MARKDOWN_WOW_CHANGE_PP
             None,  # MARKDOWN_CLUSTER_PCT
@@ -831,34 +828,6 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
         f"DELETE FROM {OUTPUT_TABLE} WHERE RUN_DATE = '{run_date_str}'"
     ).collect()
     df.write.mode("append").save_as_table(OUTPUT_TABLE)
-
-    # Carry forward markdown / prompted-markdown placeholder values from each
-    # store's most recent prior row (Cornelious, 24 Aug: "keep the placeholder
-    # for now"). Without this, new run dates have NULL markdown columns and
-    # the API drops those tiles. Remove once the batch computes real values.
-    md_cols = [
-        "MARKDOWN_PCT", "MARKDOWN_WOW_CHANGE_PP", "MARKDOWN_CLUSTER_PCT",
-        "MARKDOWN_TREND_DIRECTION", "MARKDOWN_DETAILS_JSON",
-        "PROMPTED_MARKDOWN_PCT", "PROMPTED_MARKDOWN_WOW_CHANGE_PP",
-        "PROMPTED_MARKDOWN_CLUSTER_PCT", "PROMPTED_MARKDOWN_TREND_DIRECTION",
-        "PROMPTED_MARKDOWN_DETAILS_JSON",
-    ]
-    set_clause = ", ".join(f"{c} = s.{c}" for c in md_cols)
-    print("  Carrying forward markdown placeholder values from prior rows...")
-    session.sql(f"""
-        UPDATE {OUTPUT_TABLE} t
-        SET {set_clause}
-        FROM (
-            SELECT STORE_ID, {', '.join(md_cols)}
-            FROM {OUTPUT_TABLE}
-            WHERE RUN_DATE <> '{run_date_str}' AND MARKDOWN_PCT IS NOT NULL
-            QUALIFY ROW_NUMBER() OVER (
-                PARTITION BY STORE_ID ORDER BY RUN_DATE DESC) = 1
-        ) s
-        WHERE t.STORE_ID = s.STORE_ID
-          AND t.RUN_DATE = '{run_date_str}'
-          AND t.MARKDOWN_PCT IS NULL
-    """).collect()
     print(f"Done. Written to {OUTPUT_TABLE} (delete-by-run-date + append).")
 
 
