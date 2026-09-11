@@ -71,8 +71,6 @@ detectors:
     - osa_recurring_slot.recurring_slot
     - compliance.tick_and_flick_wow
     - compliance.tick_and_flick_vs_chain
-    - markdown_compliance.wow
-    - markdown_compliance.vs_chain
     - markdown_override.vs_chain
     - markdown_override.wow
     - waste.vs_chain

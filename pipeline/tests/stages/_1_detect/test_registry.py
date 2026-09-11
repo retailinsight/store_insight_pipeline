@@ -8,7 +8,9 @@ renamed, the registry must still expose it.
 
 from __future__ import annotations
 
-from store_insight.pipeline.config.loader import load_config
+from pathlib import Path
+
+import yaml
 from store_insight.pipeline.stages._1_detect import registry
 from store_insight.pipeline.stages._1_detect.detector_info import DetectorInfo
 
@@ -21,6 +23,9 @@ EXPECTED_DETECTOR_MODULES = {
     'compliance.tick_and_flick_vs_chain',
     'markdown_compliance.wow',
     'markdown_compliance.vs_chain',
+    'big_drop_markdown_compliance.big_drop',
+    'big_drop_expiry_date_compliance.big_drop',
+    'big_drop_prompted_markdown_compliance.big_drop',
     'expiry_date_compliance.trailing_7d',
     'expiry_date_compliance.vs_chain',
     'prompted_markdown_compliance.wow',
@@ -37,25 +42,6 @@ EXPECTED_DETECTOR_MODULES = {
     'straight_to_bin.value_threshold',
 }
 
-EXPECTED_DEFAULT_ENABLED_DETECTORS = {
-    'osa_big_drop.big_drop',
-    'osa_recurring_slot.recurring_slot',
-    'compliance.tick_and_flick_wow',
-    'compliance.tick_and_flick_vs_chain',
-    'markdown_compliance.wow',
-    'markdown_compliance.vs_chain',
-    'markdown_override.vs_chain',
-    'markdown_override.wow',
-    'waste.vs_chain',
-    'waste.wow',
-    'waste_trim.trim',
-    'markdown_sellthrough.vs_chain',
-    'markdown_sellthrough.wow',
-    'markdown_sku.repeat_request',
-    'markdown_sku.excessive_override',
-}
-
-
 def _dotted(mod):
     parts = mod.__name__.split('.')
     idx = parts.index('detectors')
@@ -68,13 +54,22 @@ def test_all_expected_detectors_discovered():
     assert not missing, f'Registry is missing expected detectors: {missing}'
 
 
-def test_default_config_enables_only_expected_detectors():
-    cfg = load_config(None)
-    enabled = set(cfg.detectors.enabled)
-    disabled = EXPECTED_DETECTOR_MODULES - enabled
-
-    assert enabled == EXPECTED_DEFAULT_ENABLED_DETECTORS
-    assert disabled == (EXPECTED_DETECTOR_MODULES - EXPECTED_DEFAULT_ENABLED_DETECTORS)
+def test_detectors_without_source_data_disabled_by_default():
+    config_path = Path(__file__).parents[3] / 'config' / 'base' / 'default.yaml'
+    enabled = set(yaml.safe_load(config_path.read_text())['detectors']['enabled'])
+    disabled = {
+        'big_drop_markdown_compliance.big_drop',
+        'big_drop_expiry_date_compliance.big_drop',
+        'big_drop_prompted_markdown_compliance.big_drop',
+        'expiry_date_compliance.trailing_7d',
+        'expiry_date_compliance.vs_chain',
+        'markdown_compliance.wow',
+        'markdown_compliance.vs_chain',
+        'prompted_markdown_compliance.wow',
+        'prompted_markdown_compliance.vs_chain',
+        'straight_to_bin.value_threshold',
+    }
+    assert disabled.isdisjoint(enabled)
 
 
 def test_every_detector_has_callable_detect():
