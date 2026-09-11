@@ -126,20 +126,13 @@ def test_availability_performance_breakdown_preserves_missing_store_controllable
     assert breakdown["STORE_CONTROLLABLE_OSCA"] is None
 
 
-def test_osca_series_performance_breakdown_matches_crt_contract():
-    """CRT API reads performance_breakdown from OSCA_DETAILS_JSON and
-    STORE_CONTROLLABLE_OSCA_DETAILS_JSON. It needs the five headline metrics
-    plus the series-specific current_week/last_week/cluster_average values.
-    """
+def test_osca_series_performance_breakdown_matches_exact_crt_contract():
     breakdown = kb._osca_series_performance_breakdown(
         osca=93.84,
         store_controllable_osca=95.72,
         actionability=100.0,
         alert_compliance=100.0,
         tick_flick=46.5,
-        current_week=93.8,
-        last_week=93.5,
-        cluster_average=93.1,
     )
 
     assert breakdown == {
@@ -148,7 +141,4 @@ def test_osca_series_performance_breakdown_matches_crt_contract():
         "actionability": "100.0%",
         "Alert_compliance": "100.0%",
         "tick_flick": "46.5%",
-        "current_week": "93.8%",
-        "last_week": "93.5%",
-        "cluster_average": "93.1%",
     }

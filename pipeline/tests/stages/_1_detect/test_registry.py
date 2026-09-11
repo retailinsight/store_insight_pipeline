@@ -8,6 +8,10 @@ renamed, the registry must still expose it.
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import yaml
+
 from store_insight.pipeline.stages._1_detect import registry
 from store_insight.pipeline.stages._1_detect.detector_info import DetectorInfo
 
@@ -20,6 +24,9 @@ EXPECTED_DETECTOR_MODULES = {
     'compliance.tick_and_flick_vs_chain',
     'markdown_compliance.wow',
     'markdown_compliance.vs_chain',
+    'big_drop_markdown_compliance.big_drop',
+    'big_drop_expiry_date_compliance.big_drop',
+    'big_drop_prompted_markdown_compliance.big_drop',
     'expiry_date_compliance.trailing_7d',
     'expiry_date_compliance.vs_chain',
     'prompted_markdown_compliance.wow',
@@ -36,7 +43,6 @@ EXPECTED_DETECTOR_MODULES = {
     'straight_to_bin.value_threshold',
 }
 
-
 def _dotted(mod):
     parts = mod.__name__.split('.')
     idx = parts.index('detectors')
@@ -47,6 +53,24 @@ def test_all_expected_detectors_discovered():
     found = {_dotted(m) for m in registry.ALL_DETECTORS}
     missing = EXPECTED_DETECTOR_MODULES - found
     assert not missing, f'Registry is missing expected detectors: {missing}'
+
+
+def test_detectors_without_source_data_disabled_by_default():
+    config_path = Path(__file__).parents[3] / 'config' / 'base' / 'default.yaml'
+    enabled = set(yaml.safe_load(config_path.read_text())['detectors']['enabled'])
+    disabled = {
+        'big_drop_markdown_compliance.big_drop',
+        'big_drop_expiry_date_compliance.big_drop',
+        'big_drop_prompted_markdown_compliance.big_drop',
+        'expiry_date_compliance.trailing_7d',
+        'expiry_date_compliance.vs_chain',
+        'markdown_compliance.wow',
+        'markdown_compliance.vs_chain',
+        'prompted_markdown_compliance.wow',
+        'prompted_markdown_compliance.vs_chain',
+        'straight_to_bin.value_threshold',
+    }
+    assert disabled.isdisjoint(enabled)
 
 
 def test_every_detector_has_callable_detect():

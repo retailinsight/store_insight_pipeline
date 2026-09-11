@@ -978,7 +978,17 @@ def run_pipeline_from_signals(
     cortex_budget = budget_from_config(cfg)
 
     def _investigate_one(sig):
-        return sig, investigate(sig, session=session, cfg=cfg, cortex_budget=cortex_budget)
+        try:
+            return sig, investigate(sig, session=session, cfg=cfg, cortex_budget=cortex_budget)
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"[pipeline] WARNING: investigation skipped for "
+                f"signal_type={sig.get('signal_type', 'UNKNOWN')} "
+                f"store_id={sig.get('store_id', 'UNKNOWN')} "
+                f"signal_id={sig.get('signal_id', 'UNKNOWN')}: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            return None
 
     cards = []
     if max_workers and max_workers > 1 and len(enriched) > 1:
@@ -986,9 +996,9 @@ def run_pipeline_from_signals(
             f"[pipeline] Investigating {len(enriched)} signals with {max_workers} parallel workers..."
         )
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            results = list(pool.map(_investigate_one, enriched))
+            results = [result for result in pool.map(_investigate_one, enriched) if result is not None]
     else:
-        results = [_investigate_one(sig) for sig in enriched]
+        results = [result for sig in enriched if (result := _investigate_one(sig)) is not None]
 
     if debug_tables and getattr(logging_cfg, "write_run_log", False):
         _write_investigations_debug_table(
