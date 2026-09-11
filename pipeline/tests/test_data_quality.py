@@ -13,6 +13,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from store_insight.pipeline.pipeline.data_quality import (
+    _NON_NEGATIVE_COLUMNS,
     SourceDataQualityError,
     _to_date,
     validate_source_data,
@@ -102,7 +103,7 @@ def _windows():
 
 def _osa_fields():
     return [
-        'STORE_ID', 'ITEM_CODE', 'ANALYSIS_DATE',
+        'STORE_ID', 'ITEM_CODE', 'DATE',
         'ACTUAL_SALES_VOLUME', 'LOST_SALES_VOLUME', 'LOST_SALES_VALUE',
     ]
 
@@ -223,3 +224,32 @@ def test_expected_store_coverage_surface_issue():
         store_hierarchy=store_hierarchy,
     )
     assert any('3' in i and 'expected stores missing' in i for i in issues)
+
+
+def test_stage_zero_gate_owns_date_and_store_coverage_checks():
+    osa = _make_df(
+        100, _osa_fields(), min_date='2025-01-10', max_date='2025-01-18',
+        distinct_stores=[1, 2],
+    )
+    store_hierarchy = MagicMock()
+    store_hierarchy.select.return_value.distinct.return_value.collect.return_value = [
+        {'STORE_ID': 1}, {'STORE_ID': 2}, {'STORE_ID': 3},
+    ]
+
+    class Cfg:
+        class detectors:
+            enabled = ['osa_big_drop.big_drop']
+        class data_quality:
+            strict = False
+            gate_enabled = True
+
+    issues = validate_source_data(
+        osa=osa, feedback=None, wmd={}, windows=_windows(), cfg=Cfg(),
+        store_hierarchy=store_hierarchy,
+    )
+
+    assert not any('date' in issue or 'expected stores missing' in issue for issue in issues)
+
+
+def test_markdown_sale_value_allows_refunds_and_reversals():
+    assert _NON_NEGATIVE_COLUMNS['markdown_sales'] == ['MARKDOWN_QUANTITY']
