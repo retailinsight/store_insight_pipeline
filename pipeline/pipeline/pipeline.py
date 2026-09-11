@@ -142,8 +142,10 @@ def _make_alert_id(cfg, signal: dict, analysis_date: str | None) -> str:
 
     The hash is based on the business identity of the issue:
     client, analysis_date, signal_type, store_id, and (when present)
-    department or item_id.  This keeps the same ID across re-runs and
-    makes it possible to track an alert over time.
+    department, dow/period_id (for slot-scoped signals such as
+    OSA_RECURRING_SLOT, where a single store+department can have several
+    distinct slots alerting at once), or item_id.  This keeps the same ID
+    across re-runs and makes it possible to track an alert over time.
     """
     client = getattr(cfg, "client_name", None) or "default"
     parts = [
@@ -154,6 +156,14 @@ def _make_alert_id(cfg, signal: dict, analysis_date: str | None) -> str:
     ]
     if signal.get("department"):
         parts.append(str(signal["department"]))
+    # Slot-scoped signals (e.g. OSA_RECURRING_SLOT) can fire multiple
+    # distinct alerts for the same store+department — one per
+    # day-of-week + reporting-period slot. Without these, two different
+    # slots collide onto the same ALERT_ID.
+    if signal.get("dow") is not None:
+        parts.append(str(signal["dow"]))
+    if signal.get("period_id") is not None:
+        parts.append(str(signal["period_id"]))
     if signal.get("item_id") is not None:
         parts.append(str(signal["item_id"]))
     return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
