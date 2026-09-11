@@ -160,7 +160,7 @@ def _availability_performance_breakdown(
     osca: float,
     store_controllable_osca: float | None,
     actionability: float,
-    alert_compliance: float | None,
+    alert_compliance: float,
     tick_flick: float,
 ):
     return {
@@ -170,12 +170,7 @@ def _availability_performance_breakdown(
             if store_controllable_osca is not None else None
         ),
         "actionability": f"{actionability:.1f}%",
-        # No real definition/data source exists for this yet (it previously
-        # duplicated ACTIONABILITY's formula, which was incorrect) — left
-        # null until a genuine "completed on time" field is available.
-        "Alert_compliance": (
-            f"{alert_compliance:.1f}%" if alert_compliance is not None else None
-        ),
+        "Alert_compliance": f"{alert_compliance:.1f}%",
         "tick_flick": f"{tick_flick:.1f}%",
     }
 
@@ -184,7 +179,7 @@ def _osca_series_performance_breakdown(
     osca: float,
     store_controllable_osca: float | None,
     actionability: float,
-    alert_compliance: float | None,
+    alert_compliance: float,
     tick_flick: float,
 ):
     """Build the exact five-field CRT performance breakdown."""
@@ -340,21 +335,31 @@ def _tod_osa(osa, start: str, end: str):
 
 
 def _feedback_metrics(feedback):
-    """Actionability and tick & flick per store.
+    """Actionability, alert compliance, and tick & flick per store.
 
-    An alert is "actionable"/worked when INTERVENTION_ID is neither 0 nor 1
-    (those two values mean no real intervention was logged).
+    TOTAL_ALERTS is every alert sent to the store that week (one row per
+    alert in the feedback table).
 
-    NOTE: Alert Compliance ("alert completed on time") has no real data
-    source or definition yet — it previously duplicated ACTIONABILITY's
-    formula, which was wrong. It is left out here and passed through as
-    None in run_batch until a genuine "completed on time" field exists.
+    Alert Compliance = alerts actually worked / alerts sent. INTERVENTION_ID
+    0 means no feedback was ever logged (not compliant); everything else —
+    including 1 ("On Shelf - No action", a real "we checked, nothing to do"
+    decision) — counts as worked.
+
+    Actionability = alerts of a genuinely actionable type / alerts sent.
+    INTERVENTION_ID 0 or 1 are excluded (0 = never worked, 1 = worked but no
+    action was actionable), so this measures what fraction of alerts led to
+    real action being taken.
     """
     total = feedback.group_by("STORE_ID").agg(F.count("*").alias("TOTAL_ALERTS"))
     worked = (
-        feedback.filter(~F.col("INTERVENTION_ID").isin(0, 1))
+        feedback.filter(F.col("INTERVENTION_ID") != 0)
         .group_by("STORE_ID")
         .agg(F.count("*").alias("WORKED_ALERTS"))
+    )
+    actionable = (
+        feedback.filter(~F.col("INTERVENTION_ID").isin(0, 1))
+        .group_by("STORE_ID")
+        .agg(F.count("*").alias("ACTIONABLE_ALERTS"))
     )
     taf = (
         feedback.filter(F.col("TICK_AND_FLICK_FLAG") == True)
@@ -363,12 +368,15 @@ def _feedback_metrics(feedback):
     )
     return (
         total
-        .join(worked, on=["STORE_ID"], how="left")
-        .join(taf,    on=["STORE_ID"], how="left")
-        .with_column("WORKED_ALERTS", F.coalesce(F.col("WORKED_ALERTS"), F.lit(0)))
-        .with_column("TAF_ALERTS",    F.coalesce(F.col("TAF_ALERTS"),    F.lit(0)))
-        .with_column("ACTIONABILITY",     F.col("WORKED_ALERTS") / F.col("TOTAL_ALERTS"))
-        .with_column("TICK_FLICK_RATE",   F.col("TAF_ALERTS")    / F.col("TOTAL_ALERTS"))
+        .join(worked,     on=["STORE_ID"], how="left")
+        .join(actionable, on=["STORE_ID"], how="left")
+        .join(taf,        on=["STORE_ID"], how="left")
+        .with_column("WORKED_ALERTS",     F.coalesce(F.col("WORKED_ALERTS"),     F.lit(0)))
+        .with_column("ACTIONABLE_ALERTS", F.coalesce(F.col("ACTIONABLE_ALERTS"), F.lit(0)))
+        .with_column("TAF_ALERTS",        F.coalesce(F.col("TAF_ALERTS"),        F.lit(0)))
+        .with_column("ALERT_COMPLIANCE",  F.col("WORKED_ALERTS")     / F.col("TOTAL_ALERTS"))
+        .with_column("ACTIONABILITY",     F.col("ACTIONABLE_ALERTS") / F.col("TOTAL_ALERTS"))
+        .with_column("TICK_FLICK_RATE",   F.col("TAF_ALERTS")        / F.col("TOTAL_ALERTS"))
     )
 
 
@@ -459,7 +467,7 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
         )
         .join(fb_metrics.select(
             F.col("STORE_ID"),
-            F.col("ACTIONABILITY"), F.col("TICK_FLICK_RATE")
+            F.col("ACTIONABILITY"), F.col("ALERT_COMPLIANCE"), F.col("TICK_FLICK_RATE")
         ), on=["STORE_ID"], how="left")
     )
 
@@ -502,9 +510,8 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
         store_osca_wow_pp = (tw_store_osca - lw_store_osca) * 100
 
         actionability    = float(row["ACTIONABILITY"]    or 0) * 100
+        alert_compliance = float(row["ALERT_COMPLIANCE"] or 0) * 100
         tick_flick       = float(row["TICK_FLICK_RATE"]  or 0) * 100
-        # No real data source/definition for this yet — see _feedback_metrics.
-        alert_compliance = None
 
         # Department performance
         dept_tw = {r["DEPARTMENT_NAME"]: r for r in dept_tw_by_store.get(sid, [])}
