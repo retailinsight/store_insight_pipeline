@@ -8,6 +8,7 @@ renamed, the registry must still expose it.
 
 from __future__ import annotations
 
+from store_insight.pipeline.config.loader import load_config
 from store_insight.pipeline.stages._1_detect import registry
 from store_insight.pipeline.stages._1_detect.detector_info import DetectorInfo
 
@@ -36,6 +37,24 @@ EXPECTED_DETECTOR_MODULES = {
     'straight_to_bin.value_threshold',
 }
 
+EXPECTED_DEFAULT_ENABLED_DETECTORS = {
+    'osa_big_drop.big_drop',
+    'osa_recurring_slot.recurring_slot',
+    'compliance.tick_and_flick_wow',
+    'compliance.tick_and_flick_vs_chain',
+    'markdown_compliance.wow',
+    'markdown_compliance.vs_chain',
+    'markdown_override.vs_chain',
+    'markdown_override.wow',
+    'waste.vs_chain',
+    'waste.wow',
+    'waste_trim.trim',
+    'markdown_sellthrough.vs_chain',
+    'markdown_sellthrough.wow',
+    'markdown_sku.repeat_request',
+    'markdown_sku.excessive_override',
+}
+
 
 def _dotted(mod):
     parts = mod.__name__.split('.')
@@ -47,6 +66,15 @@ def test_all_expected_detectors_discovered():
     found = {_dotted(m) for m in registry.ALL_DETECTORS}
     missing = EXPECTED_DETECTOR_MODULES - found
     assert not missing, f'Registry is missing expected detectors: {missing}'
+
+
+def test_default_config_enables_only_expected_detectors():
+    cfg = load_config(None)
+    enabled = set(cfg.detectors.enabled)
+    disabled = EXPECTED_DETECTOR_MODULES - enabled
+
+    assert enabled == EXPECTED_DEFAULT_ENABLED_DETECTORS
+    assert disabled == (EXPECTED_DETECTOR_MODULES - EXPECTED_DEFAULT_ENABLED_DETECTORS)
 
 
 def test_every_detector_has_callable_detect():
