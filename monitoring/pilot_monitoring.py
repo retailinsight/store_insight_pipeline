@@ -38,7 +38,7 @@ VOLUME_BAND_HIGH = 2.0    # C4: WARN when today's total > 2x baseline
 MIX_SHARE_WARN = 0.80     # C4: WARN when one TYPE exceeds 80% of alerts
 BASELINE_WEEKS = 4        # C4: trailing same-weekday weeks
 TASK_LOOKBACK_HOURS = 18  # C2/C5: how far back to look in TASK_HISTORY
-KPI_MIN_COLUMNS = 28      # C6: expected column count
+KPI_MIN_COLUMNS = 38      # C6: expected column count
 
 # Slack notification integration (SD-67936). A message is sent every run:
 # problem blocks when a check is not OK, a recovery line when an open
@@ -118,12 +118,12 @@ CHECK_DESCRIPTIONS = {
     },
     'C6': {
         'title': 'KPI output fresh and complete',
-        'description': ('Confirms KPI_AVAILABILITY_SUMMARY has rows for today and the expected 28 '
-                       'columns, including TIME_OF_DAY_BREAKDOWN, are present.'),
+        'description': ('Confirms KPI_AVAILABILITY_SUMMARY has rows for today, the expected 38 '
+                       'columns, exact five-field OSCA breakdowns and dated time-of-day entries.'),
         'part': 'KPI output',
         'impact': 'KPI tiles may be empty, stale, or missing sections such as the time-of-day breakdown.',
-        'first_response': ('Re-run the KPI batch. If the column count is wrong, stop and compare the table '
-                           'to the expected 28-column DDL before altering anything.'),
+        'first_response': ('Re-run the KPI batch. If validation still fails, check the latest RUN_DATE, '
+                           'JSON contract and 38-column schema before altering anything.'),
     },
     'C7': {
         'title': 'Quality gate result',
@@ -392,11 +392,17 @@ def check_c4_volume_mix(runner, data_db, business_date):
 
 
 def check_c6_kpi_output(runner, data_db, business_date):
+    table = f'{data_db}.PUBLIC.KPI_AVAILABILITY_SUMMARY'
     rows = runner(
-        f"SELECT COUNT(*) AS N FROM {data_db}.PUBLIC.KPI_AVAILABILITY_SUMMARY "
-        f"WHERE RUN_DATE = '{business_date}'"
+        f"SELECT COUNT(*) AS N, COUNT(DISTINCT STORE_ID) AS STORES, "
+        f"COUNT_IF(ARRAY_SIZE(OBJECT_KEYS(PARSE_JSON(OSCA_DETAILS_JSON):performance_breakdown)) = 5) AS OSCA_OK, "
+        f"COUNT_IF(ARRAY_SIZE(OBJECT_KEYS(PARSE_JSON(STORE_CONTROLLABLE_OSCA_DETAILS_JSON):performance_breakdown)) = 5) AS STORE_OSCA_OK "
+        f"FROM {table} WHERE RUN_DATE = '{business_date}'"
     )
     n = int(rows[0]['N']) if rows else 0
+    stores = int(rows[0]['STORES']) if rows else 0
+    osca_ok = int(rows[0]['OSCA_OK']) if rows else 0
+    store_osca_ok = int(rows[0]['STORE_OSCA_OK']) if rows else 0
     cols = runner(
         f"SELECT COUNT(*) AS NCOLS, "
         f"COUNT_IF(COLUMN_NAME = 'TIME_OF_DAY_BREAKDOWN') AS HAS_TOD "
@@ -404,8 +410,18 @@ def check_c6_kpi_output(runner, data_db, business_date):
         f"WHERE TABLE_SCHEMA = 'PUBLIC' "
         f"AND TABLE_NAME = 'KPI_AVAILABILITY_SUMMARY'"
     )
+    dates = runner(
+        f"SELECT COUNT(*) AS TOD_ENTRIES, "
+        f"COUNT_IF(o.value:date IS NULL) + COUNT_IF(s.value:date IS NULL) AS MISSING_DATES "
+        f"FROM {table} k, "
+        f"LATERAL FLATTEN(input => PARSE_JSON(k.OSCA_DETAILS_JSON):time_of_day_analysis) o, "
+        f"LATERAL FLATTEN(input => PARSE_JSON(k.STORE_CONTROLLABLE_OSCA_DETAILS_JSON):time_of_day_analysis) s "
+        f"WHERE k.RUN_DATE = '{business_date}' AND o.index = s.index"
+    )
     ncols = int(cols[0]['NCOLS']) if cols else 0
     has_tod = bool(int(cols[0]['HAS_TOD'])) if cols else False
+    tod_entries = int(dates[0]['TOD_ENTRIES']) if dates else 0
+    missing_dates = int(dates[0]['MISSING_DATES']) if dates else 0
     if n == 0:
         status, details = 'FAIL', f'no KPI rows for RUN_DATE {business_date}'
     elif not has_tod or ncols < KPI_MIN_COLUMNS:
@@ -413,11 +429,21 @@ def check_c6_kpi_output(runner, data_db, business_date):
         details = (f'schema regression: {ncols} columns '
                    f'(expected >= {KPI_MIN_COLUMNS}), TIME_OF_DAY_BREAKDOWN '
                    f'{"present" if has_tod else "MISSING"}')
+    elif stores != n or osca_ok != n or store_osca_ok != n or tod_entries == 0 or missing_dates:
+        status = 'FAIL'
+        details = (f'contract regression: rows={n}, stores={stores}, OSCA={osca_ok}/{n}, '
+                   f'store OSCA={store_osca_ok}/{n}, TOD entries={tod_entries}, '
+                   f'missing dates={missing_dates}')
     else:
-        status, details = 'OK', f'{n} rows, {ncols} columns, TOD present'
+        status = 'OK'
+        details = f'{n} rows/stores, exact OSCA contracts, {tod_entries} dated TOD entries'
     return _result('C6', status,
-                   {'rows': n, 'columns': ncols, 'has_tod': has_tod},
-                   {'rows': '> 0', 'columns': f'>= {KPI_MIN_COLUMNS}'},
+                   {'rows': n, 'stores': stores, 'columns': ncols, 'has_tod': has_tod,
+                    'osca_contract_rows': osca_ok, 'store_osca_contract_rows': store_osca_ok,
+                    'tod_entries': tod_entries, 'missing_dates': missing_dates},
+                   {'rows': 'one per store', 'columns': f'>= {KPI_MIN_COLUMNS}',
+                    'osca_contract_rows': n, 'store_osca_contract_rows': n,
+                    'missing_dates': 0},
                    {}, details, business_date)
 
 

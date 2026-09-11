@@ -101,6 +101,40 @@ def test_quality_no_rows_is_unknown():
     assert status == 'UNKNOWN'
 
 
+def _c6_runner(contract_rows=121, stores=121, tod_entries=847, missing_dates=0):
+    def run(sql):
+        if 'INFORMATION_SCHEMA.COLUMNS' in sql:
+            return [{'NCOLS': 38, 'HAS_TOD': 1}]
+        if 'LATERAL FLATTEN' in sql:
+            return [{'TOD_ENTRIES': tod_entries, 'MISSING_DATES': missing_dates}]
+        return [{
+            'N': 121,
+            'STORES': stores,
+            'OSCA_OK': contract_rows,
+            'STORE_OSCA_OK': contract_rows,
+        }]
+    return run
+
+
+def test_c6_accepts_exact_kpi_contract_with_dates():
+    result = pm.check_c6_kpi_output(_c6_runner(), 'DB', '2026-09-11')
+    assert result['status'] == 'OK'
+
+
+def test_c6_fails_stale_osca_contract():
+    result = pm.check_c6_kpi_output(
+        _c6_runner(contract_rows=0), 'DB', '2026-09-11')
+    assert result['status'] == 'FAIL'
+    assert 'OSCA=0/121' in result['details']
+
+
+def test_c6_fails_missing_time_of_day_dates():
+    result = pm.check_c6_kpi_output(
+        _c6_runner(missing_dates=1), 'DB', '2026-09-11')
+    assert result['status'] == 'FAIL'
+    assert 'missing dates=1' in result['details']
+
+
 # ── overall_status ───────────────────────────────────────────────────────────
 
 def test_overall_fail_wins():
