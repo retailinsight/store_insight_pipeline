@@ -191,8 +191,8 @@ def test_osa_narrative_with_lsv_composition():
 # ---------------------------------------------------------------------------
 
 
-def test_compliance_narrative():
-    sig = {
+def _compliance(**overrides):
+    base = {
         "signal_type": "COMPLIANCE",
         "store_id": 10,
         "site_name": "Anytown",
@@ -208,7 +208,12 @@ def test_compliance_narrative():
         "above_chain_by": 30.0,
         "facts": {"tf_by_alert_type": []},
     }
-    out = generate(sig)
+    base.update(overrides)
+    return base
+
+
+def test_compliance_tick_and_flick_narrative():
+    out = generate(_compliance())
     _assert_card_keys(out)
     assert "Anytown" in out["issue"]
     assert "tick-and-flick" in out["issue"].lower()
@@ -216,6 +221,33 @@ def test_compliance_narrative():
     assert "+20.0pp" in out["explanation"]
     assert "30.0pp above the chain average" in out["explanation"]
     assert "Anytown" in out["recommended_action"]
+
+
+def test_compliance_wow_narrative():
+    out = generate(_compliance(trigger_types=["WOW"]))
+    _assert_card_keys(out)
+    assert "up 20.0pp this week to 40.0%" in out["issue"]
+    assert "+20.0pp" in out["explanation"]
+    assert "chain average" not in out["issue"]
+    assert "chain average" not in out["explanation"]
+
+
+def test_compliance_vs_chain_narrative():
+    out = generate(_compliance(trigger_types=["VS_CHAIN"]))
+    _assert_card_keys(out)
+    assert "30.0pp above chain average" in out["issue"]
+    assert "30.0pp above the chain average" in out["explanation"]
+    assert "week-on-week" not in out["issue"]
+    assert "+20.0pp" not in out["explanation"]
+
+
+def test_compliance_combined_triggers_narrative():
+    out = generate(_compliance(trigger_types=["VS_CHAIN", "WOW"]))
+    _assert_card_keys(out)
+    assert "30.0pp above chain average" in out["issue"]
+    assert "up 20.0pp week-on-week" in out["issue"]
+    assert "+20.0pp" in out["explanation"]
+    assert "30.0pp above the chain average" in out["explanation"]
 
 
 # ---------------------------------------------------------------------------
@@ -675,6 +707,14 @@ def test_markdown_compliance_coaching_narrative():
     assert 'review the markdown routine' in out['recommended_action']
     assert 'DAIRY, PRODUCE, COOKED MEAT' in out['recommended_action']
     assert '84.1%' in out['recommended_action']
+
+
+def test_markdown_compliance_keeps_specific_narrative_with_tick_and_flick_trigger():
+    out = generate(_markdown_compliance(trigger_types=['TICK_AND_FLICK']))
+    _assert_card_keys(out)
+    assert 'Manningtree' in out['issue']
+    assert 'markdown' in out['recommended_action'].lower()
+    assert 'tick-and-flick' not in out['issue'].lower()
 
 
 # ---------------------------------------------------------------------------

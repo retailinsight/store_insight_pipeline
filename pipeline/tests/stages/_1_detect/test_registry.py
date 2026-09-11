@@ -43,7 +43,6 @@ EXPECTED_DETECTOR_MODULES = {
     'straight_to_bin.value_threshold',
 }
 
-
 def _dotted(mod):
     parts = mod.__name__.split('.')
     idx = parts.index('detectors')
