@@ -1031,11 +1031,10 @@ def generate(signal: dict) -> dict:
     dict with keys: issue, explanation, cost_if_not_fixed, recommended_action
     """
     triggers = signal["trigger_types"]
-
-    if "TICK_AND_FLICK" in triggers:
-        return _generate_tick_and_flick(signal)
-
     signal_type = signal.get("signal_type", "")
+
+    if signal_type == "COMPLIANCE" or "TICK_AND_FLICK" in triggers:
+        return _generate_tick_and_flick(signal)
 
     if signal_type == "MARKDOWN_COMPLIANCE":
         return _generate_markdown_compliance(signal)

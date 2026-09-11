@@ -191,12 +191,16 @@ def test_osa_narrative_with_lsv_composition():
 # ---------------------------------------------------------------------------
 
 
-def test_compliance_narrative():
+@pytest.mark.parametrize(
+    "trigger_types",
+    [["TICK_AND_FLICK"], ["WOW"], ["VS_CHAIN"], ["VS_CHAIN", "WOW"]],
+)
+def test_compliance_narrative(trigger_types):
     sig = {
         "signal_type": "COMPLIANCE",
         "store_id": 10,
         "site_name": "Anytown",
-        "trigger_types": ["TICK_AND_FLICK"],
+        "trigger_types": trigger_types,
         "this_week_worked": 40,
         "this_week_tf": 16,
         "this_week_tf_rate": 40.0,
