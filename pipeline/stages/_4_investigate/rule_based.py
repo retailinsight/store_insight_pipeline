@@ -1055,7 +1055,7 @@ def generate(signal: dict) -> dict:
     -------
     dict with keys: issue, explanation, cost_if_not_fixed, recommended_action
     """
-    triggers = signal["trigger_types"]
+    triggers = signal.get("trigger_types", [])
     signal_type = signal.get("signal_type", "")
 
     if signal_type == "COMPLIANCE":
