@@ -413,3 +413,64 @@ def test_run_pipeline_from_signals_returns_intermediates_when_requested(
     assert len(cards) == 1
     assert raw == [sig]
     assert enriched == [sig]
+
+
+def test_investigation_failure_skips_one_signal_in_parallel(monkeypatch, capsys):
+    failed = make_osa_signal(
+        store_id=1, department='D1', trigger_types=['WOW'], this_week_lsv=100.0,
+    )
+    healthy = make_osa_signal(
+        store_id=2, department='D2', trigger_types=['WOW'], this_week_lsv=100.0,
+    )
+    failed['score'] = 1.0
+    healthy['score'] = 0.9
+
+    monkeypatch.setattr(
+        'store_insight.pipeline.pipeline.pipeline._resolve_config',
+        lambda *a, **k: DetectorConfig(),
+    )
+    monkeypatch.setattr('store_insight.pipeline.pipeline.pipeline.score_all', lambda *a, **k: None)
+    monkeypatch.setattr('store_insight.pipeline.pipeline.pipeline.apply_top_n_filter', lambda s, **k: s)
+    monkeypatch.setattr(
+        'store_insight.pipeline.pipeline.pipeline.enrich_signals',
+        lambda *a, **k: [failed, healthy],
+    )
+
+    def investigate_one(signal, **kwargs):
+        if signal['store_id'] == 1:
+            raise KeyError('department')
+        return {
+            'issue': 'i', 'explanation': 'e', 'cost_if_not_fixed': 'c',
+            'recommended_action': 'r', '_engine': 'rule_based',
+        }
+
+    monkeypatch.setattr('store_insight.pipeline.pipeline.pipeline.investigate', investigate_one)
+
+    class Cfg:
+        class output:
+            alerts = 'DB.SCHEMA.ALERTS_PIPELINE'
+            top_n_per_store = 0
+            max_per_type_per_store = 0
+            signal_type_buckets = {}
+        class scoring:
+            score_weights = None
+        class investigation:
+            max_workers = 2
+        class logging:
+            write_signals = False
+            write_enriched = False
+            write_run_log = False
+
+    cards = run_pipeline_from_signals(
+        [failed, healthy], osa=None,
+        last_week_start='2025-01-06', last_week_end='2025-01-12',
+        this_week_start='2025-01-13', this_week_end='2025-01-19',
+        session=None, run_date='2025-01-19', cfg=Cfg(),
+    )
+
+    assert len(cards) == 1
+    assert cards[0]['store_id'] == 2
+    warning = capsys.readouterr().out
+    assert 'WARNING: investigation skipped' in warning
+    assert 'store_id=1' in warning
+    assert "KeyError: 'department'" in warning
