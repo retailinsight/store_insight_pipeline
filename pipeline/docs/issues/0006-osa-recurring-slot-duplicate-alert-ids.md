@@ -91,10 +91,8 @@ See
   - The same `(dow, period_id)` slot still produces a stable `ALERT_ID`
     across re-runs (unaffected by non-identity fields such as
     `sort_value`).
-- Full pipeline test suite run: 777 passed. The only 2 failures
-  (`test_osa_store_actionable_gatherers.py`) are pre-existing and unrelated
-  to this change (stale `facts_keys` in the `osa_store_actionable_day_periods`
-  gatherer).
+- Full current pipeline + monitoring suite: 818 passed, 2 skipped.
+- Ruff and diff checks pass.
 
 ## Remaining work
 
