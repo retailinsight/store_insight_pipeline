@@ -103,6 +103,7 @@ def _fmt_lsv_composition_lines(composition):
 def _generate_tick_and_flick(signal: dict) -> dict:
     """Generate narrative for a TICK_AND_FLICK compliance alert."""
     site_name = signal.get("site_name") or f"Store {signal['store_id']}"
+    triggers = signal.get("trigger_types", [])
     this_worked = signal.get("this_week_worked", 0)
     this_tf = signal.get("this_week_tf", 0)
     this_rate = signal.get("this_week_tf_rate", 0.0)
@@ -120,15 +121,39 @@ def _generate_tick_and_flick(signal: dict) -> dict:
     driver = facts.get("driver_assessment", {}) or {}
     likely_driver = driver.get("likely_driver", "COACHING")
 
-    issue = f"{site_name}: tick-and-flick compliance declining"
+    include_wow = "WOW" in triggers or "TICK_AND_FLICK" in triggers
+    include_vs_chain = "VS_CHAIN" in triggers or "TICK_AND_FLICK" in triggers
+
+    if "WOW" in triggers and "VS_CHAIN" in triggers:
+        issue = (
+            f"{site_name}: tick-and-flick rate {this_rate:.1f}% — "
+            f"{above_chain:.1f}pp above chain average and up {rate_change:.1f}pp week-on-week"
+        )
+    elif "VS_CHAIN" in triggers:
+        issue = (
+            f"{site_name}: tick-and-flick rate {this_rate:.1f}% — "
+            f"{above_chain:.1f}pp above chain average"
+        )
+    elif "WOW" in triggers:
+        issue = f"{site_name}: tick-and-flick rate up {rate_change:.1f}pp this week to {this_rate:.1f}%"
+    else:
+        issue = f"{site_name}: tick-and-flick compliance declining"
 
     explanation_lines = [
         f"{this_tf} of {this_worked} alerts worked this week were tick-and-flick ({this_rate:.1f}%).",
-        f"Tick-and-flick rate rose {rate_change:+.1f}pp week-on-week "
-        f"(last week: {last_rate:.1f}%, {last_tf} of {last_worked} alerts).",
-        f"Store tick-and-flick rate is {above_chain:.1f}pp above the chain average of {chain_rate:.1f}%.",
         f"Alert volume is {volume_classification.lower()} ({volume_change_pct:+.1f}% week-on-week).",
     ]
+    if include_wow:
+        explanation_lines.insert(
+            1,
+            f"Tick-and-flick rate rose {rate_change:+.1f}pp week-on-week "
+            f"(last week: {last_rate:.1f}%, {last_tf} of {last_worked} alerts).",
+        )
+    if include_vs_chain:
+        explanation_lines.insert(
+            len(explanation_lines) - 1,
+            f"Store tick-and-flick rate is {above_chain:.1f}pp above the chain average of {chain_rate:.1f}%.",
+        )
 
     cost_if_not_fixed = f"\u00a3{projected_cost:,.2f} per week if not fixed."
 
@@ -1030,12 +1055,11 @@ def generate(signal: dict) -> dict:
     -------
     dict with keys: issue, explanation, cost_if_not_fixed, recommended_action
     """
-    triggers = signal["trigger_types"]
-
-    if "TICK_AND_FLICK" in triggers:
-        return _generate_tick_and_flick(signal)
-
+    triggers = signal.get("trigger_types", [])
     signal_type = signal.get("signal_type", "")
+
+    if signal_type == "COMPLIANCE":
+        return _generate_tick_and_flick(signal)
 
     if signal_type == "MARKDOWN_COMPLIANCE":
         return _generate_markdown_compliance(signal)
@@ -1045,6 +1069,9 @@ def generate(signal: dict) -> dict:
 
     if signal_type == "PROMPTED_MARKDOWN_COMPLIANCE":
         return _generate_prompted_markdown_compliance(signal)
+
+    if "TICK_AND_FLICK" in triggers:
+        return _generate_tick_and_flick(signal)
 
     if signal_type == "OSA_STORE_ACTIONABLE":
         return _generate_osa_store_actionable(signal)
