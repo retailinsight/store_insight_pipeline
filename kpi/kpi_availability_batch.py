@@ -20,15 +20,13 @@ yesterday). The script computes KPIs over the 7-day window ending on that date
 
 Writes are idempotent per run date: existing rows for the run date are deleted
 and the new rows appended. The table is never dropped or recreated, so columns
-maintained by other processes (waste) survive. Markdown compliance is computed
-here from the real COMPLIANCE_REPORTING source; prompted-markdown compliance
-falls back to a deterministic placeholder until its source table is ingested
-(see kpi_markdown_compliance.py).
+maintained by other processes (waste/markdown/prompted-markdown/TOD) survive.
 """
 
 import argparse
 import json
 import os
+from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -51,13 +49,11 @@ try:  # python-dotenv is not available inside Snowflake stored procedures
 except ImportError:
     pass
 
-from store_insight.kpi.availability_narrative_temp import (
-    DepartmentCandidate,
-    NarrativeConfig,
-    OsaSnapshot,
-    build_narrative,
-)
-from store_insight.pipeline.pipeline._shared import quality_is_valid
+# NOTE: everything this script needs (including the narrative builder below)
+# is defined in this single file rather than imported from other modules in
+# the repo. scripts/deploy_kpi_batch_task.py only packages this file into the
+# Snowflake stored procedure (imports=[".../kpi_availability_batch.py"]), so
+# any `from store_insight...` import would raise ModuleNotFoundError in prod.
 
 _session: Session | None = None
 
@@ -340,24 +336,24 @@ def _feedback_metrics(feedback):
     TOTAL_ALERTS is every alert sent to the store that week (one row per
     alert in the feedback table).
 
-    Alert Compliance = alerts actually worked / alerts sent. INTERVENTION_ID
-    0 means no feedback was ever logged (not compliant); everything else —
-    including 1 ("On Shelf - No action", a real "we checked, nothing to do"
-    decision) — counts as worked.
+    Alert Compliance = alerts actually worked / alerts sent. No intervention
+    was ever logged for a NULL INTERVENTION_ID (not compliant); any recorded
+    value — including 1 ("On Shelf - No action", a real "we checked, nothing
+    to do" decision) — counts as worked.
 
     Actionability = alerts of a genuinely actionable type / alerts sent.
-    INTERVENTION_ID 0 or 1 are excluded (0 = never worked, 1 = worked but no
-    action was actionable), so this measures what fraction of alerts led to
-    real action being taken.
+    Alerts with a NULL INTERVENTION_ID (never worked) or ID 1 (worked but no
+    action was actionable) are excluded, so this measures what fraction of
+    alerts led to real action being taken.
     """
     total = feedback.group_by("STORE_ID").agg(F.count("*").alias("TOTAL_ALERTS"))
     worked = (
-        feedback.filter(F.col("INTERVENTION_ID") != 0)
+        feedback.filter(F.col("INTERVENTION_ID").is_not_null())
         .group_by("STORE_ID")
         .agg(F.count("*").alias("WORKED_ALERTS"))
     )
     actionable = (
-        feedback.filter(~F.col("INTERVENTION_ID").isin(0, 1))
+        feedback.filter(F.col("INTERVENTION_ID").is_not_null() & (F.col("INTERVENTION_ID") != 1))
         .group_by("STORE_ID")
         .agg(F.count("*").alias("ACTIONABLE_ALERTS"))
     )
@@ -383,11 +379,183 @@ def _feedback_metrics(feedback):
 # ---------------------------------------------------------------------------
 # Deterministic narrative generation
 # ---------------------------------------------------------------------------
+# Builds the three-sentence manager-facing summary from validated, pre-ranked
+# facts, replacing a previous Snowflake Cortex COMPLETE call so every output
+# is reproducible. Inlined (rather than a separate importable module) for the
+# packaging reason noted at the top of the file.
 
-# The three-sentence manager-facing summary is built by build_narrative
-# from store_insight.kpi.availability_narrative_temp. It replaces a
-# previous Snowflake Cortex COMPLETE call so every output is reproducible
-# and derived from validated, pre-ranked facts.
+@dataclass
+class OsaSnapshot:
+    """Current and previous OSA values for a store or cluster."""
+
+    current_pct: float | None
+    previous_pct: float | None
+
+
+@dataclass
+class DepartmentCandidate:
+    """A department's current/previous OSA and commercial data for ranking."""
+
+    department: str
+    current_osa_pct: float
+    previous_osa_pct: float
+    lost_sales_value: float
+    quality_valid: bool = True
+
+
+@dataclass
+class NarrativeConfig:
+    """Tunable thresholds for candidate eligibility and anomaly quarantine."""
+
+    min_positive_rows: int = 10
+    max_unknown_row_pct: float = 10.0
+    max_abs_movement_pp: float = 50.0
+    min_positive_improvement_pp: float = 0.0
+    min_negative_deterioration_pp: float = 0.0
+
+
+def quality_is_valid(quality: dict, min_positive_rows: int, max_unknown_row_pct: float) -> bool:
+    return (
+        quality["positive_inventory_rows"] >= min_positive_rows
+        and quality["unknown_inventory_row_pct"] <= max_unknown_row_pct
+    )
+
+
+def _is_valid_candidate(candidate: DepartmentCandidate, cfg: NarrativeConfig) -> bool:
+    """Return True if a department can be considered for a callout."""
+    if not candidate.quality_valid:
+        return False
+    if candidate.current_osa_pct is None or candidate.previous_osa_pct is None:
+        return False
+    movement = abs(candidate.current_osa_pct - candidate.previous_osa_pct)
+    return movement <= cfg.max_abs_movement_pp
+
+
+def _choose_direction_verb(current: float, previous: float) -> str:
+    """Pick the verb for an OSA movement."""
+    return "rose" if current >= previous else "fell"
+
+
+def rank_positive_candidate(
+    candidates: list[DepartmentCandidate], cfg: NarrativeConfig
+) -> DepartmentCandidate | None:
+    """
+    Return the most commercially meaningful positive department.
+
+    Eligible candidates improved week-on-week. They are ranked by the largest
+    absolute percentage-point improvement.
+    """
+    eligible = [
+        c
+        for c in candidates
+        if _is_valid_candidate(c, cfg)
+        and c.current_osa_pct > c.previous_osa_pct
+        and (c.current_osa_pct - c.previous_osa_pct) > cfg.min_positive_improvement_pp
+    ]
+    if not eligible:
+        return None
+    return max(eligible, key=lambda c: c.current_osa_pct - c.previous_osa_pct)
+
+
+def rank_negative_candidates(
+    candidates: list[DepartmentCandidate], cfg: NarrativeConfig, max_count: int = 2
+) -> list[DepartmentCandidate]:
+    """
+    Return up to ``max_count`` negative department callouts.
+
+    Eligible candidates deteriorated week-on-week. Primary sort is by current
+    lost-sales value (commercial exposure), tie-broken by the largest absolute
+    percentage-point drop.
+    """
+    eligible = [
+        c
+        for c in candidates
+        if _is_valid_candidate(c, cfg)
+        and c.previous_osa_pct > c.current_osa_pct
+        and (c.previous_osa_pct - c.current_osa_pct) > cfg.min_negative_deterioration_pp
+    ]
+    if not eligible:
+        return []
+    eligible.sort(key=lambda c: (c.lost_sales_value, c.previous_osa_pct - c.current_osa_pct), reverse=True)
+    return eligible[:max_count]
+
+
+def render_summary(
+    store_controllable: OsaSnapshot,
+    overall: OsaSnapshot,
+    cluster_pct: float | None,
+) -> str:
+    """Render sentence 1: the whole-store availability summary."""
+    sc_current = store_controllable.current_pct
+    sc_previous = store_controllable.previous_pct
+    ov_current = overall.current_pct
+    ov_previous = overall.previous_pct
+
+    if sc_current is None or sc_previous is None or ov_current is None or ov_previous is None:
+        raise ValueError("Summary requires current and previous store-controllable and overall OSA")
+
+    sc_verb = _choose_direction_verb(sc_current, sc_previous)
+    ov_verb = _choose_direction_verb(ov_current, ov_previous)
+    cluster_text = f"{cluster_pct:.1f}%" if cluster_pct is not None else "not available"
+
+    return (
+        f"Store-controllable availability {sc_verb} from {sc_previous:.1f}% last week "
+        f"to {sc_current:.1f}% this week, while overall availability {ov_verb} "
+        f"from {ov_previous:.1f}% to {ov_current:.1f}%, compared with a society average "
+        f"of {cluster_text}."
+    )
+
+
+def render_positive(candidate: DepartmentCandidate | None) -> str:
+    """Render sentence 2: the single most meaningful department improvement."""
+    if candidate is None:
+        return "No material department improvement stood out in the completed data this week."
+    return (
+        f"{candidate.department} improved from {candidate.previous_osa_pct:.1f}% "
+        f"to {candidate.current_osa_pct:.1f}%."
+    )
+
+
+def render_negative(candidates: list[DepartmentCandidate]) -> str:
+    """Render sentence 3: one or two negative department callouts."""
+    if not candidates:
+        return "No material department deterioration stood out in the completed data this week."
+
+    parts: list[str] = []
+    for c in candidates:
+        segment = f"{c.department} fell from {c.previous_osa_pct:.1f}% to {c.current_osa_pct:.1f}%"
+        if c.lost_sales_value:
+            segment += f" with £{round(c.lost_sales_value)} in lost sales"
+        parts.append(segment)
+
+    if len(parts) == 1:
+        return parts[0] + "."
+    return parts[0] + ", while " + parts[1] + "."
+
+
+def build_narrative(
+    store_controllable: OsaSnapshot,
+    overall: OsaSnapshot,
+    cluster_pct: float | None,
+    departments: list[DepartmentCandidate],
+    cfg: NarrativeConfig | None = None,
+) -> list[str]:
+    """
+    Build the three fixed-order availability sentences deterministically.
+
+    Returns exactly three strings: summary, positive, negative.
+    """
+    if cfg is None:
+        cfg = NarrativeConfig()
+
+    positive = rank_positive_candidate(departments, cfg)
+    negatives = rank_negative_candidates(departments, cfg)
+
+    return [
+        render_summary(store_controllable, overall, cluster_pct),
+        render_positive(positive),
+        render_negative(negatives),
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -431,11 +599,6 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
     tod_data = _tod_osa(osa, tw_start, tw_end)
 
     fb_metrics = _feedback_metrics(feedback)
-
-    # Markdown / prompted-markdown compliance are disabled for now — the real
-    # COMPLIANCE_REPORTING source doesn't exist yet, so this was writing an
-    # always-0% value for markdown and a synthetic placeholder for prompted.
-    # See kpi_markdown_compliance.py.
 
     # Join store scores
     store_joined = (
@@ -672,10 +835,11 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
             departments=department_candidates,
             cfg=narrative_cfg,
         )
-        # Flattened narrative: join the three deterministic sentences into a
-        # single "summary" string, used everywhere narrative appears (instead
-        # of a separate multi-sentence "Key_insights" array plus a
-        # first-sentence-only "summary" field).
+        # The three deterministic sentences are also joined into a single
+        # "summary" string, used everywhere narrative appears elsewhere in
+        # this row (OSCA/store-controllable details). Key_insights is kept
+        # as the original three-element array since the CRT API still reads
+        # it from OVERALL_DETAILS_JSON.
         summary = " ".join(key_insights)
 
         # Assemble JSON blobs for storage
@@ -696,6 +860,7 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
                 "month_average": f"{m_osa*100:.1f}%",
                 "year_average":  f"{y_osa*100:.1f}%",
             },
+            "Key_insights": key_insights,
             "summary": summary,
         }
 
@@ -751,14 +916,13 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
             "up" if wow_pp >= 0 else "down",
             json.dumps(overall_details),
             json.dumps(availability_details),
-            # Waste metrics are maintained by a separate process — leave NULL.
+            # Waste / markdown / prompted-markdown metrics are not computed by
+            # this batch yet — write None so existing column data is preserved.
             None,  # WASTE_PCT
             None,  # WASTE_WOW_CHANGE_PP
             None,  # WASTE_CLUSTER_PCT
             None,  # WASTE_TREND_DIRECTION
             None,  # WASTE_DETAILS_JSON
-            # Markdown / prompted-markdown compliance are disabled for now —
-            # see the comment above the (removed) compute call in run_batch().
             None,  # MARKDOWN_PCT
             None,  # MARKDOWN_WOW_CHANGE_PP
             None,  # MARKDOWN_CLUSTER_PCT
