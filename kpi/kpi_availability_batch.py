@@ -287,6 +287,25 @@ def _cluster_osa(osa, sites, start: str, end: str):
     )
 
 
+def _society_osa(osa, start: str, end: str) -> float:
+    """Chain-wide OSA % across *every* store for a date window (not grouped by
+    cluster). This is the "society average" referenced in the narrative —
+    distinct from CLUSTER_OSA, which is scoped to a single store's cluster.
+    """
+    row = (
+        osa.filter((F.col("ANALYSIS_DATE") >= start) & (F.col("ANALYSIS_DATE") <= end))
+        .agg(
+            F.sum("ACTUAL_SALES_VOLUME").alias("SALES"),
+            F.sum("LOST_SALES_VOLUME").alias("LSV"),
+        )
+        .collect()[0]
+    )
+    sales = float(row["SALES"] or 0)
+    lsv = float(row["LSV"] or 0)
+    denom = sales + lsv
+    return (sales / denom) if denom > 0 else 0.0
+
+
 def _dept_osa(osa, start: str, end: str):
     """OSA % per store+department for a date window, plus quality counts."""
     return (
@@ -483,9 +502,14 @@ def rank_negative_candidates(
 def render_summary(
     store_controllable: OsaSnapshot,
     overall: OsaSnapshot,
-    cluster_pct: float | None,
+    society_pct: float | None,
 ) -> str:
-    """Render sentence 1: the whole-store availability summary."""
+    """Render sentence 1: the whole-store availability summary.
+
+    ``society_pct`` is the chain-wide OSA average across *every* store (see
+    ``_society_osa``), not the store's own cluster average — those are two
+    different numbers and the wording here must match whichever is passed in.
+    """
     sc_current = store_controllable.current_pct
     sc_previous = store_controllable.previous_pct
     ov_current = overall.current_pct
@@ -496,13 +520,13 @@ def render_summary(
 
     sc_verb = _choose_direction_verb(sc_current, sc_previous)
     ov_verb = _choose_direction_verb(ov_current, ov_previous)
-    cluster_text = f"{cluster_pct:.1f}%" if cluster_pct is not None else "not available"
+    society_text = f"{society_pct:.1f}%" if society_pct is not None else "not available"
 
     return (
         f"Store-controllable availability {sc_verb} from {sc_previous:.1f}% last week "
         f"to {sc_current:.1f}% this week, while overall availability {ov_verb} "
         f"from {ov_previous:.1f}% to {ov_current:.1f}%, compared with a society average "
-        f"of {cluster_text}."
+        f"of {society_text}."
     )
 
 
@@ -536,7 +560,7 @@ def render_negative(candidates: list[DepartmentCandidate]) -> str:
 def build_narrative(
     store_controllable: OsaSnapshot,
     overall: OsaSnapshot,
-    cluster_pct: float | None,
+    society_pct: float | None,
     departments: list[DepartmentCandidate],
     cfg: NarrativeConfig | None = None,
 ) -> list[str]:
@@ -552,10 +576,22 @@ def build_narrative(
     negatives = rank_negative_candidates(departments, cfg)
 
     return [
-        render_summary(store_controllable, overall, cluster_pct),
+        render_summary(store_controllable, overall, society_pct),
         render_positive(positive),
         render_negative(negatives),
     ]
+
+
+def _narrative_fields(key_insights: list[str]) -> dict:
+    """Key_insights (the raw 3-sentence array the CRT API's List[str] contract
+    still requires) and summary (those same sentences flattened into one
+    string) — both derived from the same build_narrative() output so they can
+    never drift apart.
+    """
+    return {
+        "Key_insights": key_insights,
+        "summary": " ".join(key_insights),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -592,6 +628,7 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
     y_store   = _store_osa(osa, y_start,  tw_end)
 
     tw_cluster = _cluster_osa(osa, sites, tw_start, tw_end)
+    society_osa = _society_osa(osa, tw_start, tw_end)
 
     tw_dept  = _dept_osa(osa, tw_start, tw_end)
     lw_dept  = _dept_osa(osa, lw_start, lw_end)
@@ -831,16 +868,16 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
                 current_pct=tw_osa * 100,
                 previous_pct=lw_osa * 100,
             ),
-            cluster_pct=cl_osa * 100,
+            society_pct=society_osa * 100,
             departments=department_candidates,
             cfg=narrative_cfg,
         )
-        # The three deterministic sentences are also joined into a single
-        # "summary" string, used everywhere narrative appears elsewhere in
-        # this row (OSCA/store-controllable details). Key_insights is kept
-        # as the original three-element array since the CRT API still reads
-        # it from OVERALL_DETAILS_JSON.
-        summary = " ".join(key_insights)
+        # Key_insights (the raw 3-sentence array, required by the CRT API's
+        # List[str] contract) and summary (the same sentences flattened into
+        # one string, used everywhere narrative appears elsewhere in this
+        # row) are built from the same source of truth — see _narrative_fields.
+        narrative_fields = _narrative_fields(key_insights)
+        summary = narrative_fields["summary"]
 
         # Assemble JSON blobs for storage
         overall_details = {
@@ -860,8 +897,7 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
                 "month_average": f"{m_osa*100:.1f}%",
                 "year_average":  f"{y_osa*100:.1f}%",
             },
-            "Key_insights": key_insights,
-            "summary": summary,
+            **narrative_fields,
         }
 
         availability_details = {

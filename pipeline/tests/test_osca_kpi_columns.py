@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -195,7 +196,7 @@ def test_render_summary_includes_the_society_average():
     summary = kb.render_summary(
         store_controllable=kb.OsaSnapshot(current_pct=97.0, previous_pct=96.5),
         overall=kb.OsaSnapshot(current_pct=95.0, previous_pct=94.9),
-        cluster_pct=93.9,
+        society_pct=93.9,
     )
 
     assert "society average" in summary
@@ -247,7 +248,7 @@ def test_build_narrative_returns_three_deterministic_sentences():
     sentences = kb.build_narrative(
         store_controllable=kb.OsaSnapshot(current_pct=97.0, previous_pct=96.5),
         overall=kb.OsaSnapshot(current_pct=95.0, previous_pct=94.9),
-        cluster_pct=93.9,
+        society_pct=93.9,
         departments=departments,
         cfg=cfg,
     )
@@ -261,9 +262,73 @@ def test_build_narrative_falls_back_to_no_material_change_sentences():
     sentences = kb.build_narrative(
         store_controllable=kb.OsaSnapshot(current_pct=97.0, previous_pct=96.5),
         overall=kb.OsaSnapshot(current_pct=95.0, previous_pct=94.9),
-        cluster_pct=93.9,
+        society_pct=93.9,
         departments=[],
     )
 
     assert "No material department improvement" in sentences[1]
     assert "No material department deterioration" in sentences[2]
+
+
+def test_narrative_fields_keeps_key_insights_list_and_flattened_summary():
+    """OVERALL_DETAILS_JSON must keep both the three-item Key_insights list
+    (required by the CRT API's List[str] contract) and the new flattened
+    summary string, built from the same source of truth."""
+    key_insights = ["Sentence one.", "Sentence two.", "Sentence three."]
+
+    fields = kb._narrative_fields(key_insights)
+
+    assert fields["Key_insights"] == key_insights
+    assert isinstance(fields["Key_insights"], list)
+    assert len(fields["Key_insights"]) == 3
+    assert fields["summary"] == "Sentence one. Sentence two. Sentence three."
+
+
+def test_overall_details_json_includes_key_insights_and_summary():
+    """The stored OVERALL_DETAILS_JSON blob must expose both Key_insights as a
+    three-item list and summary as the flattened string."""
+    key_insights = ["Sentence one.", "Sentence two.", "Sentence three."]
+    narrative_fields = kb._narrative_fields(key_insights)
+
+    overall_details = {
+        "target": {"value": "90%", "trend_direction": "up", "trend": "+0.0% vs target"},
+        "previous_average": {"value": "94.9%", "trend_direction": "up", "trend": "+0.1% improvement"},
+        "performance_breakdown": {
+            "current_week": "95.0%",
+            "last_week": "94.9%",
+            "month_average": "94.8%",
+            "year_average": "94.5%",
+        },
+        **narrative_fields,
+    }
+
+    loaded = json.loads(json.dumps(overall_details))
+
+    assert "Key_insights" in loaded
+    assert "summary" in loaded
+    assert isinstance(loaded["Key_insights"], list)
+    assert len(loaded["Key_insights"]) == 3
+    assert loaded["summary"] == " ".join(loaded["Key_insights"])
+
+
+# ---------------------------------------------------------------------------
+# _society_osa: chain-wide average, distinct from CLUSTER_OSA
+# ---------------------------------------------------------------------------
+
+def test_society_osa_averages_across_every_store_not_just_one_cluster(local_session):
+    """The narrative's "society average" must be a chain-wide figure, not
+    scoped to a single store's cluster (that's a separate, legitimate
+    CLUSTER_OSA metric used elsewhere)."""
+    osa = local_session.create_dataframe(
+        [
+            (1, "2026-09-08", 90.0, 10.0),
+            (2, "2026-09-08", 50.0, 50.0),
+        ],
+        schema=["STORE_ID", "ANALYSIS_DATE", "ACTUAL_SALES_VOLUME", "LOST_SALES_VOLUME"],
+    )
+
+    society_osa = kb._society_osa(osa, "2026-09-08", "2026-09-08")
+
+    # (90 + 50) / (90 + 10 + 50 + 50) = 140 / 200 = 0.70 — not either store's
+    # individual rate (0.90 or 0.50), confirming it isn't cluster-scoped.
+    assert society_osa == pytest.approx(0.70)
