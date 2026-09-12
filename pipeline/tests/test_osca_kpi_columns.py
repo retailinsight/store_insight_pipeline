@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -142,3 +143,192 @@ def test_osca_series_performance_breakdown_matches_exact_crt_contract():
         "Alert_compliance": "100.0%",
         "tick_flick": "46.5%",
     }
+
+
+# ---------------------------------------------------------------------------
+# _feedback_metrics: actionability / alert compliance / tick & flick ratios
+# ---------------------------------------------------------------------------
+
+def test_feedback_metrics_ratios(local_session):
+    """No-intervention feedback rows store INTERVENTION_ID as NULL (not 0).
+
+    Alert compliance counts any recorded intervention (including 1, "no
+    action needed") as worked; actionability additionally excludes 1.
+    """
+    feedback = local_session.create_dataframe(
+        [
+            (1, True, None),
+            (1, False, None),
+            (1, False, 1),
+            (1, True, 5),
+            (1, False, 5),
+        ],
+        schema=["STORE_ID", "TICK_AND_FLICK_FLAG", "INTERVENTION_ID"],
+    )
+
+    row = kb._feedback_metrics(feedback).collect()[0]
+
+    assert row["TOTAL_ALERTS"] == 5
+    assert row["WORKED_ALERTS"] == 3
+    assert row["ACTIONABLE_ALERTS"] == 2
+    assert float(row["ALERT_COMPLIANCE"]) == pytest.approx(0.6)
+    assert float(row["ACTIONABILITY"]) == pytest.approx(0.4)
+    assert float(row["TICK_FLICK_RATE"]) == pytest.approx(0.4)
+
+
+def test_feedback_metrics_all_null_intervention_ids_means_zero_compliance(local_session):
+    feedback = local_session.create_dataframe(
+        [(1, False, None), (1, False, None)],
+        schema=["STORE_ID", "TICK_AND_FLICK_FLAG", "INTERVENTION_ID"],
+    )
+
+    row = kb._feedback_metrics(feedback).collect()[0]
+
+    assert float(row["ALERT_COMPLIANCE"]) == pytest.approx(0.0)
+    assert float(row["ACTIONABILITY"]) == pytest.approx(0.0)
+
+
+# ---------------------------------------------------------------------------
+# Deterministic narrative
+# ---------------------------------------------------------------------------
+
+def test_render_summary_includes_the_society_average():
+    summary = kb.render_summary(
+        store_controllable=kb.OsaSnapshot(current_pct=97.0, previous_pct=96.5),
+        overall=kb.OsaSnapshot(current_pct=95.0, previous_pct=94.9),
+        society_pct=93.9,
+    )
+
+    assert "society average" in summary
+
+
+def test_rank_positive_candidate_selects_largest_improvement():
+    cfg = kb.NarrativeConfig()
+    candidates = [
+        kb.DepartmentCandidate("BAKERY", current_osa_pct=92.0, previous_osa_pct=90.0, lost_sales_value=0.0),
+        kb.DepartmentCandidate("DAIRY", current_osa_pct=95.0, previous_osa_pct=90.0, lost_sales_value=0.0),
+    ]
+
+    best = kb.rank_positive_candidate(candidates, cfg)
+
+    assert best.department == "DAIRY"
+
+
+def test_rank_negative_candidates_orders_by_lost_sales_value():
+    cfg = kb.NarrativeConfig()
+    candidates = [
+        kb.DepartmentCandidate("BAKERY", current_osa_pct=80.0, previous_osa_pct=90.0, lost_sales_value=500.0),
+        kb.DepartmentCandidate("DAIRY", current_osa_pct=85.0, previous_osa_pct=90.0, lost_sales_value=2000.0),
+    ]
+
+    worst = kb.rank_negative_candidates(candidates, cfg)
+
+    assert [c.department for c in worst] == ["DAIRY", "BAKERY"]
+
+
+def test_rank_negative_candidates_excludes_departments_failing_quality_gate():
+    cfg = kb.NarrativeConfig()
+    candidates = [
+        kb.DepartmentCandidate(
+            "BAKERY", current_osa_pct=80.0, previous_osa_pct=90.0,
+            lost_sales_value=500.0, quality_valid=False,
+        ),
+    ]
+
+    assert kb.rank_negative_candidates(candidates, cfg) == []
+
+
+def test_build_narrative_returns_three_deterministic_sentences():
+    cfg = kb.NarrativeConfig()
+    departments = [
+        kb.DepartmentCandidate("DAIRY", current_osa_pct=95.0, previous_osa_pct=90.0, lost_sales_value=0.0),
+        kb.DepartmentCandidate("BAKERY", current_osa_pct=80.0, previous_osa_pct=90.0, lost_sales_value=500.0),
+    ]
+
+    sentences = kb.build_narrative(
+        store_controllable=kb.OsaSnapshot(current_pct=97.0, previous_pct=96.5),
+        overall=kb.OsaSnapshot(current_pct=95.0, previous_pct=94.9),
+        society_pct=93.9,
+        departments=departments,
+        cfg=cfg,
+    )
+
+    assert len(sentences) == 3
+    assert "DAIRY improved" in sentences[1]
+    assert "BAKERY fell" in sentences[2]
+
+
+def test_build_narrative_falls_back_to_no_material_change_sentences():
+    sentences = kb.build_narrative(
+        store_controllable=kb.OsaSnapshot(current_pct=97.0, previous_pct=96.5),
+        overall=kb.OsaSnapshot(current_pct=95.0, previous_pct=94.9),
+        society_pct=93.9,
+        departments=[],
+    )
+
+    assert "No material department improvement" in sentences[1]
+    assert "No material department deterioration" in sentences[2]
+
+
+def test_narrative_fields_keeps_key_insights_list_and_flattened_summary():
+    """OVERALL_DETAILS_JSON must keep both the three-item Key_insights list
+    (required by the CRT API's List[str] contract) and the new flattened
+    summary string, built from the same source of truth."""
+    key_insights = ["Sentence one.", "Sentence two.", "Sentence three."]
+
+    fields = kb._narrative_fields(key_insights)
+
+    assert fields["Key_insights"] == key_insights
+    assert isinstance(fields["Key_insights"], list)
+    assert len(fields["Key_insights"]) == 3
+    assert fields["summary"] == "Sentence one. Sentence two. Sentence three."
+
+
+def test_overall_details_json_includes_key_insights_and_summary():
+    """The stored OVERALL_DETAILS_JSON blob must expose both Key_insights as a
+    three-item list and summary as the flattened string."""
+    key_insights = ["Sentence one.", "Sentence two.", "Sentence three."]
+    narrative_fields = kb._narrative_fields(key_insights)
+
+    overall_details = {
+        "target": {"value": "90%", "trend_direction": "up", "trend": "+0.0% vs target"},
+        "previous_average": {"value": "94.9%", "trend_direction": "up", "trend": "+0.1% improvement"},
+        "performance_breakdown": {
+            "current_week": "95.0%",
+            "last_week": "94.9%",
+            "month_average": "94.8%",
+            "year_average": "94.5%",
+        },
+        **narrative_fields,
+    }
+
+    loaded = json.loads(json.dumps(overall_details))
+
+    assert "Key_insights" in loaded
+    assert "summary" in loaded
+    assert isinstance(loaded["Key_insights"], list)
+    assert len(loaded["Key_insights"]) == 3
+    assert loaded["summary"] == " ".join(loaded["Key_insights"])
+
+
+# ---------------------------------------------------------------------------
+# _society_osa: chain-wide average, distinct from CLUSTER_OSA
+# ---------------------------------------------------------------------------
+
+def test_society_osa_averages_across_every_store_not_just_one_cluster(local_session):
+    """The narrative's "society average" must be a chain-wide figure, not
+    scoped to a single store's cluster (that's a separate, legitimate
+    CLUSTER_OSA metric used elsewhere)."""
+    osa = local_session.create_dataframe(
+        [
+            (1, "2026-09-08", 90.0, 10.0),
+            (2, "2026-09-08", 50.0, 50.0),
+        ],
+        schema=["STORE_ID", "ANALYSIS_DATE", "ACTUAL_SALES_VOLUME", "LOST_SALES_VOLUME"],
+    )
+
+    society_osa = kb._society_osa(osa, "2026-09-08", "2026-09-08")
+
+    # (90 + 50) / (90 + 10 + 50 + 50) = 140 / 200 = 0.70 — not either store's
+    # individual rate (0.90 or 0.50), confirming it isn't cluster-scoped.
+    assert society_osa == pytest.approx(0.70)

@@ -47,7 +47,6 @@ REFRESH_TASK_NAME = "KPI_AVAILABILITY_REFRESH_TASK"
 STAGE_NAME = "KPI_BATCH_CODE_STAGE"
 CRON = "USING CRON 30 6 * * * UTC"  # daily 06:30 UTC, ~30 min after the 06:00 alerts pipeline
 REFRESH_CRON = "USING CRON 45 11 * * * Europe/London"  # after the 11:30 source check
-CORTEX_MODEL = "mistral-large2"
 OSCA_COLUMNS = {
     "OSCA_PCT": "FLOAT",
     "OSCA_WOW_CHANGE_PP": "FLOAT",
@@ -70,9 +69,6 @@ def _ensure_osca_columns(session: Session, table: str) -> None:
 
 
 def _sp_handler(session: Session, analysis_date: str, run_date: str, output_table: str) -> str:
-    import os
-
-    os.environ["KPI_CORTEX_MODEL"] = os.environ.get("KPI_CORTEX_MODEL", "mistral-large2")
     import kpi_availability_batch as kb
 
     return kb.run_batch_sp(

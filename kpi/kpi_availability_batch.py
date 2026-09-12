@@ -2,8 +2,8 @@
 KPI Availability Batch Script
 ==============================
 Joins source tables, aggregates all Availability KPI metrics per store per week,
-calls Snowflake Cortex to generate key insights, and writes the result to the
-table named by the KPI_OUTPUT_TABLE env var (default:
+builds a deterministic three-sentence availability narrative, and writes the
+result to the table named by the KPI_OUTPUT_TABLE env var (default:
 STORE_INSIGHT_DB.PUBLIC.KPI_AVAILABILITY_SUMMARY).
 
 Run manually (from the repo root):
@@ -26,6 +26,7 @@ maintained by other processes (waste/markdown/prompted-markdown/TOD) survive.
 import argparse
 import json
 import os
+from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -47,6 +48,12 @@ try:  # python-dotenv is not available inside Snowflake stored procedures
     load_dotenv(dotenv_path=Path(__file__).parent.parent / "api2" / ".env")
 except ImportError:
     pass
+
+# NOTE: everything this script needs (including the narrative builder below)
+# is defined in this single file rather than imported from other modules in
+# the repo. scripts/deploy_kpi_batch_task.py only packages this file into the
+# Snowflake stored procedure (imports=[".../kpi_availability_batch.py"]), so
+# any `from store_insight...` import would raise ModuleNotFoundError in prod.
 
 _session: Session | None = None
 
@@ -116,7 +123,6 @@ HIERARCHY_TABLE = "ANALYSIS.FINAL.LSM_ITEM_HIERARCHY"
 SITE_TABLE      = "ANALYSIS.FINAL.LSM_SITE_HIERARCHY"
 FEEDBACK_TABLE  = "ANALYSIS.FINAL.LSM_ALERT_FEEDBACK"
 OUTPUT_TABLE    = os.getenv("KPI_OUTPUT_TABLE", "STORE_INSIGHT_DB.PUBLIC.KPI_AVAILABILITY_SUMMARY")
-CORTEX_MODEL    = os.getenv("KPI_CORTEX_MODEL", "mistral-large2")
 
 # RAG threshold
 OSA_TARGET = 0.90
@@ -232,7 +238,7 @@ def _load_feedback(session: Session, week_start: str, week_end: str):
         .select(
             F.col("SITE_ID").alias("STORE_ID"),
             F.col("TICK_AND_FLICK_FLAG"),
-            F.col("INTERVENTION_NAME"),
+            F.col("INTERVENTION_ID"),
             F.col("ALERT_ANALYSIS_DATE"),
         )
         .cache_result()
@@ -281,8 +287,27 @@ def _cluster_osa(osa, sites, start: str, end: str):
     )
 
 
+def _society_osa(osa, start: str, end: str) -> float:
+    """Chain-wide OSA % across *every* store for a date window (not grouped by
+    cluster). This is the "society average" referenced in the narrative —
+    distinct from CLUSTER_OSA, which is scoped to a single store's cluster.
+    """
+    row = (
+        osa.filter((F.col("ANALYSIS_DATE") >= start) & (F.col("ANALYSIS_DATE") <= end))
+        .agg(
+            F.sum("ACTUAL_SALES_VOLUME").alias("SALES"),
+            F.sum("LOST_SALES_VOLUME").alias("LSV"),
+        )
+        .collect()[0]
+    )
+    sales = float(row["SALES"] or 0)
+    lsv = float(row["LSV"] or 0)
+    denom = sales + lsv
+    return (sales / denom) if denom > 0 else 0.0
+
+
 def _dept_osa(osa, start: str, end: str):
-    """OSA % per store+department for a date window."""
+    """OSA % per store+department for a date window, plus quality counts."""
     return (
         osa.filter((F.col("ANALYSIS_DATE") >= start) & (F.col("ANALYSIS_DATE") <= end))
         .filter(F.col("DEPARTMENT_NAME").is_not_null())
@@ -292,6 +317,9 @@ def _dept_osa(osa, start: str, end: str):
             F.sum("LOST_SALES_VOLUME").alias("DEPT_LSV"),
             _store_controlled_lsv().alias("DEPT_STORE_CONTROLLED_LSV"),
             F.sum("LOST_SALES_VALUE").alias("DEPT_LSV_VALUE"),
+            F.count("*").alias("DEPT_ROW_COUNT"),
+            F.sum(F.when(F.col("INVENTORY_QTY") > 0, F.lit(1)).otherwise(F.lit(0))).alias("DEPT_POSITIVE_ROWS"),
+            F.sum(F.when(F.col("INVENTORY_QTY").is_null(), F.lit(1)).otherwise(F.lit(0))).alias("DEPT_UNKNOWN_ROWS"),
         )
         .with_column("DEPT_OSA", _osa_pct(F.col("DEPT_SALES"), F.col("DEPT_LSV")))
         .with_column(
@@ -322,12 +350,31 @@ def _tod_osa(osa, start: str, end: str):
 
 
 def _feedback_metrics(feedback):
-    """Actionability, alert compliance, tick & flick per store."""
+    """Actionability, alert compliance, and tick & flick per store.
+
+    TOTAL_ALERTS is every alert sent to the store that week (one row per
+    alert in the feedback table).
+
+    Alert Compliance = alerts actually worked / alerts sent. No intervention
+    was ever logged for a NULL INTERVENTION_ID (not compliant); any recorded
+    value — including 1 ("On Shelf - No action", a real "we checked, nothing
+    to do" decision) — counts as worked.
+
+    Actionability = alerts of a genuinely actionable type / alerts sent.
+    Alerts with a NULL INTERVENTION_ID (never worked) or ID 1 (worked but no
+    action was actionable) are excluded, so this measures what fraction of
+    alerts led to real action being taken.
+    """
     total = feedback.group_by("STORE_ID").agg(F.count("*").alias("TOTAL_ALERTS"))
     worked = (
-        feedback.filter(F.col("INTERVENTION_NAME").is_not_null())
+        feedback.filter(F.col("INTERVENTION_ID").is_not_null())
         .group_by("STORE_ID")
         .agg(F.count("*").alias("WORKED_ALERTS"))
+    )
+    actionable = (
+        feedback.filter(F.col("INTERVENTION_ID").is_not_null() & (F.col("INTERVENTION_ID") != 1))
+        .group_by("STORE_ID")
+        .agg(F.count("*").alias("ACTIONABLE_ALERTS"))
     )
     taf = (
         feedback.filter(F.col("TICK_AND_FLICK_FLAG") == True)
@@ -336,83 +383,215 @@ def _feedback_metrics(feedback):
     )
     return (
         total
-        .join(worked, on=["STORE_ID"], how="left")
-        .join(taf,    on=["STORE_ID"], how="left")
-        .with_column("WORKED_ALERTS", F.coalesce(F.col("WORKED_ALERTS"), F.lit(0)))
-        .with_column("TAF_ALERTS",    F.coalesce(F.col("TAF_ALERTS"),    F.lit(0)))
-        .with_column("ACTIONABILITY",     F.col("WORKED_ALERTS") / F.col("TOTAL_ALERTS"))
-        .with_column("ALERT_COMPLIANCE",  F.col("WORKED_ALERTS") / F.col("TOTAL_ALERTS"))
-        .with_column("TICK_FLICK_RATE",   F.col("TAF_ALERTS")    / F.col("TOTAL_ALERTS"))
+        .join(worked,     on=["STORE_ID"], how="left")
+        .join(actionable, on=["STORE_ID"], how="left")
+        .join(taf,        on=["STORE_ID"], how="left")
+        .with_column("WORKED_ALERTS",     F.coalesce(F.col("WORKED_ALERTS"),     F.lit(0)))
+        .with_column("ACTIONABLE_ALERTS", F.coalesce(F.col("ACTIONABLE_ALERTS"), F.lit(0)))
+        .with_column("TAF_ALERTS",        F.coalesce(F.col("TAF_ALERTS"),        F.lit(0)))
+        .with_column("ALERT_COMPLIANCE",  F.col("WORKED_ALERTS")     / F.col("TOTAL_ALERTS"))
+        .with_column("ACTIONABILITY",     F.col("ACTIONABLE_ALERTS") / F.col("TOTAL_ALERTS"))
+        .with_column("TICK_FLICK_RATE",   F.col("TAF_ALERTS")        / F.col("TOTAL_ALERTS"))
     )
 
 
 # ---------------------------------------------------------------------------
-# Cortex key insights
+# Deterministic narrative generation
 # ---------------------------------------------------------------------------
+# Builds the three-sentence manager-facing summary from validated, pre-ranked
+# facts, replacing a previous Snowflake Cortex COMPLETE call so every output
+# is reproducible. Inlined (rather than a separate importable module) for the
+# packaging reason noted at the top of the file.
 
-def _generate_key_insights(session: Session, store_id: int, facts: dict) -> list[str]:
-    """
-    Call Snowflake Cortex COMPLETE to generate 3 key insight bullets
-    from the aggregated KPI facts for a store.
+@dataclass
+class OsaSnapshot:
+    """Current and previous OSA values for a store or cluster."""
 
-    The prompt enforces a JSON array response schema so output can be
-    parsed deterministically. Falls back to rule-based strings on any
-    Cortex or parse failure.
+    current_pct: float | None
+    previous_pct: float | None
 
-    Returns a list of exactly 3 strings.
-    """
-    prompt = (
-        "You are a retail performance analyst. "
-        "Based on the store KPI data below, generate exactly 3 concise insight sentences "
-        "for a store manager. "
-        "You MUST respond with a valid JSON array of exactly 3 strings and nothing else. "
-        "Example format: [\"Insight one.\", \"Insight two.\", \"Insight three.\"] "
-        "Do not include any text outside the JSON array.\n\n"
-        "Store KPI data:\n"
-        f"- Current week OSA: {facts['current_week_osa_pct']:.1f}%\n"
-        f"- Last week OSA: {facts['last_week_osa_pct']:.1f}%\n"
-        f"- Week-on-week change: {facts['wow_change_pp']:+.1f}pp\n"
-        f"- Cluster average OSA: {facts['cluster_osa_pct']:.1f}%\n"
-        f"- Rolling 28-day OSA: {facts['month_avg_osa_pct']:.1f}%\n"
-        f"- Rolling 365-day OSA: {facts['year_avg_osa_pct']:.1f}%\n"
-        f"- Availability target: 90%\n"
-        f"- Top underperforming departments: {facts['top_underperforming_depts']}\n"
+
+@dataclass
+class DepartmentCandidate:
+    """A department's current/previous OSA and commercial data for ranking."""
+
+    department: str
+    current_osa_pct: float
+    previous_osa_pct: float
+    lost_sales_value: float
+    quality_valid: bool = True
+
+
+@dataclass
+class NarrativeConfig:
+    """Tunable thresholds for candidate eligibility and anomaly quarantine."""
+
+    min_positive_rows: int = 10
+    max_unknown_row_pct: float = 10.0
+    max_abs_movement_pp: float = 50.0
+    min_positive_improvement_pp: float = 0.0
+    min_negative_deterioration_pp: float = 0.0
+
+
+def quality_is_valid(quality: dict, min_positive_rows: int, max_unknown_row_pct: float) -> bool:
+    return (
+        quality["positive_inventory_rows"] >= min_positive_rows
+        and quality["unknown_inventory_row_pct"] <= max_unknown_row_pct
     )
 
-    try:
-        escaped = prompt.replace("'", "\\'")
-        result = session.sql(
-            f"SELECT SNOWFLAKE.CORTEX.COMPLETE('{CORTEX_MODEL}', '{escaped}') AS RESPONSE"
-        ).collect()
-        raw = result[0]["RESPONSE"].strip()
 
-        # Strip any markdown code fences the model may add
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-            raw = raw.strip()
+def _is_valid_candidate(candidate: DepartmentCandidate, cfg: NarrativeConfig) -> bool:
+    """Return True if a department can be considered for a callout."""
+    if not candidate.quality_valid:
+        return False
+    if candidate.current_osa_pct is None or candidate.previous_osa_pct is None:
+        return False
+    movement = abs(candidate.current_osa_pct - candidate.previous_osa_pct)
+    return movement <= cfg.max_abs_movement_pp
 
-        parsed = json.loads(raw)
 
-        if not isinstance(parsed, list):
-            raise ValueError(f"Expected JSON array, got {type(parsed)}")
+def _choose_direction_verb(current: float, previous: float) -> str:
+    """Pick the verb for an OSA movement."""
+    return "rose" if current >= previous else "fell"
 
-        insights = [str(item).strip() for item in parsed if str(item).strip()][:3]
-        while len(insights) < 3:
-            insights.append("")
-        return insights
 
-    except Exception as e:
-        print(f"  Warning: Cortex call failed for store {store_id}: {e}")
-        wow_dir = "up" if facts["wow_change_pp"] >= 0 else "down"
-        vs_target = facts["current_week_osa_pct"] - 90.0
-        vs_cluster = facts["current_week_osa_pct"] - facts["cluster_osa_pct"]
-        return [
-            f"Availability is {'above' if vs_target >= 0 else 'below'} the 90% target by {abs(vs_target):.1f}pp.",
-            f"Week-on-week trend is {wow_dir} ({facts['wow_change_pp']:+.1f}pp vs last week).",
-            f"Store is {'ahead of' if vs_cluster >= 0 else 'behind'} cluster average by {abs(vs_cluster):.1f}pp.",
-        ]
+def rank_positive_candidate(
+    candidates: list[DepartmentCandidate], cfg: NarrativeConfig
+) -> DepartmentCandidate | None:
+    """
+    Return the most commercially meaningful positive department.
+
+    Eligible candidates improved week-on-week. They are ranked by the largest
+    absolute percentage-point improvement.
+    """
+    eligible = [
+        c
+        for c in candidates
+        if _is_valid_candidate(c, cfg)
+        and c.current_osa_pct > c.previous_osa_pct
+        and (c.current_osa_pct - c.previous_osa_pct) > cfg.min_positive_improvement_pp
+    ]
+    if not eligible:
+        return None
+    return max(eligible, key=lambda c: c.current_osa_pct - c.previous_osa_pct)
+
+
+def rank_negative_candidates(
+    candidates: list[DepartmentCandidate], cfg: NarrativeConfig, max_count: int = 2
+) -> list[DepartmentCandidate]:
+    """
+    Return up to ``max_count`` negative department callouts.
+
+    Eligible candidates deteriorated week-on-week. Primary sort is by current
+    lost-sales value (commercial exposure), tie-broken by the largest absolute
+    percentage-point drop.
+    """
+    eligible = [
+        c
+        for c in candidates
+        if _is_valid_candidate(c, cfg)
+        and c.previous_osa_pct > c.current_osa_pct
+        and (c.previous_osa_pct - c.current_osa_pct) > cfg.min_negative_deterioration_pp
+    ]
+    if not eligible:
+        return []
+    eligible.sort(key=lambda c: (c.lost_sales_value, c.previous_osa_pct - c.current_osa_pct), reverse=True)
+    return eligible[:max_count]
+
+
+def render_summary(
+    store_controllable: OsaSnapshot,
+    overall: OsaSnapshot,
+    society_pct: float | None,
+) -> str:
+    """Render sentence 1: the whole-store availability summary.
+
+    ``society_pct`` is the chain-wide OSA average across *every* store (see
+    ``_society_osa``), not the store's own cluster average — those are two
+    different numbers and the wording here must match whichever is passed in.
+    """
+    sc_current = store_controllable.current_pct
+    sc_previous = store_controllable.previous_pct
+    ov_current = overall.current_pct
+    ov_previous = overall.previous_pct
+
+    if sc_current is None or sc_previous is None or ov_current is None or ov_previous is None:
+        raise ValueError("Summary requires current and previous store-controllable and overall OSA")
+
+    sc_verb = _choose_direction_verb(sc_current, sc_previous)
+    ov_verb = _choose_direction_verb(ov_current, ov_previous)
+    society_text = f"{society_pct:.1f}%" if society_pct is not None else "not available"
+
+    return (
+        f"Store-controllable availability {sc_verb} from {sc_previous:.1f}% last week "
+        f"to {sc_current:.1f}% this week, while overall availability {ov_verb} "
+        f"from {ov_previous:.1f}% to {ov_current:.1f}%, compared with a society average "
+        f"of {society_text}."
+    )
+
+
+def render_positive(candidate: DepartmentCandidate | None) -> str:
+    """Render sentence 2: the single most meaningful department improvement."""
+    if candidate is None:
+        return "No material department improvement stood out in the completed data this week."
+    return (
+        f"{candidate.department} improved from {candidate.previous_osa_pct:.1f}% "
+        f"to {candidate.current_osa_pct:.1f}%."
+    )
+
+
+def render_negative(candidates: list[DepartmentCandidate]) -> str:
+    """Render sentence 3: one or two negative department callouts."""
+    if not candidates:
+        return "No material department deterioration stood out in the completed data this week."
+
+    parts: list[str] = []
+    for c in candidates:
+        segment = f"{c.department} fell from {c.previous_osa_pct:.1f}% to {c.current_osa_pct:.1f}%"
+        if c.lost_sales_value:
+            segment += f" with £{round(c.lost_sales_value)} in lost sales"
+        parts.append(segment)
+
+    if len(parts) == 1:
+        return parts[0] + "."
+    return parts[0] + ", while " + parts[1] + "."
+
+
+def build_narrative(
+    store_controllable: OsaSnapshot,
+    overall: OsaSnapshot,
+    society_pct: float | None,
+    departments: list[DepartmentCandidate],
+    cfg: NarrativeConfig | None = None,
+) -> list[str]:
+    """
+    Build the three fixed-order availability sentences deterministically.
+
+    Returns exactly three strings: summary, positive, negative.
+    """
+    if cfg is None:
+        cfg = NarrativeConfig()
+
+    positive = rank_positive_candidate(departments, cfg)
+    negatives = rank_negative_candidates(departments, cfg)
+
+    return [
+        render_summary(store_controllable, overall, society_pct),
+        render_positive(positive),
+        render_negative(negatives),
+    ]
+
+
+def _narrative_fields(key_insights: list[str]) -> dict:
+    """Key_insights (the raw 3-sentence array the CRT API's List[str] contract
+    still requires) and summary (those same sentences flattened into one
+    string) — both derived from the same build_narrative() output so they can
+    never drift apart.
+    """
+    return {
+        "Key_insights": key_insights,
+        "summary": " ".join(key_insights),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -449,6 +628,7 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
     y_store   = _store_osa(osa, y_start,  tw_end)
 
     tw_cluster = _cluster_osa(osa, sites, tw_start, tw_end)
+    society_osa = _society_osa(osa, tw_start, tw_end)
 
     tw_dept  = _dept_osa(osa, tw_start, tw_end)
     lw_dept  = _dept_osa(osa, lw_start, lw_end)
@@ -646,30 +826,58 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
                     entry[key] = f"{periods[pid]['osca'] * 100:.1f}%"
             tod_breakdown.append(entry)
 
-        # Top underperforming depts for Cortex prompt
-        underperforming = [
-            cp["category"] for cp in category_perf if cp["warning"]
-        ][:3]
+        # Build deterministic narrative candidates from validated department facts
+        narrative_cfg = NarrativeConfig()
+        department_candidates = []
+        for dname, dr in sorted(dept_tw.items()):
+            lw_dr = dept_lw.get(dname)
+            if lw_dr is None:
+                continue
+            row_count = int(dr["DEPT_ROW_COUNT"] or 0)
+            positive_rows = int(dr["DEPT_POSITIVE_ROWS"] or 0)
+            unknown_rows = int(dr["DEPT_UNKNOWN_ROWS"] or 0)
+            quality = {
+                "row_count": row_count,
+                "positive_inventory_rows": positive_rows,
+                "unknown_inventory_rows": unknown_rows,
+                "unknown_inventory_row_pct": round(
+                    (unknown_rows / row_count * 100) if row_count else 0.0, 2
+                ),
+            }
+            department_candidates.append(
+                DepartmentCandidate(
+                    department=dname,
+                    current_osa_pct=float(dr["DEPT_OSA"] or 0) * 100,
+                    previous_osa_pct=float(lw_dr["DEPT_OSA"] or 0) * 100,
+                    lost_sales_value=float(dr["DEPT_LSV_VALUE"] or 0),
+                    quality_valid=quality_is_valid(
+                        quality,
+                        narrative_cfg.min_positive_rows,
+                        narrative_cfg.max_unknown_row_pct,
+                    ),
+                )
+            )
 
-        # WoW summary sentence
-        direction = "increased" if wow_pp >= 0 else "decreased"
-        summary = (
-            f"Availability {direction} {abs(wow_pp):.1f}pp this week vs last week "
-            f"(store OSA: {tw_osa*100:.1f}%, cluster average: {cl_osa*100:.1f}%)."
+        print(f"  Generating deterministic narrative for store {sid}...")
+        key_insights = build_narrative(
+            store_controllable=OsaSnapshot(
+                current_pct=tw_store_osca * 100,
+                previous_pct=lw_store_osca * 100,
+            ),
+            overall=OsaSnapshot(
+                current_pct=tw_osa * 100,
+                previous_pct=lw_osa * 100,
+            ),
+            society_pct=society_osa * 100,
+            departments=department_candidates,
+            cfg=narrative_cfg,
         )
-
-        facts = {
-            "current_week_osa_pct":  tw_osa * 100,
-            "last_week_osa_pct":     lw_osa * 100,
-            "wow_change_pp":         wow_pp,
-            "cluster_osa_pct":       cl_osa * 100,
-            "month_avg_osa_pct":     m_osa * 100,
-            "year_avg_osa_pct":      y_osa * 100,
-            "top_underperforming_depts": ", ".join(underperforming) if underperforming else "none",
-        }
-
-        print(f"  Generating insights for store {sid}...")
-        key_insights = _generate_key_insights(session, sid, facts)
+        # Key_insights (the raw 3-sentence array, required by the CRT API's
+        # List[str] contract) and summary (the same sentences flattened into
+        # one string, used everywhere narrative appears elsewhere in this
+        # row) are built from the same source of truth — see _narrative_fields.
+        narrative_fields = _narrative_fields(key_insights)
+        summary = narrative_fields["summary"]
 
         # Assemble JSON blobs for storage
         overall_details = {
@@ -689,7 +897,7 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
                 "month_average": f"{m_osa*100:.1f}%",
                 "year_average":  f"{y_osa*100:.1f}%",
             },
-            "Key_insights": key_insights,
+            **narrative_fields,
         }
 
         availability_details = {
@@ -726,11 +934,7 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
                 alert_compliance,
                 tick_flick,
             ),
-            "summary": (
-                f"Store-controllable availability changed {store_osca_wow_pp:+.1f}pp "
-                f"this week vs last week ({tw_store_osca * 100:.1f}% current, "
-                f"{cl_store_osca * 100:.1f}% cluster average)."
-            ),
+            "summary": summary,
             "category_performance": store_category_perf,
             "time_of_day_analysis": store_time_of_day,
         }
@@ -831,34 +1035,6 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
         f"DELETE FROM {OUTPUT_TABLE} WHERE RUN_DATE = '{run_date_str}'"
     ).collect()
     df.write.mode("append").save_as_table(OUTPUT_TABLE)
-
-    # Carry forward markdown / prompted-markdown placeholder values from each
-    # store's most recent prior row (Cornelious, 24 Aug: "keep the placeholder
-    # for now"). Without this, new run dates have NULL markdown columns and
-    # the API drops those tiles. Remove once the batch computes real values.
-    md_cols = [
-        "MARKDOWN_PCT", "MARKDOWN_WOW_CHANGE_PP", "MARKDOWN_CLUSTER_PCT",
-        "MARKDOWN_TREND_DIRECTION", "MARKDOWN_DETAILS_JSON",
-        "PROMPTED_MARKDOWN_PCT", "PROMPTED_MARKDOWN_WOW_CHANGE_PP",
-        "PROMPTED_MARKDOWN_CLUSTER_PCT", "PROMPTED_MARKDOWN_TREND_DIRECTION",
-        "PROMPTED_MARKDOWN_DETAILS_JSON",
-    ]
-    set_clause = ", ".join(f"{c} = s.{c}" for c in md_cols)
-    print("  Carrying forward markdown placeholder values from prior rows...")
-    session.sql(f"""
-        UPDATE {OUTPUT_TABLE} t
-        SET {set_clause}
-        FROM (
-            SELECT STORE_ID, {', '.join(md_cols)}
-            FROM {OUTPUT_TABLE}
-            WHERE RUN_DATE <> '{run_date_str}' AND MARKDOWN_PCT IS NOT NULL
-            QUALIFY ROW_NUMBER() OVER (
-                PARTITION BY STORE_ID ORDER BY RUN_DATE DESC) = 1
-        ) s
-        WHERE t.STORE_ID = s.STORE_ID
-          AND t.RUN_DATE = '{run_date_str}'
-          AND t.MARKDOWN_PCT IS NULL
-    """).collect()
     print(f"Done. Written to {OUTPUT_TABLE} (delete-by-run-date + append).")
 
 
