@@ -30,7 +30,6 @@ detectors:
     - compliance.tick_and_flick_vs_chain
     - markdown_override.vs_chain
     - markdown_override.wow
-    - waste_trim.trim
     - markdown_sku.repeat_request
     - markdown_sku.excessive_override
 
@@ -41,7 +40,12 @@ detector_config:
       min_actionable_chain_gap:       0.01
       min_actionable_lsv:             50.0
       min_actionable_positive_rows:   3
-      max_actionable_unknown_row_pct: 50.0
+      # NOTE: DetectorConfig.from_config() flattens all threshold groups into
+      # one flat namespace, so this field name is shared with OSA_BIG_DROP's
+      # max_actionable_unknown_row_pct below and the *last* group processed
+      # wins for both detectors. Keep these two values equal (10.0) until
+      # separate per-detector field names are introduced. See PR #80 review.
+      max_actionable_unknown_row_pct: 10.0
 
     OSA_BIG_DROP:
       min_actionable_big_drop:        0.02
@@ -64,21 +68,11 @@ detector_config:
       min_override_wow_increase: 0.01
       min_total_markdowns:       2
 
-    MARKDOWN_SELLTHROUGH:
-      min_sellthrough_chain_gap: 0.03
-      min_sellthrough_wow_drop:  0.03
-      min_markdown_qty:          5
-
     MARKDOWN_SKU:
       min_markdown_weeks:      4
       min_markdown_requests:   8
       min_sku_override_rate:   0.75
       min_sku_requests:        4
-
-    WASTE:
-      min_stb_chain_gap:       0.03
-      min_stb_wow_increase:    0.04
-      min_waste_qty:           3
 
 investigation:
   COMPLIANCE:
