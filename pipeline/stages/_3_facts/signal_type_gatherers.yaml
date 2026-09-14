@@ -23,7 +23,7 @@ OSA_STORE_ACTIONABLE:
   - name: osa_store_actionable_day_periods
     description: Top day-period rows by store-controlled LSV
   - name: osa_item_time_patterns
-    description: Complete 7x3 day-period grid, prior-week top items, and repeat timing patterns
+    description: Complete 7x3 day-period grid, latest-week top items, and repeat timing patterns
   - name: osa_store_actionable_chain_drift
     description: Store-controlled chain OSA drift context
   - name: osa_store_actionable_cost_projection
@@ -39,7 +39,7 @@ OSA_BIG_DROP:
   - name: osa_store_actionable_day_periods
     description: Top day-period rows by store-controlled LSV
   - name: osa_item_time_patterns
-    description: Complete 7x3 day-period grid, prior-week top items, and repeat timing patterns
+    description: Complete 7x3 day-period grid, latest-week top items, and repeat timing patterns
   - name: osa_store_actionable_chain_drift
     description: Store-controlled chain OSA drift context
   - name: osa_store_actionable_cost_projection

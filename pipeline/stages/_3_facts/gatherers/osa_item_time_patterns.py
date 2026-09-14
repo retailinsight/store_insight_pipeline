@@ -168,21 +168,18 @@ def _complete_day_period_grid(rows, start_date, end_date):
     return grid
 
 
-def _top5_lsv_items(osa, filt, this_week_start, this_week_end, dept_col, top_n):
-    group_cols = ['STORE_ID', dept_col, 'ITEM_CODE', 'ITEM_DESCRIPTION', 'ITEM_HIERARCHY_3']
-    rows = (
-        window_metrics(osa.filter(filt), this_week_start, this_week_end, group_cols, 'LATEST')
-        .filter(F.col('LATEST_STORE_LSV') > 0)
-        .collect()
-    )
+def _top5_lsv_items_from_rows(rows, dept_col, top_n):
     grouped = defaultdict(list)
     for row in rows:
+        lsv = attributed_values(row, 'LATEST')
+        if lsv['store_controlled'] <= 0:
+            continue
         grouped[(int(row['STORE_ID']), row[dept_col])].append({
             'item_code': str(row['ITEM_CODE']),
             'item_description': row['ITEM_DESCRIPTION'] or '',
             'ppg': row['ITEM_HIERARCHY_3'] or '',
             'subclass': row[dept_col] or '',
-            'latest_week_lsv': attributed_values(row, 'LATEST'),
+            'latest_week_lsv': lsv,
         })
     return {
         key: sorted(
@@ -191,6 +188,16 @@ def _top5_lsv_items(osa, filt, this_week_start, this_week_end, dept_col, top_n):
         )[:top_n]
         for key, items in grouped.items()
     }
+
+
+def _top5_lsv_items(osa, filt, this_week_start, this_week_end, dept_col, top_n):
+    group_cols = ['STORE_ID', dept_col, 'ITEM_CODE', 'ITEM_DESCRIPTION', 'ITEM_HIERARCHY_3']
+    rows = (
+        window_metrics(osa.filter(filt), this_week_start, this_week_end, group_cols, 'LATEST')
+        .filter(F.col('LATEST_STORE_LSV') > 0)
+        .collect()
+    )
+    return _top5_lsv_items_from_rows(rows, dept_col, top_n)
 
 
 def _item_repeat_patterns(

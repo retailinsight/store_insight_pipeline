@@ -160,3 +160,63 @@ def test_actionable_extraction_adds_evidence_without_overwriting_attributed_peri
     assert 'day_period_grid' not in facts
     assert 'grid_scope' not in facts
     assert facts['top_5_lsv_items'] == [{'item_code': '123'}]
+
+
+def _lsa_row(store_id=1, dept='CHILLED', item_code='1', desc='ITEM', ppg='PPG',
+             total=10.0, store=8.0, upstream=1.5, unknown=0.5):
+    """A collected window_metrics row, as dict — same access pattern as a Snowpark Row."""
+    return {
+        'STORE_ID': store_id,
+        'ITEM_HIERARCHY_2': dept,
+        'ITEM_CODE': item_code,
+        'ITEM_DESCRIPTION': desc,
+        'ITEM_HIERARCHY_3': ppg,
+        'LATEST_TOTAL_LSV': total,
+        'LATEST_STORE_LSV': store,
+        'LATEST_UPSTREAM_LSV': upstream,
+        'LATEST_UNKNOWN_LSV': unknown,
+    }
+
+
+def test_top5_lsv_items_nested_structure():
+    rows = [_lsa_row(item_code='123', desc='DOUGHNUT', ppg='CAKE',
+                     total=10.0, store=8.0, upstream=1.5, unknown=0.5)]
+    result = g._top5_lsv_items_from_rows(rows, 'ITEM_HIERARCHY_2', 5)
+
+    assert list(result) == [(1, 'CHILLED')]
+    assert result[(1, 'CHILLED')] == [{
+        'item_code': '123',
+        'item_description': 'DOUGHNUT',
+        'ppg': 'CAKE',
+        'subclass': 'CHILLED',
+        'latest_week_lsv': {
+            'total': 10.0,
+            'store_controlled': 8.0,
+            'upstream': 1.5,
+            'unknown': 0.5,
+        },
+    }]
+
+
+def test_top5_lsv_items_max_five_ordered_by_store_controlled():
+    rows = [
+        _lsa_row(item_code=str(i), store=store_lsv, total=store_lsv)
+        for i, store_lsv in enumerate([50, 10, 90, 30, 70, 20, 40], start=1)
+    ]
+    items = g._top5_lsv_items_from_rows(rows, 'ITEM_HIERARCHY_2', 5)[(1, 'CHILLED')]
+
+    assert len(items) == 5
+    assert [i['latest_week_lsv']['store_controlled'] for i in items] == [90, 70, 50, 40, 30]
+    assert [i['item_code'] for i in items] == ['3', '5', '1', '7', '4']
+
+
+def test_top5_lsv_items_excludes_zero_store_controlled():
+    rows = [
+        _lsa_row(item_code='upstream_only', store=0.0, upstream=40.0, total=40.0),
+        _lsa_row(item_code='unknown_only', store=0.0, unknown=30.0, total=30.0),
+        _lsa_row(item_code='zero', store=0.0, total=0.0),
+        _lsa_row(item_code='kept', store=5.0, total=5.0),
+    ]
+    items = g._top5_lsv_items_from_rows(rows, 'ITEM_HIERARCHY_2', 5)[(1, 'CHILLED')]
+
+    assert [i['item_code'] for i in items] == ['kept']
