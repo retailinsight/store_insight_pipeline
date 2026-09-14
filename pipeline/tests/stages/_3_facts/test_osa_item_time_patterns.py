@@ -27,7 +27,7 @@ def test_metadata_shape():
         'grid_scope',
         'grid_start_date',
         'grid_end_date',
-        'top_lsv_items_last_week_top5',
+        'top_5_lsv_items',
     }
 
 
@@ -88,7 +88,7 @@ def test_extract_facts_returns_empty_for_missing_signal():
         'grid_scope': 'THIS_WEEK',
         'grid_start_date': None,
         'grid_end_date': None,
-        'top_lsv_items_last_week_top5': [],
+        'top_5_lsv_items': [],
     }
 
 
@@ -150,7 +150,7 @@ def test_actionable_extraction_adds_evidence_without_overwriting_attributed_peri
         'repeat_item_time_patterns': [],
         'day_period_grid': [{'dow_num': 1, 'period_id': 1}],
         'grid_scope': 'THIS_WEEK',
-        'top_lsv_items_last_week_top5': [{'item_code': '123'}],
+        'top_5_lsv_items': [{'item_code': '123'}],
     }}
 
     facts = g.extract_facts(signal, raw)
@@ -159,4 +159,4 @@ def test_actionable_extraction_adds_evidence_without_overwriting_attributed_peri
     assert 'worst_day_period' not in facts
     assert 'day_period_grid' not in facts
     assert 'grid_scope' not in facts
-    assert facts['top_lsv_items_last_week_top5'] == [{'item_code': '123'}]
+    assert facts['top_5_lsv_items'] == [{'item_code': '123'}]
