@@ -11,7 +11,13 @@ from __future__ import annotations
 
 import pytest
 
-from store_insight.pipeline.stages._4_investigate.rule_based import generate
+from store_insight.pipeline.stages._4_investigate.rule_based import _clean_item_name, generate
+
+
+def test_clean_item_name():
+    assert _clean_item_name('  CP PAIN AU CHOCOLAT    #  ') == 'CP PAIN AU CHOCOLAT'
+    assert _clean_item_name('CP GARDEN SALD  BOWL') == 'CP GARDEN SALD BOWL'
+    assert _clean_item_name(None) == ''
 
 REQUIRED_KEYS = {"issue", "explanation", "cost_if_not_fixed", "recommended_action"}
 
@@ -277,16 +283,18 @@ def _mdo(**overrides):
 def test_markdown_override_vs_chain_narrative():
     out = generate(_mdo(trigger_types=["VS_CHAIN"]))
     _assert_card_keys(out)
-    assert "25.0%" in out["issue"]
-    assert "15.0pp above chain average" in out["issue"]
+    assert out["issue"] == 'Coach your team on override decisions.'
     assert "10 of 40 markdowns" in out["explanation"]
-    assert "overrides" in out["recommended_action"].lower()
+    assert out["recommended_action"] == (
+        '10 of 40 markdowns were overridden this week (25.0%), against a chain average of 10.0%.'
+    )
+    assert "end of life" not in out["recommended_action"]
 
 
 def test_markdown_override_wow_narrative():
     out = generate(_mdo(trigger_types=["WOW"]))
     _assert_card_keys(out)
-    assert "up 15.0pp" in out["issue"]
+    assert out["issue"] == 'Coach your team on override decisions.'
 
 
 def test_markdown_override_top_department_added():
@@ -295,8 +303,22 @@ def test_markdown_override_top_department_added():
         {"dept": "BAKERY", "overrides": 5, "override_rate_pct": 50.0},
     ]
     out = generate(sig)
+    assert out["issue"] == 'Coach your team on override decisions in BAKERY.'
+    assert out["recommended_action"] == (
+        '5 of 10 overrides this week came from this department, '
+        'against a chain average override rate of 10.0%.'
+    )
     assert "BAKERY" in out["explanation"]
-    assert "BAKERY" in out["recommended_action"]
+
+
+def test_markdown_override_chain_rate_under_one_percent():
+    out = generate(_mdo(chain_override_rate=0.4))
+    assert out["recommended_action"].endswith('against a chain average of under 1%.')
+
+
+def test_markdown_override_no_chain_rate():
+    out = generate(_mdo(chain_override_rate=None))
+    assert out["recommended_action"] == '10 of 40 markdowns were overridden this week (25.0%).'
 
 
 # ---------------------------------------------------------------------------
@@ -462,9 +484,12 @@ def _sku(**overrides):
 def test_markdown_sku_repeat_request_narrative():
     out = generate(_sku(trigger_types=["REPEAT_REQUEST"]))
     _assert_card_keys(out)
-    assert "Milk 2L marked down 6 times" in out["issue"]
+    assert out["issue"] == 'Check your order quantity for Milk 2L in CHILLED.'
     assert "avg markdown depth 30.0%" in out["explanation"]
-    assert "ordering and ranging for Milk 2L" in out["recommended_action"]
+    assert out["recommended_action"].startswith(
+        'It has been marked down 6 times in the last 4 weeks '
+        'at an average depth of 30% — reducing the order'
+    )
 
 
 def test_markdown_sku_excessive_override_narrative():
@@ -472,7 +497,8 @@ def test_markdown_sku_excessive_override_narrative():
         _sku(trigger_types=["EXCESSIVE_OVERRIDE"], override_count=4, markdown_request_count=5)
     )
     _assert_card_keys(out)
-    assert "overridden 4 of 5 requests" in out["issue"]
+    assert out["issue"] == 'Review the markdown price for Milk 2L in CHILLED.'
+    assert out["recommended_action"] == 'The recommended markdown was overridden 4 of 5 times in the last 4 weeks.'
     assert "80% override rate" in out["explanation"]
 
 
@@ -485,7 +511,8 @@ def test_markdown_sku_combined_triggers_narrative():
         )
     )
     _assert_card_keys(out)
-    assert "repeat markdown requests and excessive overrides" in out["issue"]
+    assert out["issue"] == 'Check your order quantity for Milk 2L in CHILLED.'
+    assert 'also overridden 3 of 6 times' in out["recommended_action"]
 
 
 def test_markdown_sku_history_block_added():
@@ -539,18 +566,23 @@ def _osa_recurring_slot(**overrides):
 def test_osa_recurring_slot_narrative():
     out = generate(_osa_recurring_slot())
     _assert_card_keys(out)
-    assert 'PRODUCE has recurring lost sales on Monday Morning (6am-12pm)' in out['issue']
+    assert out['issue'] == 'Check Monday morning availability in PRODUCE — focus on Gala Apples and Bananas.'
+    assert out['recommended_action'] == '2 lines have run short repeatedly in this slot over the last 3 weeks.'
     assert '2 items repeatedly lost sales' in out['explanation']
     assert '\u00a3560.00' in out['explanation']
-    assert '\u00a3157.50' in out['explanation']
+    assert 'When these lines run short they lose about \u00a3157.50 a week between them.' in out['explanation']
+    assert 'Across all lines, this slot averages \u00a3125.00 a week in lost sales.' in out['explanation']
+    assert 'Weekly slot history (all lines, last 3 of 3 weeks):' in out['explanation']
     assert '45.0% of lost sales in this Monday Morning (6am-12pm) slot' in out['explanation']
     assert '12.5% of total lost sales in PRODUCE' in out['explanation']
     assert 'trend is increasing' in out['explanation']
-    assert 'Gala Apples (APL001)' in out['explanation']
-    assert 'Bananas (BAN002)' in out['explanation']
+    assert '\u2022 Gala Apples: ' in out['explanation']
+    assert '\u2022 Bananas: ' in out['explanation']
+    assert 'APL001' not in out['explanation']
+    assert 'BAN002' not in out['explanation']
     assert '2025-W1' in out['explanation']
     assert '\u00a3630.00' in out['cost_if_not_fixed']  # 157.5 * 4
-    assert 'Investigate operational drivers behind Monday Morning (6am-12pm)' in out['recommended_action']
+    assert out['cost_if_not_fixed'].startswith('If these lines keep running short in this slot')
 
 
 def test_osa_recurring_slot_narrative_without_optional_facts():
@@ -559,7 +591,30 @@ def test_osa_recurring_slot_narrative_without_optional_facts():
     out = generate(sig)
     _assert_card_keys(out)
     assert '2 items repeatedly lost sales' in out['explanation']
-    assert 'recurring slot problem continues' in out['cost_if_not_fixed']
+    assert 'Across all lines' not in out['explanation']
+    assert 'keep running short in this slot' in out['cost_if_not_fixed']
+    assert 'over the last 4 weeks' in out['recommended_action']
+
+
+def test_osa_recurring_slot_cleans_item_names():
+    sig = _osa_recurring_slot()
+    sig['repeat_item_details'] = [
+        {'item_code': 'CRS001', 'item_description': 'CP IR A/BTTR CROISSANT #  ',
+         'repeat_weeks': 3, 'total_lsv': 100.0, 'avg_weekly_lsv': 33.3},
+    ]
+    out = generate(sig)
+    assert 'focus on CP IR A/BTTR CROISSANT' in out['issue']
+    assert '#' not in out['issue']
+    assert 'over the last 3 weeks' in out['explanation']
+    assert 'lookback window' not in out['explanation']
+
+
+def test_osa_recurring_slot_no_history_no_items():
+    sig = _osa_recurring_slot(repeat_item_count=1, repeat_item_details=[])
+    sig['facts'] = {}
+    out = generate(sig)
+    assert out['issue'] == 'Check Monday morning availability in PRODUCE.'
+    assert out['recommended_action'] == '1 line has run short repeatedly in this slot in recent weeks.'
 
 
 # ---------------------------------------------------------------------------
@@ -600,12 +655,163 @@ def _osa_store_actionable(**overrides):
 def test_osa_store_actionable_narrative_is_store_focused():
     out = generate(_osa_store_actionable())
     _assert_card_keys(out)
-    assert '7.0pp' in out['issue']
-    assert '£500.00' in out['explanation']
-    assert 'upstream context' in out['explanation']
+    assert out['issue'] == 'Give replenishment in CHILLED extra attention on Fridays.'
+    assert (
+        'Store-controlled OSCA in CHILLED has dropped to 88.0% in the last 7 days '
+        'compared with 95.0% in the week before, and a Society average of 93.0%.'
+    ) in out['explanation']
     assert '£2,000.00' in out['cost_if_not_fixed']
-    assert 'Milk (501)' in out['recommended_action']
+    assert out['recommended_action'] == (
+        'Store-controlled OSCA in CHILLED has dropped to 88.0% in the last 7 days '
+        'compared with 95.0% in the week before, and a Society average of 93.0%.'
+    )
     assert 'repeat' not in ' '.join(out.values()).lower()
+
+
+def test_osa_store_actionable_title_uses_worst_day_period():
+    out = generate(_osa_store_actionable(facts={
+        'worst_day_period': {
+            'day': 'Saturday', 'period_id': 3, 'period_label': 'Evening (6pm-Close)',
+        },
+    }))
+    assert out['issue'] == 'Give replenishment in CHILLED extra attention on Saturday evenings.'
+
+
+def test_osa_store_actionable_title_generic_fallback():
+    out = generate(_osa_store_actionable(facts={}))
+    assert out['issue'] == 'Give replenishment in CHILLED extra attention this week.'
+
+
+def test_osa_store_actionable_vs_chain_only_subtitle():
+    out = generate(_osa_store_actionable(
+        trigger_types=['VS_CHAIN'], last_week_osa=None, wow_drift_pp=None,
+    ))
+    assert (
+        'Store-controlled OSCA in CHILLED was 88.0% in the last 7 days '
+        'against a Society average of 93.0%.'
+    ) in out['explanation']
+
+
+def test_osa_store_actionable_vs_chain_only_improved_week_uses_was_wording():
+    out = generate(_osa_store_actionable(
+        trigger_types=['VS_CHAIN'], last_week_osa=85.0, this_week_osa=88.0,
+        wow_drift_pp=3.0, chain_this_week_osa=93.0, chain_gap_pp=-5.0,
+    ))
+    assert out['recommended_action'] == (
+        'Store-controlled OSCA in CHILLED was 88.0% in the last 7 days '
+        'against a Society average of 93.0%.'
+    )
+    assert 'has dropped' not in out['explanation']
+
+
+def test_osa_store_actionable_wow_only_backfills_chain_fact():
+    out = generate(_osa_store_actionable(
+        trigger_types=['WOW'],
+        chain_this_week_osa=None,
+        chain_gap_pp=None,
+        facts={'chain_store_this_week_osa': 93.0},
+    ))
+    assert 'Society average of 93.0%' in out['explanation']
+
+
+def test_osa_store_actionable_wow_only_without_chain_fact():
+    out = generate(_osa_store_actionable(
+        trigger_types=['WOW'],
+        chain_this_week_osa=None,
+        chain_gap_pp=None,
+        facts={},
+    ))
+    assert (
+        'Store-controlled OSCA in CHILLED has dropped to 88.0% in the last 7 days '
+        'compared with 95.0% in the week before.'
+    ) in out['explanation']
+    assert 'Society average' not in out['explanation']
+
+
+def test_osa_store_actionable_worst_ppg_sentence():
+    out = generate(_osa_store_actionable(facts={
+        'ppg_lsv_changes': [{'ppg': 'Vodka', 'latest_week_lsv': {'store_controlled': 120.0}}],
+    }))
+    assert 'Vodka is the worst performing PPG.' in out['explanation']
+
+
+# ---------------------------------------------------------------------------
+# OSA BIG DROP
+# ---------------------------------------------------------------------------
+
+
+def _osa_big_drop(**overrides):
+    signal = {
+        'signal_type': 'OSA_BIG_DROP',
+        'store_id': 1,
+        'department': 'SPIRITS',
+        'trigger_types': ['BIG_DROP'],
+        'last_week_osa': 95.0,
+        'this_week_osa': 88.0,
+        'wow_drift_pp': -7.0,
+        'latest_day': 'Sunday',
+        'prior_day': 'Saturday',
+        'this_week_lsv': {
+            'total': 700.0, 'store_controlled': 500.0, 'upstream': 180.0, 'unknown': 20.0,
+        },
+        'facts': {
+            'worst_day_period': {
+                'day': 'Saturday', 'period_id': 3, 'period_label': 'Evening (6pm-Close)',
+            },
+            'ppg_lsv_changes': [{'ppg': 'Vodka', 'latest_week_lsv': {'store_controlled': 120.0}}],
+            'item_lsv_changes': [{
+                'item_code': '10', 'item_name': 'Smirnoff', 'eans': ['501'], 'upcs': [],
+                'lsv_change': {'store_controlled': 25.0},
+            }],
+            'cost_projection': {
+                'projection_weeks': 4,
+                'store_controlled_cost_of_inaction': 2000.0,
+            },
+        },
+    }
+    signal.update(overrides)
+    return signal
+
+
+def test_osa_big_drop_narrative_names_trading_days():
+    out = generate(_osa_big_drop())
+    _assert_card_keys(out)
+    assert out['issue'] == 'Give replenishment in SPIRITS extra attention on Saturday evenings.'
+    assert 'Store-controlled OSCA in SPIRITS dropped 7.0pp in a single day — from 95.0% on Saturday to 88.0% on Sunday.' in out['explanation']
+    assert 'lost sales on Sunday while recorded inventory was positive.' in out['explanation']
+    assert 'upstream context' not in out['explanation']
+    assert 'Over the last 7 days the leading PPG was Vodka (£120.00 store-controlled lost sales).' in out['explanation']
+    assert out['cost_if_not_fixed'] == (
+        "If Sunday's rate of loss continued, store-controlled lost sales could cost "
+        "approximately £14,000.00 over the next 4 weeks."
+    )
+    assert out['recommended_action'] == (
+        'Store-controlled OSCA in SPIRITS dropped 7.0pp in a single day — '
+        'from 95.0% on Saturday to 88.0% on Sunday.'
+    )
+
+
+def test_osa_big_drop_item_uses_latest_week_lsv():
+    sig = _osa_big_drop()
+    sig['facts']['item_lsv_changes'] = [{
+        'item_code': '10', 'item_name': 'Smirnoff', 'eans': ['501'], 'upcs': [],
+        'lsv_change': {'store_controlled': -5.1},
+        'latest_week_lsv': {'store_controlled': 55.3},
+        'prior_week_lsv': {'store_controlled': 60.4},
+    }]
+    out = generate(sig)
+    assert (
+        'The largest item offender over the last 7 days was Smirnoff '
+        'with £55.30 of store-controlled lost sales (£60.40 the week before).'
+    ) in out['explanation']
+    assert '£-' not in out['explanation']
+    assert 'change from the preceding week' not in out['explanation']
+
+
+def test_osa_big_drop_without_day_names_falls_back():
+    out = generate(_osa_big_drop(latest_day=None, prior_day=None))
+    assert 'Store-controlled OSCA in SPIRITS dropped 7.0pp in a single day — from 95.0% to 88.0%.' in out['explanation']
+    assert out['cost_if_not_fixed'].startswith("If that day's rate of loss continued")
 
 
 # ---------------------------------------------------------------------------

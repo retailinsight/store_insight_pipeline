@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import datetime
+
 from snowflake.snowpark import functions as F
 
 from store_insight.pipeline.pipeline._shared import (
@@ -48,6 +50,8 @@ def detect(
         return []
     latest_date = str(available_dates[0]['DATE'])
     prior_date = str(available_dates[1]['DATE'])
+    latest_day = datetime.date.fromisoformat(latest_date.split()[0]).strftime('%A')
+    prior_day = datetime.date.fromisoformat(prior_date.split()[0]).strftime('%A')
     print(f'[osa_big_drop.big_drop] comparing {latest_date} vs {prior_date}')
 
     group_cols = ['STORE_ID', section]
@@ -96,6 +100,8 @@ def detect(
             last_week_lsv=prior_lsv,
             this_week_lsv=latest_lsv,
             lsv_change=subtract_attributed(latest_lsv, prior_lsv),
+            latest_day=latest_day,
+            prior_day=prior_day,
             quality={'previous_day': prior_quality, 'current_day': latest_quality},
         ))
 

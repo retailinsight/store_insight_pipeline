@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-14T12:16:04+00:00",
+  "generated_at": "2026-09-14T13:25:07+00:00",
   "pipeline_summary": "Weekly batch that detects retail availability and markdown anomalies, enriches each signal with supporting facts, generates plain-English narrative cards, and scores them so the highest-impact issues surface first.",
   "stages": {
     "1_detect": "Run lightweight statistical detectors → list of signals.",
@@ -257,6 +257,14 @@
         {
           "name": "lsv_change",
           "type": "dict | None"
+        },
+        {
+          "name": "latest_day",
+          "type": "str | None"
+        },
+        {
+          "name": "prior_day",
+          "type": "str | None"
         },
         {
           "name": "quality",

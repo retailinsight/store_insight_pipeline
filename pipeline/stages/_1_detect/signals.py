@@ -83,6 +83,8 @@ class OsaBigDropSignal(TypedDict):
     last_week_lsv:               dict | None
     this_week_lsv:               dict
     lsv_change:                  dict | None
+    latest_day:                  str | None
+    prior_day:                   str | None
     quality:                     dict
 
 
@@ -458,6 +460,8 @@ def make_osa_big_drop_signal(
     chain_this_week_osa: float | None = None,
     total_chain_this_week_osa: float | None = None,
     chain_gap_pp: float | None = None,
+    latest_day: str | None = None,
+    prior_day: str | None = None,
     quality: dict | None = None,
 ) -> OsaBigDropSignal:
     return {
@@ -477,6 +481,8 @@ def make_osa_big_drop_signal(
         'last_week_lsv': last_week_lsv,
         'this_week_lsv': this_week_lsv,
         'lsv_change': lsv_change,
+        'latest_day': latest_day,
+        'prior_day': prior_day,
         'quality': quality or {},
     }
 

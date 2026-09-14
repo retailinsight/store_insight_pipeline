@@ -72,7 +72,7 @@ detector_config:
 
     MARKDOWN_SKU:
       min_markdown_weeks:      4
-      min_markdown_requests:   8
+      min_markdown_requests:   12
       min_sku_override_rate:   0.75
       min_sku_requests:        4
 
