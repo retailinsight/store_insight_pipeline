@@ -12,6 +12,7 @@ connection:
   warehouse: STORE_INSIGHT_WH
 
 output:
+  emit_affected_products: true
   # Total cap of 3 alerts/store/day signed off by Dave (13 Sep). Tested on the
   # 13 Sep run: 1,152 -> 362 alerts, 120 stores x 3, 2 stores x 1, none empty.
   top_n_per_store: 3

@@ -10,6 +10,7 @@ that changes eastofengland's live behaviour fails loudly here first.
 """
 
 from store_insight.pipeline.config.loader import load_config
+from store_insight.pipeline.pipeline import pipeline as pipeline_module
 from store_insight.pipeline.pipeline.config import DetectorConfig
 
 EXPECTED_ENABLED_DETECTORS = [
@@ -122,6 +123,39 @@ class TestEastOfEnglandEffectiveThresholds:
 
         det_cfg = DetectorConfig.from_config(cfg.detector_config.model_dump())
         assert det_cfg.max_actionable_unknown_row_pct == 10.0
+
+
+class TestEastOfEnglandOutputContract:
+
+    def test_affected_products_is_nullable_28th_column(self):
+        cfg = _load()
+        schema = pipeline_module._card_schema(
+            emit_affected_products=cfg.output.emit_affected_products,
+        )
+        row = pipeline_module._card_to_row(
+            {
+                'alert_type': 'COMPLIANCE',
+                'store_id': 1,
+                'section': '',
+                'type': 'Compliance',
+                'trigger_types': ['WOW'],
+                'issue': 'i',
+                'explanation': 'e',
+                'cost_if_not_fixed': 'c',
+                'recommended_action': 'r',
+                'sort_value': 1.0,
+                'signal_json': None,
+            },
+            '2026-09-14',
+            emit_affected_products=cfg.output.emit_affected_products,
+        )
+
+        assert cfg.output.emit_affected_products is True
+        assert len(schema.fields) == 28
+        assert schema.fields[-1].name == 'AFFECTED_PRODUCTS'
+        assert schema.fields[-1].nullable is True
+        assert len(row) == 28
+        assert row[-1] is None
 
 
 class TestEastOfEnglandQueueSafeguard:
