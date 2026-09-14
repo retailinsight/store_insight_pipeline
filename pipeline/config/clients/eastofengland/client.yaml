@@ -12,12 +12,13 @@ connection:
   warehouse: STORE_INSIGHT_WH
 
 output:
-  top_n_per_store: 10
+  # Total cap of 3 alerts/store/day signed off by Dave (13 Sep). Tested on the
+  # 13 Sep run: 1,152 -> 362 alerts, 120 stores x 3, 2 stores x 1, none empty.
+  top_n_per_store: 3
   # Variety cap agreed with Daniel (21 Aug): at most 2 alerts of one signal
   # type per store per day, so MARKDOWN_SKU cannot fill every slot. The cap
   # is broken only when a store has no other signal types to fill top_n
-  # (see apply_top_n_filter). Target of 3 alerts/store/day awaits Dave's
-  # sign-off; top_n_per_store stays at 10 until then.
+  # (see apply_top_n_filter).
   max_per_type_per_store: 2
 
 detectors:
