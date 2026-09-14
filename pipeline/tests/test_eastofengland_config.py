@@ -102,7 +102,7 @@ class TestEastOfEnglandEffectiveThresholds:
         det_cfg = DetectorConfig.from_config(cfg.detector_config.model_dump())
 
         assert det_cfg.min_markdown_weeks == 4
-        assert det_cfg.min_markdown_requests == 8
+        assert det_cfg.min_markdown_requests == 12
         assert det_cfg.min_sku_override_rate == 0.75
         assert det_cfg.min_sku_requests == 4
 
