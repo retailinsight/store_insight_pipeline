@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-08T19:55:32+00:00",
+  "generated_at": "2026-09-14T12:16:04+00:00",
   "pipeline_summary": "Weekly batch that detects retail availability and markdown anomalies, enriches each signal with supporting facts, generates plain-English narrative cards, and scores them so the highest-impact issues surface first.",
   "stages": {
     "1_detect": "Run lightweight statistical detectors → list of signals.",
@@ -160,9 +160,9 @@
             "grid_scope",
             "grid_start_date",
             "grid_end_date",
-            "top_lsv_items_last_week_top5"
+            "top_5_lsv_items"
           ],
-          "description": "Day-of-week / reporting-period patterns, repeat offenders, complete heat-map grid, and top prior-week items."
+          "description": "Day-of-week / reporting-period patterns, repeat offenders, complete heat-map grid, and top latest-week items."
         },
         {
           "name": "osa_store_actionable_chain_drift",
@@ -326,9 +326,9 @@
             "grid_scope",
             "grid_start_date",
             "grid_end_date",
-            "top_lsv_items_last_week_top5"
+            "top_5_lsv_items"
           ],
-          "description": "Day-of-week / reporting-period patterns, repeat offenders, complete heat-map grid, and top prior-week items."
+          "description": "Day-of-week / reporting-period patterns, repeat offenders, complete heat-map grid, and top latest-week items."
         },
         {
           "name": "osa_store_actionable_chain_drift",
@@ -520,15 +520,26 @@
       ],
       "detectors": [
         {
-          "name": "TICK_AND_FLICK",
-          "module": "tick_and_flick",
-          "problem": "A store's rate of rapidly dismissed alerts has risen week-on-week and is above the chain average, indicating poor compliance with the alerting process.",
+          "name": "VS_CHAIN",
+          "module": "tick_and_flick_vs_chain",
+          "problem": "A store's tick-and-flick rate is above the chain average, indicating poor compliance with the alerting process relative to peers.",
           "action": "Review the store's alert-working behaviour with the store manager and ensure alerts are being genuinely investigated rather than dismissed.",
           "baseline": "The chain-wide tick-and-flick rate for the same week.",
-          "logic": "Tick-and-flick rate = rapid dismissals / alerts worked.\nWoW increase = this-week rate - last-week rate.\nChain gap = store this-week rate - chain this-week rate.\nFires when WoW increase >= min_wow_increase, chain gap >= min_chain_outperform, and this-week alerts worked >= min_alerts_worked.",
+          "logic": "Tick-and-flick rate = rapid dismissals / alerts worked.\nVS_CHAIN: store this-week rate - chain this-week rate >= min_compliance_chain_gap,\nand this-week alerts worked >= min_alerts_worked.",
           "config_keys": [
-            "min_wow_increase",
-            "min_chain_outperform",
+            "min_compliance_chain_gap",
+            "min_alerts_worked"
+          ]
+        },
+        {
+          "name": "WOW",
+          "module": "tick_and_flick_wow",
+          "problem": "A store's tick-and-flick rate has risen sharply week-on-week, indicating deteriorating compliance with the alerting process.",
+          "action": "Review the store's alert-working behaviour with the store manager and ensure alerts are being genuinely investigated rather than dismissed.",
+          "baseline": "The same store during the preceding week.",
+          "logic": "Tick-and-flick rate = rapid dismissals / alerts worked.\nWOW: this-week rate - last-week rate >= min_compliance_wow_drop,\nand this-week alerts worked >= min_alerts_worked.",
+          "config_keys": [
+            "min_compliance_wow_drop",
             "min_alerts_worked"
           ]
         }
@@ -539,9 +550,10 @@
           "facts_keys": [
             "tf_by_alert_type",
             "alert_volume_by_day",
+            "trailing_7d_tf",
             "driver_assessment"
           ],
-          "description": "Alert type is the unchanged source ALERT_TYPE_NAME label: the kind of alert intervention the store actioned. It is not a department, severity, SKU grouping, or a category derived by this pipeline. For each alert type, this adds current-week interventions worked, tick-and-flicked dismissals, and tick-and-flick rate = dismissals / interventions worked. Also builds a daily volume breakdown and a workload/coaching driver assessment."
+          "description": "Alert type is the unchanged source ALERT_TYPE_NAME label: the kind of alert intervention the store actioned. It is not a department, severity, SKU grouping, or a category derived by this pipeline. For each alert type, this adds current-week interventions worked, tick-and-flicked dismissals, and tick-and-flick rate = dismissals / interventions worked. Also builds a daily volume breakdown, a seven-day trailing tick-and-flick count series, and a workload/coaching driver assessment."
         }
       ],
       "investigator": {
@@ -1589,19 +1601,19 @@
       ]
     },
     {
-      "name": "min_wow_increase",
+      "name": "min_compliance_wow_drop",
       "type": "float",
       "default": 0.1,
       "detectors": [
-        "COMPLIANCE TICK_AND_FLICK"
+        "COMPLIANCE WOW"
       ]
     },
     {
-      "name": "min_chain_outperform",
+      "name": "min_compliance_chain_gap",
       "type": "float",
       "default": 0.05,
       "detectors": [
-        "COMPLIANCE TICK_AND_FLICK"
+        "COMPLIANCE VS_CHAIN"
       ]
     },
     {
@@ -1609,7 +1621,8 @@
       "type": "int",
       "default": 5,
       "detectors": [
-        "COMPLIANCE TICK_AND_FLICK"
+        "COMPLIANCE VS_CHAIN",
+        "COMPLIANCE WOW"
       ]
     },
     {
@@ -1751,6 +1764,54 @@
       "detectors": [
         "PROMPTED_MARKDOWN_COMPLIANCE VS_CHAIN",
         "PROMPTED_MARKDOWN_COMPLIANCE WOW"
+      ]
+    },
+    {
+      "name": "min_big_drop_markdown_compliance_drop",
+      "type": "float",
+      "default": 0.05,
+      "detectors": [
+        "BIG_DROP_MARKDOWN_COMPLIANCE BIG_DROP"
+      ]
+    },
+    {
+      "name": "min_big_drop_markdown_compliance_volume",
+      "type": "int",
+      "default": 10,
+      "detectors": [
+        "BIG_DROP_MARKDOWN_COMPLIANCE BIG_DROP"
+      ]
+    },
+    {
+      "name": "min_big_drop_expiry_compliance_drop",
+      "type": "float",
+      "default": 0.05,
+      "detectors": [
+        "BIG_DROP_EXPIRY_DATE_COMPLIANCE BIG_DROP"
+      ]
+    },
+    {
+      "name": "min_big_drop_expiry_compliance_volume",
+      "type": "int",
+      "default": 10,
+      "detectors": [
+        "BIG_DROP_EXPIRY_DATE_COMPLIANCE BIG_DROP"
+      ]
+    },
+    {
+      "name": "min_big_drop_prompted_markdown_compliance_drop",
+      "type": "float",
+      "default": 0.05,
+      "detectors": [
+        "BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE BIG_DROP"
+      ]
+    },
+    {
+      "name": "min_big_drop_prompted_markdown_compliance_volume",
+      "type": "int",
+      "default": 10,
+      "detectors": [
+        "BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE BIG_DROP"
       ]
     },
     {

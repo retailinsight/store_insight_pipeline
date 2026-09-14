@@ -35,7 +35,14 @@ from collections import defaultdict
 
 from snowflake.snowpark import functions as F
 
-from store_insight.pipeline.pipeline._shared import build_store_dept_filter, sunday_first_dow
+from store_insight.pipeline.pipeline._shared import (
+    actionable_window_metrics as window_metrics,
+)
+from store_insight.pipeline.pipeline._shared import (
+    attributed_values,
+    build_store_dept_filter,
+    sunday_first_dow,
+)
 from store_insight.pipeline.stages._3_facts.config import GathererInfo
 
 METADATA = GathererInfo(
@@ -49,9 +56,9 @@ METADATA = GathererInfo(
         'grid_scope',
         'grid_start_date',
         'grid_end_date',
-        'top_lsv_items_last_week_top5',
+        'top_5_lsv_items',
     ],
-    description  = 'Day-of-week / reporting-period patterns, repeat offenders, complete heat-map grid, and top prior-week items.',
+    description  = 'Day-of-week / reporting-period patterns, repeat offenders, complete heat-map grid, and top latest-week items.',
 )
 
 
@@ -161,37 +168,36 @@ def _complete_day_period_grid(rows, start_date, end_date):
     return grid
 
 
-def _top_lsv_items_last_week(osa, filt, last_week_start, last_week_end, dept_col, top_n):
-    rows = (
-        osa
-        .filter((F.col('DATE') >= last_week_start) & (F.col('DATE') <= last_week_end))
-        .filter(filt)
-        .group_by(
-            'STORE_ID', dept_col, 'ITEM_CODE', 'ITEM_DESCRIPTION',
-            'ITEM_HIERARCHY_3',
-        )
-        .agg(
-            F.sum('ACTUAL_SALES_VOLUME').alias('ITEM_SALES'),
-            F.sum('LOST_SALES_VOLUME').alias('ITEM_LSV_VOL'),
-            F.sum('LOST_SALES_VALUE').alias('ITEM_LSV'),
-        )
-        .with_column('ITEM_OSA', _osa_score_col(F.col('ITEM_SALES'), F.col('ITEM_LSV_VOL')))
-        .collect()
-    )
+def _top5_lsv_items_from_rows(rows, dept_col, top_n):
     grouped = defaultdict(list)
     for row in rows:
+        lsv = attributed_values(row, 'LATEST')
+        if lsv['store_controlled'] <= 0:
+            continue
         grouped[(int(row['STORE_ID']), row[dept_col])].append({
             'item_code': str(row['ITEM_CODE']),
             'item_description': row['ITEM_DESCRIPTION'] or '',
             'ppg': row['ITEM_HIERARCHY_3'] or '',
             'subclass': row[dept_col] or '',
-            'lsv_last_week': round(float(row['ITEM_LSV'] or 0), 2),
-            'osa_last_week': round(float(row['ITEM_OSA'] or 0) * 100, 2),
+            'latest_week_lsv': lsv,
         })
     return {
-        key: sorted(items, key=lambda item: (-item['lsv_last_week'], item['item_code']))[:top_n]
+        key: sorted(
+            items,
+            key=lambda item: (-item['latest_week_lsv']['store_controlled'], item['item_code']),
+        )[:top_n]
         for key, items in grouped.items()
     }
+
+
+def _top5_lsv_items(osa, filt, this_week_start, this_week_end, dept_col, top_n):
+    group_cols = ['STORE_ID', dept_col, 'ITEM_CODE', 'ITEM_DESCRIPTION', 'ITEM_HIERARCHY_3']
+    rows = (
+        window_metrics(osa.filter(filt), this_week_start, this_week_end, group_cols, 'LATEST')
+        .filter(F.col('LATEST_STORE_LSV') > 0)
+        .collect()
+    )
+    return _top5_lsv_items_from_rows(rows, dept_col, top_n)
 
 
 def _item_repeat_patterns(
@@ -357,8 +363,8 @@ def gather(
         dept_col,
         min_recent_days, min_repeat_weeks, top_n,
     )
-    top_items = _top_lsv_items_last_week(
-        osa, filt, last_week_start, last_week_end, dept_col, 5,
+    top_items = _top5_lsv_items(
+        osa, filt, this_week_start, this_week_end, dept_col, 5,
     )
 
     # Merge the two result dicts (keys may only exist in one side).
@@ -372,7 +378,7 @@ def gather(
             'grid_scope': 'THIS_WEEK',
             'grid_start_date': this_week_start,
             'grid_end_date': this_week_end,
-            'top_lsv_items_last_week_top5': top_items.get(key, []),
+            'top_5_lsv_items': top_items.get(key, []),
         }
     return result
 
@@ -388,7 +394,7 @@ def extract_facts(signal, raw_result, top_n=5):
         'grid_scope': 'THIS_WEEK',
         'grid_start_date': None,
         'grid_end_date': None,
-        'top_lsv_items_last_week_top5': [],
+        'top_5_lsv_items': [],
     })
 
     pattern = data.get('day_period_pattern', [])
@@ -396,7 +402,7 @@ def extract_facts(signal, raw_result, top_n=5):
 
     facts = {
         'repeat_item_time_patterns': repeat[:top_n],
-        'top_lsv_items_last_week_top5': data.get('top_lsv_items_last_week_top5', []),
+        'top_5_lsv_items': data.get('top_5_lsv_items', []),
     }
     if signal.get('signal_type') != 'OSA_STORE_ACTIONABLE':
         facts.update({
