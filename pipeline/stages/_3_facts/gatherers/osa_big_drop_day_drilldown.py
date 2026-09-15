@@ -32,25 +32,6 @@ def _date_string(value):
     return value.isoformat() if hasattr(value, 'isoformat') else str(value).split()[0]
 
 
-def _reconcile_drop_day(grid, latest_date, target):
-    cells = [row for row in grid if row['date'] == latest_date]
-    residual = round(float(target) - sum(row['store_controlled_lsv'] for row in cells), 2)
-    if not cells or not residual:
-        return grid
-    if residual > 0:
-        recipient = max(cells, key=lambda row: (row['store_controlled_lsv'], -row['period_id']))
-        recipient['store_controlled_lsv'] = round(recipient['store_controlled_lsv'] + residual, 2)
-        return grid
-    remaining = abs(residual)
-    for row in sorted(cells, key=lambda cell: (-cell['store_controlled_lsv'], cell['period_id'])):
-        reduction = min(row['store_controlled_lsv'], remaining)
-        row['store_controlled_lsv'] = round(row['store_controlled_lsv'] - reduction, 2)
-        remaining = round(remaining - reduction, 2)
-        if not remaining:
-            break
-    return grid
-
-
 def _period_facts(osa, signals, this_week_start, this_week_end, dept_col):
     filt = build_store_dept_filter(signals, dept_col)
     data = osa.filter(filt).with_column('DOW', sunday_first_dow(F.col('DATE')))
@@ -86,8 +67,7 @@ def _period_facts(osa, signals, this_week_start, this_week_end, dept_col):
                     'store_controlled_lsv': observed.get((date, period), 0.0),
                 })
             current += datetime.timedelta(days=1)
-        target = (signal.get('this_week_lsv') or {}).get('store_controlled', 0)
-        result[key] = _reconcile_drop_day(grid, signal.get('latest_date'), target)
+        result[key] = grid
     return result
 
 

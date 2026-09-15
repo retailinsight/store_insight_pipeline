@@ -15,29 +15,6 @@ def test_extract_returns_compact_defaults():
     }
 
 
-def test_reconcile_only_changes_drop_day():
-    grid = [
-        {'date': '2026-09-13', 'period_id': 1, 'store_controlled_lsv': 20.0},
-        {'date': '2026-09-14', 'period_id': 1, 'store_controlled_lsv': 5.13},
-        {'date': '2026-09-14', 'period_id': 2, 'store_controlled_lsv': 1.19},
-        {'date': '2026-09-14', 'period_id': 3, 'store_controlled_lsv': 4.08},
-    ]
-    result = day_g._reconcile_drop_day(grid, '2026-09-14', 10.41)
-    assert result[0]['store_controlled_lsv'] == 20.0
-    assert sum(row['store_controlled_lsv'] for row in result[1:]) == 10.41
-
-
-def test_negative_reconciliation_never_creates_negative_lsv():
-    grid = [
-        {'date': '2026-09-14', 'period_id': 1, 'store_controlled_lsv': 5.0},
-        {'date': '2026-09-14', 'period_id': 2, 'store_controlled_lsv': 3.0},
-        {'date': '2026-09-14', 'period_id': 3, 'store_controlled_lsv': 2.0},
-    ]
-    result = day_g._reconcile_drop_day(grid, '2026-09-14', 1.0)
-    assert all(row['store_controlled_lsv'] >= 0 for row in result)
-    assert sum(row['store_controlled_lsv'] for row in result) == 1.0
-
-
 def test_drop_day_facts_are_sorted_capped_and_compact(monkeypatch):
     class _Expression:
         def __eq__(self, _other):
