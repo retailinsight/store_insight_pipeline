@@ -30,20 +30,8 @@ OSA_STORE_ACTIONABLE:
     description: Attributed four-week cost-of-inaction projection
 
 OSA_BIG_DROP:
-  - name: osa_store_actionable_ppg_drilldown
-    description: Top latest-week PPGs with prior-week attributed LSV changes
-  - name: osa_store_actionable_item_lsv_changes
-    description: Top item offenders with prior-week changes and UPC/EAN arrays
-  - name: osa_store_actionable_dow
-    description: Seven chronological day rows with attributed LSV and source status
-  - name: osa_store_actionable_day_periods
-    description: Top day-period rows by store-controlled LSV
-  - name: osa_item_time_patterns
-    description: Complete 7x3 day-period grid, latest-week top items, and repeat timing patterns
-  - name: osa_store_actionable_chain_drift
-    description: Store-controlled chain OSA drift context
-  - name: osa_store_actionable_cost_projection
-    description: Attributed four-week cost-of-inaction projection
+  - name: osa_big_drop_day_drilldown
+    description: Compact time-of-day grid, PPG, and item store-controlled LSV facts
 
 OSA_RECURRING_SLOT:
   - name: osa_recurring_slot_facts

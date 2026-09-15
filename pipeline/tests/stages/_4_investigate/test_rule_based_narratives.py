@@ -751,22 +751,25 @@ def _osa_big_drop(**overrides):
         'wow_drift_pp': -7.0,
         'latest_day': 'Sunday',
         'prior_day': 'Saturday',
+        'latest_date': '2026-09-13',
+        'prior_date': '2026-09-12',
         'this_week_lsv': {
             'total': 700.0, 'store_controlled': 500.0, 'upstream': 180.0, 'unknown': 20.0,
         },
         'facts': {
-            'worst_day_period': {
-                'day': 'Saturday', 'period_id': 3, 'period_label': 'Evening (6pm-Close)',
-            },
-            'ppg_lsv_changes': [{'ppg': 'Vodka', 'latest_week_lsv': {'store_controlled': 120.0}}],
-            'item_lsv_changes': [{
-                'item_code': '10', 'item_name': 'Smirnoff', 'eans': ['501'], 'upcs': [],
-                'lsv_change': {'store_controlled': 25.0},
+            'ppg_lsv': [
+                {'ppg': 'Vodka', 'store_controlled_lsv': 120.0},
+                {'ppg': 'Gin', 'store_controlled_lsv': 80.0},
+                {'ppg': 'Whisky', 'store_controlled_lsv': 60.0},
+            ],
+            'day_period_grid': [{
+                'date': '2026-09-13', 'day': 'Sunday', 'period_id': 1,
+                'period_label': 'Morning (Open-12pm)', 'store_controlled_lsv': 500.0,
             }],
-            'cost_projection': {
-                'projection_weeks': 4,
-                'store_controlled_cost_of_inaction': 2000.0,
-            },
+            'item_lsv': [{
+                'item_code': '10', 'item_name': 'Smirnoff',
+                'store_controlled_lsv': 25.0,
+            }],
         },
     }
     signal.update(overrides)
@@ -776,40 +779,49 @@ def _osa_big_drop(**overrides):
 def test_osa_big_drop_narrative_names_trading_days():
     out = generate(_osa_big_drop())
     _assert_card_keys(out)
-    assert out['issue'] == 'Give replenishment in SPIRITS extra attention on Saturday evenings.'
+    assert out['issue'] == (
+        'Investigate why store-controlled OSCA dropped in SPIRITS '
+        'from 95% on Saturday to 88% on Sunday.'
+    )
     assert 'Store-controlled OSCA in SPIRITS dropped 7.0pp in a single day — from 95.0% on Saturday to 88.0% on Sunday.' in out['explanation']
     assert 'lost sales on Sunday while recorded inventory was positive.' in out['explanation']
     assert 'upstream context' not in out['explanation']
-    assert 'Over the last 7 days the leading PPG was Vodka (£120.00 store-controlled lost sales).' in out['explanation']
+    assert 'On Sunday the leading PPG was Vodka (£120.00 store-controlled lost sales).' in out['explanation']
     assert out['cost_if_not_fixed'] == (
         "If Sunday's rate of loss continued, store-controlled lost sales could cost "
         "approximately £14,000.00 over the next 4 weeks."
     )
+    assert out['recommended_action'] == (
+        'The top 3 contributing PPGs were Vodka, Gin and Whisky.'
+    )
+
+
+def test_osa_big_drop_subtitle_falls_back_without_ppgs():
+    out = generate(_osa_big_drop(facts={}))
     assert out['recommended_action'] == (
         'Store-controlled OSCA in SPIRITS dropped 7.0pp in a single day — '
         'from 95.0% on Saturday to 88.0% on Sunday.'
     )
 
 
-def test_osa_big_drop_item_uses_latest_week_lsv():
+def test_osa_big_drop_item_uses_drop_day_lsv():
     sig = _osa_big_drop()
-    sig['facts']['item_lsv_changes'] = [{
-        'item_code': '10', 'item_name': 'Smirnoff', 'eans': ['501'], 'upcs': [],
-        'lsv_change': {'store_controlled': -5.1},
-        'latest_week_lsv': {'store_controlled': 55.3},
-        'prior_week_lsv': {'store_controlled': 60.4},
+    sig['facts']['item_lsv'] = [{
+        'item_code': '10', 'item_name': 'Smirnoff',
+        'store_controlled_lsv': 55.3,
     }]
     out = generate(sig)
     assert (
-        'The largest item offender over the last 7 days was Smirnoff '
-        'with £55.30 of store-controlled lost sales (£60.40 the week before).'
+        'The largest item offender on Sunday was Smirnoff '
+        'with £55.30 of store-controlled lost sales.'
     ) in out['explanation']
-    assert '£-' not in out['explanation']
-    assert 'change from the preceding week' not in out['explanation']
 
 
 def test_osa_big_drop_without_day_names_falls_back():
     out = generate(_osa_big_drop(latest_day=None, prior_day=None))
+    assert out['issue'] == (
+        'Investigate why store-controlled OSCA dropped in SPIRITS from 95% to 88%.'
+    )
     assert 'Store-controlled OSCA in SPIRITS dropped 7.0pp in a single day — from 95.0% to 88.0%.' in out['explanation']
     assert out['cost_if_not_fixed'].startswith("If that day's rate of loss continued")
 

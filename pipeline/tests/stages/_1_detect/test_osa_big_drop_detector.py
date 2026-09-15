@@ -70,6 +70,8 @@ def test_big_drop_emits_signal_on_sharp_drop(monkeypatch):
     assert signals[0]['this_week_lsv']['store_controlled'] == 250.0
     assert signals[0]['latest_day'] == 'Tuesday'
     assert signals[0]['prior_day'] == 'Monday'
+    assert signals[0]['latest_date'] == '2026-09-08'
+    assert signals[0]['prior_date'] == '2026-09-07'
 
 
 def test_big_drop_uses_latest_two_available_dates_when_requested_date_is_missing(monkeypatch):
