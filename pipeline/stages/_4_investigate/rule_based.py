@@ -809,7 +809,7 @@ def _generate_osa_big_drop(signal: dict) -> dict:
 
     ppg_names = [ppg['ppg'] for ppg in ppgs[:3] if ppg.get('ppg')]
     subtitle = (
-        f'The top 3 contributing PPGs were {_join_names(ppg_names)}.'
+        f'The top contributing PPGs were {_join_names(ppg_names)}.'
         if ppg_names else drop_sentence
     )
 

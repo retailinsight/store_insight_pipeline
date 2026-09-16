@@ -792,7 +792,7 @@ def test_osa_big_drop_narrative_names_trading_days():
         "approximately £14,000.00 over the next 4 weeks."
     )
     assert out['recommended_action'] == (
-        'The top 3 contributing PPGs were Vodka, Gin and Whisky.'
+        'The top contributing PPGs were Vodka, Gin and Whisky.'
     )
 
 
