@@ -164,10 +164,11 @@ def write_status_updates(session, action_table: str, updates: list[dict]) -> Non
         session.sql(
             f"INSERT INTO {action_table} "
             "(ACTION_ID, STATUS, OUTCOME, ASSIGNEE_INITIALS, NOTES, UPDATED_AT) "
-            f"SELECT ACTION_ID, '{update['status']}', '{update['outcome']}', "
+            "SELECT ACTION_ID, ?, ?, "
             "ASSIGNEE_INITIALS, NOTES, CURRENT_TIMESTAMP() "
-            f"FROM {action_table} WHERE ACTION_ID = '{update['alert_id']}' "
-            "QUALIFY ROW_NUMBER() OVER (PARTITION BY ACTION_ID ORDER BY UPDATED_AT DESC) = 1"
+            f"FROM {action_table} WHERE ACTION_ID = ? "
+            "QUALIFY ROW_NUMBER() OVER (PARTITION BY ACTION_ID ORDER BY UPDATED_AT DESC) = 1",
+            params=[update['status'], update['outcome'], update['alert_id']],
         ).collect()
 
 

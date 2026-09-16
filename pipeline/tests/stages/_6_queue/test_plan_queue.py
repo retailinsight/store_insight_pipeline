@@ -48,6 +48,7 @@ def test_three_new_todos_are_added_alongside_in_progress_work():
     plan = _plan(candidates, work, {'work': {'status': 'in_progress', 'outcome': ''}})
     assert len(plan.live) == 4
     assert plan.live[0]['alert_id'] == 'work'
+    assert plan.status_updates == []
 
 
 def test_in_progress_card_is_refreshed_by_issue_key_and_keeps_alert_id():
