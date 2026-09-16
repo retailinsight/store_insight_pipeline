@@ -151,6 +151,7 @@ def build_report(cursor, database=DATABASE):
             for row in plan.live
         ),
         'outcomes': dict(sorted(statuses.items())),
+        'suppression_count': statuses.get('SUPPRESSED', 0),
         'expiry_update_count': len(plan.status_updates),
         'max_live_per_store': max(Counter(row['store_id'] for row in plan.live).values(), default=0),
     }

@@ -37,6 +37,7 @@ def test_shadow_report_uses_select_queries_only():
     assert report['candidate_count'] == 1
     assert report['in_progress_found'] == 1
     assert report['in_progress_missing_source'] == []
+    assert report['suppression_count'] == 0
     assert all(query.upper().startswith('SELECT') for query in cursor.queries)
     forbidden = ('ALTER ', 'CREATE ', 'INSERT ', 'UPDATE ', 'DELETE ', 'DROP ', 'CALL ')
     assert not any(token in query.upper() for query in cursor.queries for token in forbidden)
