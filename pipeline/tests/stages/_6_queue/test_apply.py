@@ -53,11 +53,9 @@ def test_suppression_returns_eligible_candidates_only():
     assert expired == []
 
 
-def test_history_view_uses_controlled_objects_and_workflow_fields():
+def test_history_view_uses_controlled_objects_only():
     sql = history_view_ddl('STORE_INSIGHT_DEV')
     assert 'STORE_INSIGHT_DEV.PUBLIC.ALERTS_HISTORY_V1' in sql
     assert 'STORE_INSIGHT_DEV.PUBLIC.ALERTS_PIPELINE' in sql
-    assert 'STORE_INSIGHT_DEV.PUBLIC.ALERT_ACTION_STATUS' in sql
-    assert 'ACTION_ID ORDER BY UPDATED_AT DESC' in sql
-    assert "'todo') AS WORKFLOW_STATUS" in sql
-    assert 'ISSUE_KEY' in sql
+    assert 'CREATE OR REPLACE VIEW' in sql
+    assert 'ALERT_ACTION_STATUS' not in sql

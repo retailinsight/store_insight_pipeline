@@ -57,27 +57,13 @@ def write_expired_statuses(session, action_table: str, expired: list[dict]) -> N
 
 def history_view_ddl(database: str, schema: str = 'PUBLIC',
                      client: str = 'eastofengland') -> str:
+    """Return the ALERTS_HISTORY_V1 DDL.
+
+    The view now mirrors ALERTS_LATEST_V1: it simply selects all rows from the
+    canonical ALERTS_PIPELINE. The API is responsible for joining to
+    ALERT_ACTION_STATUS and for computing ISSUE_KEY from SIGNAL_JSON:issue_key.
+    """
     prefix = f'{database}.{schema}'
-    signal = 'TRY_PARSE_JSON(a.SIGNAL_JSON)'
-    identity = (
-        f"ARRAY_TO_STRING(ARRAY_CONSTRUCT_COMPACT('{client}', "
-        f"{signal}:signal_type::STRING, a.STORE_ID::STRING, "
-        f"{signal}:department::STRING, {signal}:dow::STRING, "
-        f"{signal}:period_id::STRING, {signal}:item_id::STRING), '|')"
-    )
-    issue_key = f"COALESCE({signal}:issue_key::STRING, SUBSTR(SHA2({identity}, 256), 1, 16))"
     return f"""CREATE OR REPLACE VIEW {prefix}.ALERTS_HISTORY_V1 AS
-WITH workflow AS (
-    SELECT ACTION_ID, STATUS, OUTCOME, ASSIGNEE_INITIALS, NOTES, UPDATED_AT
-    FROM {prefix}.ALERT_ACTION_STATUS
-    QUALIFY ROW_NUMBER() OVER (PARTITION BY ACTION_ID ORDER BY UPDATED_AT DESC) = 1
-)
-SELECT a.*,
-       {issue_key} AS ISSUE_KEY,
-       COALESCE(LOWER(REPLACE(TRIM(w.STATUS), '-', '_')), 'todo') AS WORKFLOW_STATUS,
-       NULLIF(LOWER(TRIM(w.OUTCOME)), '') AS WORKFLOW_OUTCOME,
-       w.ASSIGNEE_INITIALS,
-       w.NOTES AS WORKFLOW_NOTES,
-       w.UPDATED_AT AS WORKFLOW_UPDATED_AT
-FROM {prefix}.ALERTS_PIPELINE a
-LEFT JOIN workflow w ON w.ACTION_ID = a.ALERT_ID"""
+SELECT a.*
+FROM {prefix}.ALERTS_PIPELINE a"""
