@@ -135,13 +135,13 @@ def read_resolved_history(session, alerts_table: str, action_table: str, run_dat
                           suppression_days: int) -> dict:
     """Return the latest resolved date for each stable issue key and store."""
     rows = session.sql(
-        f"WITH workflow AS (SELECT ACTION_ID, STATUS, OUTCOME, UPDATED_AT FROM {action_table} "
+        f"WITH resolved AS (SELECT ACTION_ID, UPDATED_AT FROM {action_table} "
+        f"WHERE LOWER(TRIM(STATUS)) = 'completed' "
+        f"AND LOWER(TRIM(OUTCOME)) IN ('completed', 'partial', 'couldnt_complete', 'expired') "
+        f"AND TO_DATE(UPDATED_AT) >= DATEADD(day, -{suppression_days}, '{run_date}') "
         f"QUALIFY ROW_NUMBER() OVER (PARTITION BY ACTION_ID ORDER BY UPDATED_AT DESC) = 1) "
-        f"SELECT a.STORE_ID, a.SIGNAL_JSON, w.UPDATED_AT FROM {alerts_table} a "
-        f"JOIN workflow w ON w.ACTION_ID = a.ALERT_ID "
-        f"WHERE LOWER(TRIM(w.STATUS)) = 'completed' "
-        f"AND LOWER(TRIM(w.OUTCOME)) IN ('completed', 'partial', 'couldnt_complete', 'expired') "
-        f"AND TO_DATE(w.UPDATED_AT) >= DATEADD(day, -{suppression_days}, '{run_date}') "
+        f"SELECT a.STORE_ID, a.SIGNAL_JSON, r.UPDATED_AT FROM {alerts_table} a "
+        f"JOIN resolved r ON r.ACTION_ID = a.ALERT_ID "
         f"QUALIFY ROW_NUMBER() OVER (PARTITION BY a.ALERT_ID ORDER BY a.RUN_DATE DESC) = 1"
     ).collect()
     history = {}

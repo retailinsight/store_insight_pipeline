@@ -46,6 +46,18 @@ def _queue_identity(card: dict):
     return card.get('issue_key') or _semantic_identity(card.get('signal_json') or {})
 
 
+def _candidate_identity_aliases(cards: list[dict]) -> dict[tuple, list]:
+    aliases: dict[tuple, list] = {}
+    ranked = sorted(cards, key=lambda c: c.get('sort_value') or 0.0, reverse=True)
+    for card in ranked:
+        semantic = _semantic_identity(card.get('signal_json') or {})
+        identity = _queue_identity(card)
+        bucket = aliases.setdefault(semantic, [])
+        if identity not in bucket:
+            bucket.append(identity)
+    return aliases
+
+
 def _light(card: dict) -> dict:
     signal = card.get('signal_json') or {}
     return {
@@ -82,15 +94,12 @@ def apply_queue(
     ensure_history_view(session, alerts_table, action_status_table)
     live_state, prev_run_date = read_live_state(
         session, alerts_table, action_status_table, run_date)
-    candidate_identities = {
-        _semantic_identity(card.get('signal_json') or {}): _queue_identity(card)
-        for card in cards
-    }
+    candidate_aliases = _candidate_identity_aliases(cards)
     for row in live_state:
         semantic = _semantic_identity(row.get('signal_json') or {})
         row['queue_identity'] = (
             row.get('issue_key')
-            or candidate_identities.get(semantic)
+            or next(iter(candidate_aliases.get(semantic, ())), None)
             or semantic
         )
     action_status = read_action_status(session, action_status_table)
@@ -98,12 +107,13 @@ def apply_queue(
         session, alerts_table, action_status_table, run_date, queue_cfg.suppression_days)
     sent_history = dict(resolved_history)
     for (identity, store_id), resolved_date in resolved_history.items():
-        issue_key = candidate_identities.get(identity) if isinstance(identity, tuple) else identity
-        if issue_key and issue_key != identity:
-            sent_history[(issue_key, store_id)] = max(
-                sent_history.get((issue_key, store_id), resolved_date),
-                resolved_date,
-            )
+        if isinstance(identity, tuple):
+            for issue_key in candidate_aliases.get(identity, ()):
+                if issue_key != identity:
+                    sent_history[(issue_key, store_id)] = max(
+                        sent_history.get((issue_key, store_id), resolved_date),
+                        resolved_date,
+                    )
 
     by_alert = {(c['alert_id'], c['store_id']): c for c in cards}
     by_issue = {(_queue_identity(c), c['store_id']): c for c in cards}

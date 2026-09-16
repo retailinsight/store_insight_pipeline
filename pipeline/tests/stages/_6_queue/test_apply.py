@@ -150,3 +150,54 @@ def test_apply_queue_refreshes_current_evidence_but_keeps_workflow_id(monkeypatc
     assert live[0]['alert_id'] == 'old'
     assert live[0]['signal_json']['signal_id'] == 'old'
     assert live[0]['first_sent_date'] == '2026-09-12'
+
+
+def test_apply_queue_suppresses_all_candidate_aliases_for_resolved_semantic_issue(monkeypatch):
+    monkeypatch.setattr(
+        'store_insight.pipeline.stages._6_queue.apply.read_live_state',
+        lambda *_args: ([], '2026-09-14'),
+    )
+    monkeypatch.setattr(
+        'store_insight.pipeline.stages._6_queue.apply.read_action_status',
+        lambda *_args: {},
+    )
+    monkeypatch.setattr(
+        'store_insight.pipeline.stages._6_queue.apply.read_resolved_history',
+        lambda *_args: {
+            (('OSA_STORE_ACTIONABLE', 1, 'grocery', 2, 4, 'sku-1'), 1): '2026-09-14',
+        },
+    )
+    session = _session()
+    cards = [
+        {
+            **_card('new-1', 'issue-a'),
+            'signal_json': {
+                'signal_type': 'OSA_STORE_ACTIONABLE',
+                'store_id': 1,
+                'issue_key': 'issue-a',
+                'department': 'grocery',
+                'dow': 2,
+                'period_id': 4,
+                'item_id': 'sku-1',
+            },
+        },
+        {
+            **_card('new-2', 'issue-b'),
+            'signal_json': {
+                'signal_type': 'OSA_STORE_ACTIONABLE',
+                'store_id': 1,
+                'issue_key': 'issue-b',
+                'department': 'grocery',
+                'dow': 2,
+                'period_id': 4,
+                'item_id': 'sku-1',
+            },
+        },
+    ]
+    live, carried, previous, plan = apply_queue(
+        session, cards, RUN_DATE, TABLE, ACTION_TABLE, QueueConfig(),
+    )
+    assert live == []
+    assert carried == []
+    assert previous == '2026-09-14'
+    assert [row['status'] for row in plan.log] == ['SUPPRESSED', 'SUPPRESSED']
