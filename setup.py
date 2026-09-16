@@ -15,7 +15,6 @@ from setuptools import find_packages, setup
 _pipeline_packages = find_packages(include=['pipeline', 'pipeline.*'])
 _package_dir = {'store_insight': '.'}
 _packages = ['store_insight', 'scripts']
-_package_dir['scripts'] = 'scripts'
 
 for _pkg in _pipeline_packages:
     _aliased = f'store_insight.{_pkg}'
