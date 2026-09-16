@@ -48,10 +48,10 @@ def detect(
     if len(available_dates) < 2:
         print(f'[osa_big_drop.big_drop] fewer than two sales days available by {requested_date}')
         return []
-    latest_date = str(available_dates[0]['DATE'])
-    prior_date = str(available_dates[1]['DATE'])
-    latest_day = datetime.date.fromisoformat(latest_date.split()[0]).strftime('%A')
-    prior_day = datetime.date.fromisoformat(prior_date.split()[0]).strftime('%A')
+    latest_date = str(available_dates[0]['DATE']).split()[0]
+    prior_date = str(available_dates[1]['DATE']).split()[0]
+    latest_day = datetime.date.fromisoformat(latest_date).strftime('%A')
+    prior_day = datetime.date.fromisoformat(prior_date).strftime('%A')
     print(f'[osa_big_drop.big_drop] comparing {latest_date} vs {prior_date}')
 
     group_cols = ['STORE_ID', section]
@@ -102,6 +102,8 @@ def detect(
             lsv_change=subtract_attributed(latest_lsv, prior_lsv),
             latest_day=latest_day,
             prior_day=prior_day,
+            latest_date=latest_date,
+            prior_date=prior_date,
             quality={'previous_day': prior_quality, 'current_day': latest_quality},
         ))
 

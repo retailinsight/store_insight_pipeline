@@ -14,6 +14,7 @@ EXPECTED_GATHERERS = {
     'osa_store_actionable_dow', 'osa_store_actionable_day_periods',
     'osa_item_time_patterns', 'osa_store_actionable_chain_drift',
     'osa_store_actionable_cost_projection',
+    'osa_big_drop_day_drilldown',
     'osa_recurring_slot_facts',
     'tick_and_flick_breakdown',
     'markdown_compliance_facts',
@@ -82,6 +83,12 @@ def test_osa_dispatch_order_matches_yaml():
         'osa_item_time_patterns', 'osa_store_actionable_chain_drift',
         'osa_store_actionable_cost_projection',
     ]
+
+
+def test_osa_big_drop_dispatch_order_matches_yaml():
+    big_drop = [m.__name__.rsplit('.', 1)[-1]
+                for m in registry.SIGNAL_TYPE_GATHERERS['OSA_BIG_DROP']]
+    assert big_drop == ['osa_big_drop_day_drilldown']
 
 
 def test_unknown_yaml_entry_raises_import_error(tmp_path, monkeypatch):
