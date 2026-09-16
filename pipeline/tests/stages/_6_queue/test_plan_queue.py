@@ -104,6 +104,18 @@ def test_resolved_issue_can_return_after_seven_days():
     assert [row['alert_id'] for row in plan.live] == ['new']
 
 
+def test_candidate_without_issue_key_is_not_suppressed_by_none_history_key():
+    candidate = {
+        'alert_id': 'new',
+        'store_id': 1,
+        'issue_key': None,
+        'signal_type': 'OSA_STORE_ACTIONABLE',
+        'sort_value': 100.0,
+    }
+    plan = _plan([candidate], sent_history={(None, 1): '2026-09-10'})
+    assert [row['alert_id'] for row in plan.live] == ['new']
+
+
 def test_issue_already_in_progress_is_not_added_to_todo():
     work = [_live('work', issue_key='stable')]
     same_issue = _card('new', issue_key='stable')

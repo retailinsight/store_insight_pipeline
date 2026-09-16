@@ -117,14 +117,15 @@ def plan_queue(
         issue = (cand.get('issue_key'), store)
         if issue in represented_issues:
             continue
-        last_suppressed = sent_history.get(issue)
-        if last_suppressed is not None:
-            days_since = (today - _date(last_suppressed)).days
-            if days_since < cfg.suppression_days:
-                plan.log.append(_log_entry(
-                    cand, 'SUPPRESSED',
-                    f'issue resolved {days_since} days ago (window {cfg.suppression_days}d)'))
-                continue
+        if cand.get('issue_key'):
+            last_suppressed = sent_history.get(issue)
+            if last_suppressed is not None:
+                days_since = (today - _date(last_suppressed)).days
+                if days_since < cfg.suppression_days:
+                    plan.log.append(_log_entry(
+                        cand, 'SUPPRESSED',
+                        f'issue resolved {days_since} days ago (window {cfg.suppression_days}d)'))
+                    continue
         if admitted_count.get(store, 0) >= cfg.max_new_per_day:
             plan.log.append(_log_entry(
                 cand, 'NOT_ADMITTED', f'daily cap of {cfg.max_new_per_day} reached'))

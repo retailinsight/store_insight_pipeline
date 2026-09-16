@@ -162,9 +162,12 @@ def read_resolved_history(session, alerts_table: str, action_table: str, run_dat
 def write_status_updates(session, action_table: str, updates: list[dict]) -> None:
     for update in updates:
         session.sql(
-            f"UPDATE {action_table} SET STATUS = '{update['status']}', "
-            f"OUTCOME = '{update['outcome']}', UPDATED_AT = CURRENT_TIMESTAMP() "
-            f"WHERE ACTION_ID = '{update['alert_id']}'"
+            f"INSERT INTO {action_table} "
+            "(ACTION_ID, STATUS, OUTCOME, ASSIGNEE_INITIALS, NOTES, UPDATED_AT) "
+            f"SELECT ACTION_ID, '{update['status']}', '{update['outcome']}', "
+            "ASSIGNEE_INITIALS, NOTES, CURRENT_TIMESTAMP() "
+            f"FROM {action_table} WHERE ACTION_ID = '{update['alert_id']}' "
+            "QUALIFY ROW_NUMBER() OVER (PARTITION BY ACTION_ID ORDER BY UPDATED_AT DESC) = 1"
         ).collect()
 
 

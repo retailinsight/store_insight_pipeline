@@ -96,15 +96,16 @@ def test_history_view_has_issue_key_and_derived_todo_status():
     assert "'todo') AS STATUS" in sql
 
 
-def test_expiry_status_write_uses_completed_and_expired():
+def test_expiry_status_write_appends_completed_and_expired_history_row():
     session = _session()
     write_status_updates(session, ACTION_TABLE, [{
         'alert_id': 'a1', 'status': 'completed', 'outcome': 'expired',
     }])
     sql = session.sql.call_args.args[0]
-    assert "STATUS = 'completed'" in sql
-    assert "OUTCOME = 'expired'" in sql
+    assert sql.startswith(f"INSERT INTO {ACTION_TABLE}")
+    assert "SELECT ACTION_ID, 'completed', 'expired'" in sql
     assert "ACTION_ID = 'a1'" in sql
+    assert 'PARTITION BY ACTION_ID ORDER BY UPDATED_AT DESC' in sql
 
 
 def test_apply_queue_refreshes_current_evidence_but_keeps_workflow_id(monkeypatch):
