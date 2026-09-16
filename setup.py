@@ -13,7 +13,7 @@ from setuptools import find_packages, setup
 
 # Discover all packages under pipeline/ and expose them as store_insight.pipeline.*
 _pipeline_packages = find_packages(include=['pipeline', 'pipeline.*'])
-_package_dir = {'store_insight': '.'}
+_package_dir = {'': '.', 'store_insight': '.'}
 _packages = ['store_insight', 'scripts']
 
 for _pkg in _pipeline_packages:
