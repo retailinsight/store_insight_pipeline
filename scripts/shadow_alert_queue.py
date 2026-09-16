@@ -9,6 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import snowflake.connector
+
 from store_insight.pipeline.pipeline.pipeline import _make_issue_key
 from store_insight.pipeline.stages._6_queue.plan import QueueConfig, plan_queue
 
