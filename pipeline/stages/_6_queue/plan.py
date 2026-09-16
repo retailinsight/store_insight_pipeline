@@ -66,6 +66,17 @@ def _log_entry(row: dict, status: str, reason: str) -> dict:
     }
 
 
+def _semantic_identity(row: dict) -> tuple:
+    return (
+        row.get('signal_type'), row.get('store_id'), row.get('department'),
+        row.get('dow'), row.get('period_id'), row.get('item_id'),
+    )
+
+
+def _queue_identity(row: dict):
+    return row.get('queue_identity') or row.get('issue_key') or _semantic_identity(row)
+
+
 def plan_queue(
     candidates: list[dict],
     live_state: list[dict],
@@ -82,7 +93,7 @@ def plan_queue(
         candidates, key=lambda c: c.get('sort_value') or 0.0, reverse=True,
     )
     fresh_by_issue = {
-        (c.get('issue_key'), c['store_id']): c for c in candidates if c.get('issue_key')
+        (_queue_identity(c), c['store_id']): c for c in candidates
     }
     represented_issues = set()
 
@@ -98,7 +109,7 @@ def plan_queue(
                 'alert_id': row['alert_id'], 'status': 'completed', 'outcome': 'expired',
             })
             continue
-        issue = (row.get('issue_key'), row['store_id'])
+        issue = (_queue_identity(row), row['store_id'])
         fresh = fresh_by_issue.get(issue)
         carried = {**fresh, **{
             'alert_id': row['alert_id'],
@@ -107,6 +118,7 @@ def plan_queue(
             'store_id': row['store_id'],
             'first_sent_date': row['first_sent_date'],
             'in_progress_since': row['in_progress_since'],
+            'queue_identity': _queue_identity(row),
         }} if fresh is not None else dict(row)
         plan.live.append(carried)
         represented_issues.add(issue)
@@ -114,18 +126,17 @@ def plan_queue(
     admitted_count: dict[int, int] = {}
     for cand in candidates:
         store = cand['store_id']
-        issue = (cand.get('issue_key'), store)
+        issue = (_queue_identity(cand), store)
         if issue in represented_issues:
             continue
-        if cand.get('issue_key'):
-            last_suppressed = sent_history.get(issue)
-            if last_suppressed is not None:
-                days_since = (today - _date(last_suppressed)).days
-                if days_since < cfg.suppression_days:
-                    plan.log.append(_log_entry(
-                        cand, 'SUPPRESSED',
-                        f'issue resolved {days_since} days ago (window {cfg.suppression_days}d)'))
-                    continue
+        last_suppressed = sent_history.get(issue)
+        if last_suppressed is not None:
+            days_since = (today - _date(last_suppressed)).days
+            if days_since < cfg.suppression_days:
+                plan.log.append(_log_entry(
+                    cand, 'SUPPRESSED',
+                    f'issue resolved {days_since} days ago (window {cfg.suppression_days}d)'))
+                continue
         if admitted_count.get(store, 0) >= cfg.max_new_per_day:
             plan.log.append(_log_entry(
                 cand, 'NOT_ADMITTED', f'daily cap of {cfg.max_new_per_day} reached'))

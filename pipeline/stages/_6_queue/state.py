@@ -160,16 +160,26 @@ def read_resolved_history(session, alerts_table: str, action_table: str, run_dat
 
 
 def write_status_updates(session, action_table: str, updates: list[dict]) -> None:
-    for update in updates:
-        session.sql(
-            f"INSERT INTO {action_table} "
-            "(ACTION_ID, STATUS, OUTCOME, ASSIGNEE_INITIALS, NOTES, UPDATED_AT) "
-            "SELECT ACTION_ID, ?, ?, "
-            "ASSIGNEE_INITIALS, NOTES, CURRENT_TIMESTAMP() "
-            f"FROM {action_table} WHERE ACTION_ID = ? "
-            "QUALIFY ROW_NUMBER() OVER (PARTITION BY ACTION_ID ORDER BY UPDATED_AT DESC) = 1",
-            params=[update['status'], update['outcome'], update['alert_id']],
-        ).collect()
+    if not updates:
+        return
+    values = ', '.join(['(?, ?, ?)'] * len(updates))
+    params = [
+        value
+        for update in updates
+        for value in (update['alert_id'], update['status'], update['outcome'])
+    ]
+    session.sql(
+        f"INSERT INTO {action_table} "
+        "(ACTION_ID, STATUS, OUTCOME, ASSIGNEE_INITIALS, NOTES, UPDATED_AT) "
+        "WITH requested (ACTION_ID, STATUS, OUTCOME) AS "
+        f"(SELECT COLUMN1, COLUMN2, COLUMN3 FROM VALUES {values}) "
+        "SELECT latest.ACTION_ID, requested.STATUS, requested.OUTCOME, "
+        "latest.ASSIGNEE_INITIALS, latest.NOTES, CURRENT_TIMESTAMP() "
+        "FROM requested "
+        f"JOIN {action_table} latest ON latest.ACTION_ID = requested.ACTION_ID "
+        "QUALIFY ROW_NUMBER() OVER (PARTITION BY latest.ACTION_ID ORDER BY latest.UPDATED_AT DESC) = 1",
+        params=params,
+    ).collect()
 
 
 def copy_carried_forward(session, alerts_table: str, prev_run_date: str,
@@ -181,9 +191,8 @@ def copy_carried_forward(session, alerts_table: str, prev_run_date: str,
         f"INSERT INTO {alerts_table} "
         f"SELECT '{run_date}' AS RUN_DATE, * EXCLUDE RUN_DATE "
         f"FROM {alerts_table} "
-        f"WHERE RUN_DATE < '{run_date}' "
+        f"WHERE RUN_DATE = '{prev_run_date}' "
         f"AND ALERT_ID IN ({_quoted(alert_ids)}) "
-        f"QUALIFY ROW_NUMBER() OVER (PARTITION BY ALERT_ID ORDER BY RUN_DATE DESC) = 1"
     ).collect()
     return len(alert_ids)
 

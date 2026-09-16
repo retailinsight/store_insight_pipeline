@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 from store_insight.pipeline.stages._6_queue.apply import apply_queue
 from store_insight.pipeline.stages._6_queue.plan import QueueConfig
 from store_insight.pipeline.stages._6_queue.state import (
+    copy_carried_forward,
     ensure_history_view,
     read_action_status,
     read_live_state,
@@ -104,10 +105,19 @@ def test_expiry_status_write_appends_completed_and_expired_history_row():
     sql = session.sql.call_args.args[0]
     params = session.sql.call_args.kwargs['params']
     assert sql.startswith(f"INSERT INTO {ACTION_TABLE}")
-    assert 'SELECT ACTION_ID, ?, ?' in sql
-    assert 'WHERE ACTION_ID = ?' in sql
-    assert 'PARTITION BY ACTION_ID ORDER BY UPDATED_AT DESC' in sql
-    assert params == ['completed', 'expired', 'a1']
+    assert 'SELECT COLUMN1, COLUMN2, COLUMN3 FROM VALUES (?, ?, ?)' in sql
+    assert 'JOIN DB.SCHEMA.ALERT_ACTION_STATUS latest ON latest.ACTION_ID = requested.ACTION_ID' in sql
+    assert 'PARTITION BY latest.ACTION_ID ORDER BY latest.UPDATED_AT DESC' in sql
+    assert params == ['a1', 'completed', 'expired']
+
+
+def test_copy_carried_forward_uses_previous_run_date():
+    session = _session()
+    copied = copy_carried_forward(session, TABLE, '2026-09-14', RUN_DATE, ['a1'])
+    assert copied == 1
+    sql = session.sql.call_args.args[0]
+    assert "WHERE RUN_DATE = '2026-09-14'" in sql
+    assert f"SELECT '{RUN_DATE}' AS RUN_DATE" in sql
 
 
 def test_apply_queue_refreshes_current_evidence_but_keeps_workflow_id(monkeypatch):

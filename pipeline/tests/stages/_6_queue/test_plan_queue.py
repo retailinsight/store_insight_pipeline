@@ -61,6 +61,7 @@ def test_in_progress_card_is_refreshed_by_issue_key_and_keeps_alert_id():
         'signal_id': 'old-id',
         'first_sent_date': '2026-09-10',
         'in_progress_since': '2026-09-10',
+        'queue_identity': 'stable',
     }]
 
 
@@ -115,6 +116,25 @@ def test_candidate_without_issue_key_is_not_suppressed_by_none_history_key():
     }
     plan = _plan([candidate], sent_history={(None, 1): '2026-09-10'})
     assert [row['alert_id'] for row in plan.live] == ['new']
+
+
+def test_candidate_without_issue_key_uses_semantic_identity_for_suppression():
+    candidate = {
+        'alert_id': 'new',
+        'store_id': 1,
+        'issue_key': None,
+        'signal_type': 'OSA_STORE_ACTIONABLE',
+        'department': 'grocery',
+        'dow': 2,
+        'period_id': 4,
+        'item_id': 'sku-1',
+        'sort_value': 100.0,
+    }
+    plan = _plan([candidate], sent_history={
+        (('OSA_STORE_ACTIONABLE', 1, 'grocery', 2, 4, 'sku-1'), 1): '2026-09-10',
+    })
+    assert plan.live == []
+    assert plan.log[0]['status'] == 'SUPPRESSED'
 
 
 def test_issue_already_in_progress_is_not_added_to_todo():

@@ -42,12 +42,22 @@ def _semantic_identity(signal: dict) -> tuple:
     )
 
 
+def _queue_identity(card: dict):
+    return card.get('issue_key') or _semantic_identity(card.get('signal_json') or {})
+
+
 def _light(card: dict) -> dict:
+    signal = card.get('signal_json') or {}
     return {
         'alert_id': card['alert_id'],
         'store_id': card['store_id'],
-        'signal_type': _card_signal_type(card),
+        'signal_type': signal.get('signal_type'),
         'issue_key': card.get('issue_key'),
+        'department': signal.get('department'),
+        'dow': signal.get('dow'),
+        'period_id': signal.get('period_id'),
+        'item_id': signal.get('item_id'),
+        'queue_identity': _queue_identity(card),
         'sort_value': card.get('sort_value') or 0.0,
     }
 
@@ -72,27 +82,31 @@ def apply_queue(
     ensure_history_view(session, alerts_table, action_status_table)
     live_state, prev_run_date = read_live_state(
         session, alerts_table, action_status_table, run_date)
-    candidate_keys = {
-        _semantic_identity(card.get('signal_json') or {}): card.get('issue_key')
+    candidate_identities = {
+        _semantic_identity(card.get('signal_json') or {}): _queue_identity(card)
         for card in cards
     }
     for row in live_state:
-        row['issue_key'] = (
+        semantic = _semantic_identity(row.get('signal_json') or {})
+        row['queue_identity'] = (
             row.get('issue_key')
-            or candidate_keys.get(_semantic_identity(row.get('signal_json') or {}))
-            or f"legacy:{row['alert_id']}"
+            or candidate_identities.get(semantic)
+            or semantic
         )
     action_status = read_action_status(session, action_status_table)
     resolved_history = read_resolved_history(
         session, alerts_table, action_status_table, run_date, queue_cfg.suppression_days)
-    sent_history = {}
+    sent_history = dict(resolved_history)
     for (identity, store_id), resolved_date in resolved_history.items():
-        issue_key = candidate_keys.get(identity) if isinstance(identity, tuple) else identity
-        if issue_key:
-            sent_history[(issue_key, store_id)] = resolved_date
+        issue_key = candidate_identities.get(identity) if isinstance(identity, tuple) else identity
+        if issue_key and issue_key != identity:
+            sent_history[(issue_key, store_id)] = max(
+                sent_history.get((issue_key, store_id), resolved_date),
+                resolved_date,
+            )
 
     by_alert = {(c['alert_id'], c['store_id']): c for c in cards}
-    by_issue = {(c.get('issue_key'), c['store_id']): c for c in cards}
+    by_issue = {(_queue_identity(c), c['store_id']): c for c in cards}
     candidates = [_light(c) for c in cards]
 
     plan = plan_queue(
@@ -101,7 +115,7 @@ def apply_queue(
     live_cards, carried_ids = [], []
     for row in plan.live:
         alert_key = (row['alert_id'], row['store_id'])
-        issue_key = (row.get('issue_key'), row['store_id'])
+        issue_key = ((row.get('queue_identity') or row.get('issue_key')), row['store_id'])
         card = by_alert.get(alert_key) or by_issue.get(issue_key)
         if card is not None:
             refreshed = {
