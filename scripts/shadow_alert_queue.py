@@ -1,6 +1,7 @@
 """Read-only DEV report for the proposed alert queue; performs SELECT queries only."""
 
 import argparse
+import datetime
 import json
 import sys
 from collections import Counter
@@ -10,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 import snowflake.connector
 from store_insight.pipeline.pipeline.pipeline import _make_issue_key
-from store_insight.pipeline.stages._6_queue.plan import QueueConfig, plan_queue
+from store_insight.pipeline.stages._6_queue.plan import suppress_signals
 
 DATABASE = 'STORE_INSIGHT_DEV'
 CLIENT = 'eastofengland'
@@ -124,12 +125,18 @@ def build_report(cursor, database=DATABASE):
     workflow = _workflow_rows(cursor, database)
     in_progress = _in_progress_rows(cursor, database, workflow)
     resolved = _resolved_history(cursor, database, run_date)
-    plan = plan_queue(
-        candidates, in_progress, workflow, resolved, run_date,
-        QueueConfig(max_new_per_day=3, expiry_days=7, suppression_days=7,
-                    no_suppression_types=frozenset()),
-    )
-    statuses = Counter(entry['status'] for entry in plan.log)
+    run_day = datetime.date.fromisoformat(run_date)
+    active = {
+        row['issue_key'] for row in in_progress
+        if (run_day - datetime.date.fromisoformat(row['in_progress_since'])).days < 7
+    }
+    expired = {
+        row['issue_key'] for row in in_progress
+        if (run_day - datetime.date.fromisoformat(row['in_progress_since'])).days >= 7
+    }
+    resolved_keys = {issue_key for issue_key, _store_id in resolved}
+    eligible, suppression_log = suppress_signals(candidates, active, resolved_keys)
+    statuses = Counter(entry['status'] for entry in suppression_log)
     missing = sorted(set(
         action_id for action_id, state in workflow.items()
         if state['status'] == 'in_progress'
@@ -137,21 +144,15 @@ def build_report(cursor, database=DATABASE):
     return {
         'database': database,
         'run_date': run_date,
-        'candidate_count': len(candidates),
+        'current_candidate_count': len(candidates),
         'in_progress_found': len(in_progress),
         'in_progress_missing_source': missing,
-        'proposed_live_count': len(plan.live),
-        'proposed_in_progress_count': sum(
-            row['alert_id'] in workflow and workflow[row['alert_id']]['status'] == 'in_progress'
-            for row in plan.live
-        ),
-        'proposed_todo_count': sum(
-            not (row['alert_id'] in workflow and workflow[row['alert_id']]['status'] == 'in_progress')
-            for row in plan.live
-        ),
-        'outcomes': dict(sorted(statuses.items())),
-        'expiry_update_count': len(plan.status_updates),
-        'max_live_per_store': max(Counter(row['store_id'] for row in plan.live).values(), default=0),
+        'active_issue_count': len(active),
+        'expiry_candidate_count': len(expired),
+        'current_candidates_after_suppression': len(eligible),
+        'suppression_outcomes': dict(sorted(statuses.items())),
+        'max_current_cards_per_store': max(
+            Counter(row['store_id'] for row in candidates).values(), default=0),
     }
 
 

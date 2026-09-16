@@ -1,28 +1,13 @@
-"""Tests for queue Snowflake I/O and orchestration using a mocked session."""
+"""Tests for workflow state reads, suppression and history-view SQL."""
 
+import datetime
 from unittest.mock import MagicMock
 
-from store_insight.pipeline.stages._6_queue.apply import apply_queue
-from store_insight.pipeline.stages._6_queue.plan import QueueConfig
+from store_insight.pipeline.stages._6_queue.apply import apply_workflow_suppression
 from store_insight.pipeline.stages._6_queue.state import (
-    ensure_history_view,
-    read_action_status,
-    read_live_state,
-    read_resolved_history,
-    write_status_updates,
+    history_view_ddl,
+    read_workflow_issue_state,
 )
-
-TABLE = 'DB.SCHEMA.ALERTS_PIPELINE'
-ACTION_TABLE = 'DB.SCHEMA.ALERT_ACTION_STATUS'
-RUN_DATE = '2026-09-15'
-
-
-def _session(rows=()):
-    session = MagicMock()
-    result = MagicMock()
-    result.collect.return_value = list(rows)
-    session.sql.return_value = result
-    return session
 
 
 def _row(**values):
@@ -31,109 +16,48 @@ def _row(**values):
     return row
 
 
-def _card(alert_id='new', issue_key='stable'):
-    return {
-        'alert_id': alert_id,
-        'signal_id': alert_id,
-        'issue_key': issue_key,
-        'store_id': 1,
-        'sort_value': 100.0,
-        'signal_json': {'signal_type': 'OSA_STORE_ACTIONABLE', 'issue_key': issue_key},
-    }
+def _session(rows):
+    session = MagicMock()
+    session.sql.return_value.collect.return_value = rows
+    return session
 
 
-def test_action_status_uses_action_id_and_normalises_status_and_outcome():
-    session = _session([_row(
-        ACTION_ID='a1', STATUS='in-progress', OUTCOME=None,
-    ), _row(
-        ACTION_ID='a2', STATUS='Completed', OUTCOME='couldnt_complete',
-    )])
-    assert read_action_status(session, ACTION_TABLE) == {
-        'a1': {'status': 'in_progress', 'outcome': ''},
-        'a2': {'status': 'completed', 'outcome': 'couldnt_complete'},
-    }
-    sql = session.sql.call_args.args[0]
-    assert 'ACTION_ID, STATUS, OUTCOME' in sql
-    assert 'PARTITION BY ACTION_ID' in sql
-
-
-def test_live_state_bootstraps_historical_in_progress_action():
-    session = _session([_row(
-        ALERT_ID='old', STORE_ID=1, FIRST_SENT_DATE='2026-09-12', SORT_VALUE=50.0,
-        SIGNAL_JSON='{"signal_type":"OSA_STORE_ACTIONABLE","issue_key":"stable"}',
-        RUN_DATE='2026-09-14', IN_PROGRESS_SINCE='2026-09-14 09:00:00',
-    )])
-    state, previous = read_live_state(session, TABLE, ACTION_TABLE, RUN_DATE)
-    assert previous == '2026-09-14'
-    assert state == [{
-        'alert_id': 'old', 'store_id': 1, 'first_sent_date': '2026-09-12',
-        'in_progress_since': '2026-09-14',
-        'sort_value': 50.0, 'signal_type': 'OSA_STORE_ACTIONABLE',
-        'issue_key': 'stable',
-        'signal_json': {'signal_type': 'OSA_STORE_ACTIONABLE', 'issue_key': 'stable'},
-    }]
-    assert 'ACTION_ID = a.ALERT_ID' in session.sql.call_args.args[0]
-
-
-def test_resolved_history_reads_supported_outcomes_by_issue_key():
-    session = _session([_row(
-        STORE_ID=1, SIGNAL_JSON='{"issue_key":"stable"}',
-        UPDATED_AT='2026-09-14 12:00:00',
-    )])
-    assert read_resolved_history(session, TABLE, ACTION_TABLE, RUN_DATE, 7) == {
-        ('stable', 1): '2026-09-14',
-    }
-    sql = session.sql.call_args.args[0]
-    assert "'completed', 'partial', 'couldnt_complete', 'expired'" in sql
-
-
-def test_history_view_has_issue_key_and_derived_todo_status():
-    session = _session()
-    ensure_history_view(session, TABLE, ACTION_TABLE)
-    sql = session.sql.call_args.args[0]
-    assert 'ALERTS_HISTORY_V1' in sql
-    assert 'SIGNAL_JSON:issue_key::STRING AS ISSUE_KEY' in sql
-    assert "'todo') AS STATUS" in sql
-
-
-def test_expiry_status_write_uses_completed_and_expired():
-    session = _session()
-    write_status_updates(session, ACTION_TABLE, [{
-        'alert_id': 'a1', 'status': 'completed', 'outcome': 'expired',
-    }])
-    sql = session.sql.call_args.args[0]
-    assert "STATUS = 'completed'" in sql
-    assert "OUTCOME = 'expired'" in sql
-    assert "ACTION_ID = 'a1'" in sql
-
-
-def test_apply_queue_refreshes_current_evidence_but_keeps_workflow_id(monkeypatch):
-    historical = [{
-        'alert_id': 'old', 'store_id': 1, 'first_sent_date': '2026-09-12',
-        'in_progress_since': '2026-09-14',
-        'sort_value': 50.0, 'signal_type': 'OSA_STORE_ACTIONABLE',
-        'issue_key': 'stable',
-        'signal_json': {'signal_type': 'OSA_STORE_ACTIONABLE', 'issue_key': 'stable'},
-    }]
-    monkeypatch.setattr(
-        'store_insight.pipeline.stages._6_queue.apply.read_live_state',
-        lambda *_args: (historical, '2026-09-14'),
+def test_workflow_state_normalises_and_uses_updated_at_age():
+    rows = [
+        _row(ALERT_ID='alert-a', SIGNAL_JSON='{"signal_type":"COMPLIANCE","store_id":1,"issue_key":"a"}',
+             STATUS='in-progress', OUTCOME='', UPDATED_AT=datetime.datetime(2026, 9, 14)),
+        _row(ALERT_ID='alert-b', SIGNAL_JSON='{"signal_type":"COMPLIANCE","store_id":2,"issue_key":"b"}',
+             STATUS='Completed', OUTCOME='couldnt_complete',
+             UPDATED_AT=datetime.datetime(2026, 9, 12)),
+        _row(ALERT_ID='alert-c', SIGNAL_JSON='{"signal_type":"COMPLIANCE","store_id":3,"issue_key":"c"}',
+             STATUS='in-progress', OUTCOME='', UPDATED_AT=datetime.datetime(2026, 9, 8)),
+    ]
+    active, resolved, expired = read_workflow_issue_state(
+        _session(rows), 'DB.PUBLIC.ALERTS_PIPELINE', 'DB.PUBLIC.ALERT_ACTION_STATUS',
+        '2026-09-16',
     )
-    monkeypatch.setattr(
-        'store_insight.pipeline.stages._6_queue.apply.read_action_status',
-        lambda *_args: {'old': {'status': 'in_progress', 'outcome': ''}},
+    assert active == {'a'}
+    assert resolved == {'b'}
+    assert expired == [{'action_id': 'alert-c', 'issue_key': 'c'}]
+
+
+def test_suppression_returns_eligible_candidates_only():
+    session = _session([])
+    signals = [{'issue_key': 'eligible'}]
+    kept, log, expired = apply_workflow_suppression(
+        session, signals, '2026-09-16', 'DB.PUBLIC.ALERTS_PIPELINE',
+        'DB.PUBLIC.ALERT_ACTION_STATUS',
     )
-    monkeypatch.setattr(
-        'store_insight.pipeline.stages._6_queue.apply.read_resolved_history',
-        lambda *_args: {},
-    )
-    session = _session()
-    fresh = _card('new', 'stable')
-    live, carried, previous, _ = apply_queue(
-        session, [fresh], RUN_DATE, TABLE, ACTION_TABLE, QueueConfig(),
-    )
-    assert carried == []
-    assert previous == '2026-09-14'
-    assert live[0]['alert_id'] == 'old'
-    assert live[0]['signal_json']['signal_id'] == 'old'
-    assert live[0]['first_sent_date'] == '2026-09-12'
+    assert kept == signals
+    assert log == []
+    assert expired == []
+
+
+def test_history_view_uses_controlled_objects_and_workflow_fields():
+    sql = history_view_ddl('STORE_INSIGHT_DEV')
+    assert 'STORE_INSIGHT_DEV.PUBLIC.ALERTS_HISTORY_V1' in sql
+    assert 'STORE_INSIGHT_DEV.PUBLIC.ALERTS_PIPELINE' in sql
+    assert 'STORE_INSIGHT_DEV.PUBLIC.ALERT_ACTION_STATUS' in sql
+    assert 'ACTION_ID ORDER BY UPDATED_AT DESC' in sql
+    assert "'todo') AS WORKFLOW_STATUS" in sql
+    assert 'ISSUE_KEY' in sql

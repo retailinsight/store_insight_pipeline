@@ -329,10 +329,7 @@ def _build_card(
     }
 
 
-def _card_schema(
-    emit_affected_products: bool = False,
-    emit_first_sent_date: bool = False,
-):
+def _card_schema(emit_affected_products: bool = False):
     """Snowflake output-table schema. Kept adjacent to ``_card_to_row`` — if
     you add a column, edit both.
 
@@ -379,8 +376,6 @@ def _card_schema(
     ]
     if emit_affected_products:
         fields.append(StructField("AFFECTED_PRODUCTS", VariantType()))
-    if emit_first_sent_date:
-        fields.append(StructField("FIRST_SENT_DATE", StringType()))
     return StructType(fields)
 
 
@@ -561,7 +556,6 @@ def _card_to_row(
     card: dict,
     run_date: str,
     emit_affected_products: bool = False,
-    emit_first_sent_date: bool = False,
 ) -> tuple:
     """Serialise one card dict to a row tuple matching ``_card_schema``."""
     row = (
@@ -595,8 +589,6 @@ def _card_to_row(
     )
     if emit_affected_products:
         row = row + (_affected_products(card),)
-    if emit_first_sent_date:
-        row = row + (card.get("first_sent_date", run_date),)
     return row
 
 
@@ -924,6 +916,26 @@ def run_pipeline_from_signals(
         scoring_cfg=cfg.scoring if cfg and cfg.scoring else None,
     )
 
+    for signal in signals:
+        signal["issue_key"] = _make_issue_key(cfg, signal)
+
+    queue_cfg = getattr(cfg, "queue", None) if cfg else None
+    if queue_cfg and queue_cfg.enabled and session is not None:
+        from store_insight.pipeline.stages._6_queue.apply import apply_workflow_suppression
+
+        output_table = _output_table(cfg)
+        database, schema, _ = output_table.split('.')
+        action_table = queue_cfg.action_status_table.format(database=database, schema=schema)
+        signals, _, _ = apply_workflow_suppression(
+            session,
+            signals,
+            run_date or this_week_end,
+            output_table,
+            action_table,
+            suppression_days=queue_cfg.suppression_days,
+            cfg=cfg,
+        )
+
     if debug_tables and getattr(logging_cfg, "write_run_log", False):
         _write_score_audit_table(
             session,
@@ -1090,23 +1102,14 @@ def write_alerts(
         return
 
     emit_affected_products = _emit_affected_products(cfg)
-    emit_first_sent_date = bool(getattr(getattr(cfg, "queue", None), "enabled", False))
     rows = [
-        _card_to_row(
-            c,
-            run_date,
-            emit_affected_products=emit_affected_products,
-            emit_first_sent_date=emit_first_sent_date,
-        )
+        _card_to_row(c, run_date, emit_affected_products=emit_affected_products)
         for c in cards
     ]
     table = target_table or _output_table(cfg)
     df = session.create_dataframe(
         rows,
-        schema=_card_schema(
-            emit_affected_products=emit_affected_products,
-            emit_first_sent_date=emit_first_sent_date,
-        ),
+        schema=_card_schema(emit_affected_products=emit_affected_products),
     )
 
     if full_replace:

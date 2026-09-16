@@ -268,15 +268,11 @@ def test_queue_disabled_schema_preserves_existing_columns():
     assert 'FIRST_SENT_DATE' not in names
 
 
-def test_queue_enabled_schema_and_row_include_first_sent_date():
+def test_workflow_suppression_does_not_change_canonical_alert_schema():
     card = _minimal_card({'item_id': 42})
-    card['first_sent_date'] = '2026-09-08'
-    schema = pipeline_module._card_schema(emit_first_sent_date=True)
-    row = pipeline_module._card_to_row(
-        card, '2026-09-09', emit_first_sent_date=True,
-    )
-    assert schema.fields[-1].name == 'FIRST_SENT_DATE'
-    assert row[-1] == '2026-09-08'
+    schema = pipeline_module._card_schema()
+    row = pipeline_module._card_to_row(card, '2026-09-09')
+    assert 'FIRST_SENT_DATE' not in [field.name for field in schema.fields]
     assert len(row) == len(schema.fields)
 
 
