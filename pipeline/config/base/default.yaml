@@ -182,13 +182,7 @@ gatherers:
     - osa_store_actionable_chain_drift
     - osa_store_actionable_cost_projection
   OSA_BIG_DROP:
-    - osa_store_actionable_ppg_drilldown
-    - osa_store_actionable_item_lsv_changes
-    - osa_store_actionable_dow
-    - osa_store_actionable_day_periods
-    - osa_item_time_patterns
-    - osa_store_actionable_chain_drift
-    - osa_store_actionable_cost_projection
+    - osa_big_drop_day_drilldown
   OSA_RECURRING_SLOT:
     - osa_recurring_slot_facts
   COMPLIANCE:

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-14T13:25:07+00:00",
+  "generated_at": "2026-09-15T10:54:56+00:00",
   "pipeline_summary": "Weekly batch that detects retail availability and markdown anomalies, enriches each signal with supporting facts, generates plain-English narrative cards, and scores them so the highest-impact issues surface first.",
   "stages": {
     "1_detect": "Run lightweight statistical detectors → list of signals.",
@@ -267,6 +267,14 @@
           "type": "str | None"
         },
         {
+          "name": "latest_date",
+          "type": "str | None"
+        },
+        {
+          "name": "prior_date",
+          "type": "str | None"
+        },
+        {
           "name": "quality",
           "type": "dict"
         }
@@ -289,70 +297,13 @@
       ],
       "gatherers": [
         {
-          "name": "osa_store_actionable_ppg_drilldown",
+          "name": "osa_big_drop_day_drilldown",
           "facts_keys": [
-            "ppg_lsv_changes"
-          ],
-          "description": "Top latest-week PPGs with prior-week and changed attributed LSV."
-        },
-        {
-          "name": "osa_store_actionable_item_lsv_changes",
-          "facts_keys": [
-            "item_lsv_changes"
-          ],
-          "description": "Top latest-week item offenders with prior-week attributed LSV and UPC/EAN arrays."
-        },
-        {
-          "name": "osa_store_actionable_dow",
-          "facts_keys": [
-            "dow_pattern",
-            "worst_day"
-          ],
-          "description": "Seven chronological dates with attributed LSV and source-data status."
-        },
-        {
-          "name": "osa_store_actionable_day_periods",
-          "facts_keys": [
-            "day_period_pattern",
-            "worst_day_period",
             "day_period_grid",
-            "grid_scope",
-            "grid_start_date",
-            "grid_end_date",
-            "dow_pattern",
-            "worst_day"
+            "ppg_lsv",
+            "item_lsv"
           ],
-          "description": "Top day/reporting-period rows and complete grid by store-controlled LSV."
-        },
-        {
-          "name": "osa_item_time_patterns",
-          "facts_keys": [
-            "day_period_pattern",
-            "worst_day_period",
-            "repeat_item_time_patterns",
-            "day_period_grid",
-            "grid_scope",
-            "grid_start_date",
-            "grid_end_date",
-            "top_5_lsv_items"
-          ],
-          "description": "Day-of-week / reporting-period patterns, repeat offenders, complete heat-map grid, and top latest-week items."
-        },
-        {
-          "name": "osa_store_actionable_chain_drift",
-          "facts_keys": [
-            "chain_store_last_week_osa",
-            "chain_store_this_week_osa",
-            "chain_store_drift_pp"
-          ],
-          "description": "Chain-wide store-controlled OSA drift per department, returned only when data-quality thresholds are met."
-        },
-        {
-          "name": "osa_store_actionable_cost_projection",
-          "facts_keys": [
-            "cost_projection"
-          ],
-          "description": "Attributed cost-of-inaction projection using latest-week run rate."
+          "description": "Compact time-of-day grid, PPG, and item store-controlled LSV facts."
         }
       ],
       "investigator": {

@@ -334,6 +334,7 @@ class GatherersConfig(BaseModel):
 
     OSA: list[str] = []
     OSA_STORE_ACTIONABLE: list[str] = []
+    OSA_BIG_DROP: list[str] = []
     OSA_RECURRING_SLOT: list[str] = []
     COMPLIANCE: list[str] = []
     MARKDOWN_OVERRIDE: list[str] = []
@@ -347,7 +348,7 @@ class GatherersConfig(BaseModel):
     @classmethod
     def validate_gatherer_names(cls, v: list[str], info) -> list[str]:
         """Validate that all gatherer names exist in the gatherer registry."""
-        if info.field_name in ["OSA", "OSA_STORE_ACTIONABLE", "OSA_RECURRING_SLOT", "COMPLIANCE", "MARKDOWN_OVERRIDE", "WASTE", "WASTE_TRIM", "MARKDOWN_SELLTHROUGH", "MARKDOWN_SKU", "STRAIGHT_TO_BIN"]:
+        if info.field_name in ["OSA", "OSA_STORE_ACTIONABLE", "OSA_BIG_DROP", "OSA_RECURRING_SLOT", "COMPLIANCE", "MARKDOWN_OVERRIDE", "WASTE", "WASTE_TRIM", "MARKDOWN_SELLTHROUGH", "MARKDOWN_SKU", "STRAIGHT_TO_BIN"]:
             known_gatherers = {mod.__name__.split(".")[-1] for mod in gatherer_registry.ALL_GATHERERS}
             unknown = set(v) - known_gatherers
             if unknown:

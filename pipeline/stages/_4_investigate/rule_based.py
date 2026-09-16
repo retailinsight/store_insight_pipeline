@@ -727,11 +727,18 @@ def _generate_osa_store_actionable(signal: dict) -> dict:
     }
 
 
+def _join_names(names: list) -> str:
+    if len(names) <= 2:
+        return ' and '.join(names)
+    return ', '.join(names[:-1]) + ' and ' + names[-1]
+
+
 def _generate_osa_big_drop(signal: dict) -> dict:
     """Narrative for an OSA_BIG_DROP day-on-day alert.
 
-    Shares the actionable title with OSA_STORE_ACTIONABLE but keeps the
-    multi-line explanation view, naming the two trading days compared.
+    The card title is an investigation prompt naming the department and the
+    two compared trading days; the subtitle names the top three contributing
+    PPGs on the drop day.
     """
     dept = signal['department']
     facts = signal.get('facts') or {}
@@ -739,66 +746,78 @@ def _generate_osa_big_drop(signal: dict) -> dict:
     store_lsv = float(lsv.get('store_controlled') or 0)
     drift = abs(float(signal.get('wow_drift_pp') or 0))
 
-    issue = _osa_actionable_title(signal)
-
-    explanation = []
     last_osa = signal.get('last_week_osa')
     this_osa = signal.get('this_week_osa')
     prior_day = signal.get('prior_day')
     latest_day = signal.get('latest_day')
     day_word = latest_day or 'that day'
+
     if last_osa is not None and this_osa is not None:
         if prior_day and latest_day:
+            issue = (
+                f'Investigate why store-controlled OSCA dropped in {dept} '
+                f'from {last_osa:g}% on {prior_day} to {this_osa:g}% on {latest_day}.'
+            )
             drop_sentence = (
                 f'Store-controlled OSCA in {dept} dropped {drift:.1f}pp in a single '
                 f'day — from {last_osa:.1f}% on {prior_day} to {this_osa:.1f}% on {latest_day}.'
             )
         else:
+            issue = (
+                f'Investigate why store-controlled OSCA dropped in {dept} '
+                f'from {last_osa:g}% to {this_osa:g}%.'
+            )
             drop_sentence = (
                 f'Store-controlled OSCA in {dept} dropped {drift:.1f}pp in a single '
                 f'day — from {last_osa:.1f}% to {this_osa:.1f}%.'
             )
-        explanation.append(drop_sentence)
+        explanation = [drop_sentence]
     else:
+        issue = f'Investigate why store-controlled OSCA dropped in {dept}.'
         drop_sentence = (
             f'{dept} recorded £{store_lsv:,.2f} of lost sales in a single day '
             f'while recorded inventory was positive.'
         )
+        explanation = []
     explanation.append(
         f'The department had £{store_lsv:,.2f} of lost sales on {day_word} while recorded inventory was positive.'
     )
 
-    ppgs = facts.get('ppg_lsv_changes') or facts.get('ppg_contributors') or []
+    ppgs = facts.get('ppg_lsv') or []
     if ppgs:
         ppg = ppgs[0]
-        name = ppg.get('ppg') or ppg.get('ppg_name') or ppg.get('name')
-        value = (ppg.get('latest_week_lsv') or {}).get('store_controlled', 0)
-        explanation.append(f'Over the last 7 days the leading PPG was {name} (£{value:,.2f} store-controlled lost sales).')
+        name = ppg.get('ppg')
+        value = float(ppg.get('store_controlled_lsv') or 0)
+        explanation.append(f'On {day_word} the leading PPG was {name} (£{value:,.2f} store-controlled lost sales).')
 
-    items = facts.get('item_lsv_changes') or []
+    items = facts.get('item_lsv') or []
     if items:
         item = items[0]
         name = _clean_item_name(item.get('item_name')) or item.get('item_code')
-        latest = float((item.get('latest_week_lsv') or {}).get('store_controlled') or 0)
-        prior = float((item.get('prior_week_lsv') or {}).get('store_controlled') or 0)
+        latest = float(item.get('store_controlled_lsv') or 0)
         explanation.append(
-            f"The largest item offender over the last 7 days was {name} "
-            f"with £{latest:,.2f} of store-controlled lost sales (£{prior:,.2f} the week before)."
+            f"The largest item offender on {day_word} was {name} "
+            f"with £{latest:,.2f} of store-controlled lost sales."
         )
 
-    projection = facts.get('cost_projection') or {}
-    weeks = int(projection.get('projection_weeks') or facts.get('projection_weeks') or 4)
+    weeks = 4
     cost = round(store_lsv * 7 * weeks, 2)
     cost_text = (
         f"If {day_word}'s rate of loss continued, store-controlled lost sales could cost "
         f"approximately £{cost:,.2f} over the next {weeks} weeks."
     )
 
+    ppg_names = [ppg['ppg'] for ppg in ppgs[:3] if ppg.get('ppg')]
+    subtitle = (
+        f'The top contributing PPGs were {_join_names(ppg_names)}.'
+        if ppg_names else drop_sentence
+    )
+
     return {
         'issue': issue,
         'explanation': '\n'.join(explanation),
         'cost_if_not_fixed': cost_text,
-        'recommended_action': drop_sentence,
+        'recommended_action': subtitle,
     }
 
 
