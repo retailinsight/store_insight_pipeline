@@ -14,6 +14,7 @@ from store_insight.pipeline.pipeline.pipeline import (
     _build_card,
     _debug_table_name,
     _make_alert_id,
+    _make_issue_key,
     _write_investigations_debug_table,
     _write_score_audit_table,
     _write_signals_debug_table,
@@ -91,6 +92,21 @@ def test_make_alert_id_differs_across_business_keys():
     assert len(set(ids.values())) == 4
 
 
+def test_issue_key_is_stable_across_analysis_dates():
+    sig = make_osa_signal(store_id=1, department='CHILLED', trigger_types=['WOW'])
+    assert _make_issue_key(None, sig) == _make_issue_key(None, sig)
+    assert _make_alert_id(None, sig, '2026-09-14') != _make_alert_id(None, sig, '2026-09-15')
+
+
+def test_issue_key_distinguishes_recurring_slots():
+    first = {
+        'signal_type': 'OSA_RECURRING_SLOT', 'store_id': 1, 'department': 'FRUIT',
+        'dow': 4, 'period_id': 2,
+    }
+    second = {**first, 'dow': 6, 'period_id': 3}
+    assert _make_issue_key(None, first) != _make_issue_key(None, second)
+
+
 def test_make_alert_id_uses_client_name_when_available():
     sig = make_osa_signal(store_id=1, department='CHILLED', trigger_types=['WOW'])
 
@@ -153,6 +169,7 @@ def test_build_card_stamps_signal_id_into_signal_json():
     card = _build_card(sig, narrative, sort_value=500.0, analysis_date='2025-01-19')
 
     assert card['signal_json']['signal_id'] == card['signal_id']
+    assert card['signal_json']['issue_key'] == card['issue_key']
 
 
 def test_build_card_ids_are_deterministic_across_calls():

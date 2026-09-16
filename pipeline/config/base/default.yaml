@@ -399,5 +399,5 @@ queue:
   max_new_per_day:      3
   expiry_days:          7
   suppression_days:     7
-  no_suppression_types: [OSA_BIG_DROP, OSA_RECURRING_SLOT, COMPLIANCE]
-  action_status_table:  "STORE_INSIGHT_DB.PUBLIC.ACTION_STATUS"
+  no_suppression_types: []
+  action_status_table:  "{database}.{schema}.ALERT_ACTION_STATUS"
