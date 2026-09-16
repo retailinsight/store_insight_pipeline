@@ -137,6 +137,25 @@ def _resolve_config(config: "DetectorConfig" = None, cfg=None) -> DetectorConfig
     return DetectorConfig()
 
 
+def _identity_parts(cfg, signal: dict) -> list[str]:
+    client = getattr(cfg, "client_name", None) or "default"
+    parts = [client, signal.get("signal_type", ""), str(signal.get("store_id", ""))]
+    if signal.get("department"):
+        parts.append(str(signal["department"]))
+    if signal.get("dow") is not None:
+        parts.append(str(signal["dow"]))
+    if signal.get("period_id") is not None:
+        parts.append(str(signal["period_id"]))
+    if signal.get("item_id") is not None:
+        parts.append(str(signal["item_id"]))
+    return parts
+
+
+def _make_issue_key(cfg, signal: dict) -> str:
+    """Return the stable business-issue identity, excluding the analysis date."""
+    return hashlib.sha256("|".join(_identity_parts(cfg, signal)).encode("utf-8")).hexdigest()[:16]
+
+
 def _make_alert_id(cfg, signal: dict, analysis_date: str | None) -> str:
     """Return a deterministic, stable ID for a signal / alert card.
 
@@ -147,25 +166,8 @@ def _make_alert_id(cfg, signal: dict, analysis_date: str | None) -> str:
     distinct slots alerting at once), or item_id.  This keeps the same ID
     across re-runs and makes it possible to track an alert over time.
     """
-    client = getattr(cfg, "client_name", None) or "default"
-    parts = [
-        client,
-        analysis_date or "unknown",
-        signal.get("signal_type", ""),
-        str(signal.get("store_id", "")),
-    ]
-    if signal.get("department"):
-        parts.append(str(signal["department"]))
-    # Slot-scoped signals (e.g. OSA_RECURRING_SLOT) can fire multiple
-    # distinct alerts for the same store+department — one per
-    # day-of-week + reporting-period slot. Without these, two different
-    # slots collide onto the same ALERT_ID.
-    if signal.get("dow") is not None:
-        parts.append(str(signal["dow"]))
-    if signal.get("period_id") is not None:
-        parts.append(str(signal["period_id"]))
-    if signal.get("item_id") is not None:
-        parts.append(str(signal["item_id"]))
+    identity = _identity_parts(cfg, signal)
+    parts = [identity[0], analysis_date or "unknown", *identity[1:]]
     return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
 
 
@@ -275,8 +277,10 @@ def _build_card(
 ) -> dict:
     """Assemble a single alert-card dict from enriched signal + narrative + score."""
     alert_id = _make_alert_id(cfg, sig, analysis_date)
+    issue_key = _make_issue_key(cfg, sig)
     signal_wo_facts = {k: v for k, v in sig.items() if k != "facts"}
     signal_wo_facts["signal_id"] = alert_id
+    signal_wo_facts["issue_key"] = issue_key
 
     # Get signal type bucket from config, use default if not provided
     default_type = 'Availability'
@@ -297,6 +301,7 @@ def _build_card(
     return {
         "signal_id": alert_id,
         "alert_id": alert_id,
+        "issue_key": issue_key,
         "analysis_date": analysis_date,
         "engine_used": narrative.get("_engine", "rule_based"),
         "alert_type": ",".join(sorted(sig["trigger_types"])),
@@ -372,10 +377,10 @@ def _card_schema(
             StructField("SKILL_FILE_USED", StringType()),
             StructField("FALLBACK_USED", StringType()),
     ]
-    if emit_first_sent_date:
-        fields.append(StructField("FIRST_SENT_DATE", StringType()))
     if emit_affected_products:
         fields.append(StructField("AFFECTED_PRODUCTS", VariantType()))
+    if emit_first_sent_date:
+        fields.append(StructField("FIRST_SENT_DATE", StringType()))
     return StructType(fields)
 
 
@@ -588,10 +593,10 @@ def _card_to_row(
         card.get("skill_file_used", ""),
         "TRUE" if card.get("fallback_used") else "FALSE",
     )
-    if emit_first_sent_date:
-        row = row + (card.get("first_sent_date", run_date),)
     if emit_affected_products:
         row = row + (_affected_products(card),)
+    if emit_first_sent_date:
+        row = row + (card.get("first_sent_date", run_date),)
     return row
 
 

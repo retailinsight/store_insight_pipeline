@@ -428,10 +428,8 @@ class QueueSettings(BaseModel):
     max_new_per_day: int = 3
     expiry_days: int = 7
     suppression_days: int = 7
-    no_suppression_types: list[str] = [
-        "OSA_BIG_DROP", "OSA_RECURRING_SLOT", "COMPLIANCE",
-    ]
-    action_status_table: str = "STORE_INSIGHT_DB.PUBLIC.ACTION_STATUS"
+    no_suppression_types: list[str] = []
+    action_status_table: str = "{database}.{schema}.ALERT_ACTION_STATUS"
 
 
 class LoggingConfig(BaseModel):

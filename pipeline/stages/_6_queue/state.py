@@ -36,55 +36,76 @@ def ensure_queue_columns(session, alerts_table: str) -> None:
     ).collect()
 
 
-def read_live_state(session, alerts_table: str, run_date: str):
-    """Live queue from the previous run. Returns (rows, prev_run_date).
+def _normalise(value):
+    return str(value or '').strip().lower().replace('-', '_').replace(' ', '_')
 
-    Rows are light dicts for the planner: alert_id, store_id, signal_type,
-    first_sent_date, sort_value. ``prev_run_date`` is None when there is no
-    usable queue history (cold start).
-    """
-    prev = session.sql(
-        f"SELECT MAX(RUN_DATE) AS D FROM {alerts_table} "
-        f"WHERE RUN_DATE < '{run_date}' AND FIRST_SENT_DATE IS NOT NULL"
+
+def ensure_history_view(session, alerts_table: str, action_table: str) -> None:
+    database, schema, _ = alerts_table.split('.')
+    session.sql(
+        f"CREATE OR REPLACE VIEW {database}.{schema}.ALERTS_HISTORY_V1 AS "
+        f"WITH workflow AS (SELECT ACTION_ID, STATUS, OUTCOME, ASSIGNEE_INITIALS, NOTES, "
+        f"UPDATED_AT FROM {action_table} QUALIFY ROW_NUMBER() OVER "
+        f"(PARTITION BY ACTION_ID ORDER BY UPDATED_AT DESC) = 1) "
+        f"SELECT a.*, a.SIGNAL_JSON:issue_key::STRING AS ISSUE_KEY, "
+        f"COALESCE(LOWER(REPLACE(TRIM(w.STATUS), '-', '_')), 'todo') AS STATUS, "
+        f"LOWER(TRIM(w.OUTCOME)) AS OUTCOME, w.ASSIGNEE_INITIALS, w.NOTES, w.UPDATED_AT "
+        f"FROM {alerts_table} a LEFT JOIN workflow w ON w.ACTION_ID = a.ALERT_ID"
     ).collect()
-    prev_run_date = prev[0]['D'] if prev and prev[0]['D'] else None
-    if prev_run_date is None:
-        return [], None
-    prev_run_date = str(prev_run_date)
 
+
+def read_live_state(session, alerts_table: str, action_table: str, run_date: str):
+    """Return the latest stored alert for every historical In Progress action."""
     rows = session.sql(
-        f"SELECT ALERT_ID, STORE_ID, FIRST_SENT_DATE, SORT_VALUE, SIGNAL_JSON "
-        f"FROM {alerts_table} "
-        f"WHERE RUN_DATE = '{prev_run_date}' AND FIRST_SENT_DATE IS NOT NULL"
+        f"WITH workflow AS (SELECT ACTION_ID, STATUS, UPDATED_AT FROM {action_table} "
+        f"QUALIFY ROW_NUMBER() OVER (PARTITION BY ACTION_ID ORDER BY UPDATED_AT DESC) = 1), "
+        f"first_seen AS (SELECT ALERT_ID, MIN(RUN_DATE) AS D FROM {alerts_table} GROUP BY ALERT_ID) "
+        f"SELECT a.ALERT_ID, a.STORE_ID, COALESCE(a.FIRST_SENT_DATE, f.D) AS FIRST_SENT_DATE, "
+        f"a.SORT_VALUE, a.SIGNAL_JSON, a.RUN_DATE, w.UPDATED_AT AS IN_PROGRESS_SINCE "
+        f"FROM {alerts_table} a "
+        f"JOIN workflow w ON w.ACTION_ID = a.ALERT_ID "
+        f"JOIN first_seen f ON f.ALERT_ID = a.ALERT_ID "
+        f"WHERE a.RUN_DATE < '{run_date}' "
+        f"AND LOWER(REPLACE(TRIM(w.STATUS), '-', '_')) = 'in_progress' "
+        f"QUALIFY ROW_NUMBER() OVER (PARTITION BY a.ALERT_ID ORDER BY a.RUN_DATE DESC) = 1"
     ).collect()
     state = []
     for r in rows:
-        signal_type = None
+        payload = {}
         raw = r['SIGNAL_JSON']
         if raw:
             try:
                 payload = json.loads(raw) if isinstance(raw, str) else raw
-                signal_type = payload.get('signal_type')
             except (ValueError, AttributeError):
-                pass
+                payload = {}
         state.append({
             'alert_id': r['ALERT_ID'],
             'store_id': r['STORE_ID'],
             'first_sent_date': str(r['FIRST_SENT_DATE']),
+            'in_progress_since': str(r['IN_PROGRESS_SINCE']).split()[0],
             'sort_value': r['SORT_VALUE'],
-            'signal_type': signal_type,
+            'signal_type': payload.get('signal_type'),
+            'issue_key': payload.get('issue_key'),
+            'signal_json': payload,
         })
+    prev_run_date = max((str(r['RUN_DATE']) for r in rows), default=None)
     return state, prev_run_date
 
 
 def read_action_status(session, action_table: str) -> dict:
-    """Latest STATUS per ALERT_ID (the app writes one row per interaction)."""
+    """Latest normalised STATUS and OUTCOME per app ACTION_ID."""
     rows = session.sql(
-        f'SELECT ALERT_ID, STATUS FROM {action_table} '
+        f'SELECT ACTION_ID, STATUS, OUTCOME FROM {action_table} '
         'QUALIFY ROW_NUMBER() OVER '
-        '(PARTITION BY ALERT_ID ORDER BY UPDATED_AT DESC) = 1'
+        '(PARTITION BY ACTION_ID ORDER BY UPDATED_AT DESC) = 1'
     ).collect()
-    return {r['ALERT_ID']: r['STATUS'] for r in rows}
+    return {
+        r['ACTION_ID']: {
+            'status': _normalise(r['STATUS']),
+            'outcome': _normalise(r['OUTCOME']),
+        }
+        for r in rows
+    }
 
 
 def read_sent_history(session, alerts_table: str, run_date: str,
@@ -103,6 +124,50 @@ def read_sent_history(session, alerts_table: str, run_date: str,
     }
 
 
+def _semantic_identity(payload: dict, store_id) -> tuple:
+    return (
+        payload.get('signal_type'), store_id, payload.get('department'), payload.get('dow'),
+        payload.get('period_id'), payload.get('item_id'),
+    )
+
+
+def read_resolved_history(session, alerts_table: str, action_table: str, run_date: str,
+                          suppression_days: int) -> dict:
+    """Return the latest resolved date for each stable issue key and store."""
+    rows = session.sql(
+        f"WITH workflow AS (SELECT ACTION_ID, STATUS, OUTCOME, UPDATED_AT FROM {action_table} "
+        f"QUALIFY ROW_NUMBER() OVER (PARTITION BY ACTION_ID ORDER BY UPDATED_AT DESC) = 1) "
+        f"SELECT a.STORE_ID, a.SIGNAL_JSON, w.UPDATED_AT FROM {alerts_table} a "
+        f"JOIN workflow w ON w.ACTION_ID = a.ALERT_ID "
+        f"WHERE LOWER(TRIM(w.STATUS)) = 'completed' "
+        f"AND LOWER(TRIM(w.OUTCOME)) IN ('completed', 'partial', 'couldnt_complete', 'expired') "
+        f"AND TO_DATE(w.UPDATED_AT) >= DATEADD(day, -{suppression_days}, '{run_date}') "
+        f"QUALIFY ROW_NUMBER() OVER (PARTITION BY a.ALERT_ID ORDER BY a.RUN_DATE DESC) = 1"
+    ).collect()
+    history = {}
+    for row in rows:
+        raw = row['SIGNAL_JSON']
+        try:
+            payload = json.loads(raw) if isinstance(raw, str) else (raw or {})
+        except (ValueError, AttributeError):
+            payload = {}
+        issue_key = payload.get('issue_key')
+        identity = issue_key or _semantic_identity(payload, row['STORE_ID'])
+        key = (identity, row['STORE_ID'])
+        resolved_date = str(row['UPDATED_AT']).split()[0]
+        history[key] = max(history.get(key, resolved_date), resolved_date)
+    return history
+
+
+def write_status_updates(session, action_table: str, updates: list[dict]) -> None:
+    for update in updates:
+        session.sql(
+            f"UPDATE {action_table} SET STATUS = '{update['status']}', "
+            f"OUTCOME = '{update['outcome']}', UPDATED_AT = CURRENT_TIMESTAMP() "
+            f"WHERE ACTION_ID = '{update['alert_id']}'"
+        ).collect()
+
+
 def copy_carried_forward(session, alerts_table: str, prev_run_date: str,
                          run_date: str, alert_ids) -> int:
     """Re-emit carried live alerts under today's RUN_DATE via SQL copy."""
@@ -112,8 +177,9 @@ def copy_carried_forward(session, alerts_table: str, prev_run_date: str,
         f"INSERT INTO {alerts_table} "
         f"SELECT '{run_date}' AS RUN_DATE, * EXCLUDE RUN_DATE "
         f"FROM {alerts_table} "
-        f"WHERE RUN_DATE = '{prev_run_date}' "
-        f"AND ALERT_ID IN ({_quoted(alert_ids)})"
+        f"WHERE RUN_DATE < '{run_date}' "
+        f"AND ALERT_ID IN ({_quoted(alert_ids)}) "
+        f"QUALIFY ROW_NUMBER() OVER (PARTITION BY ALERT_ID ORDER BY RUN_DATE DESC) = 1"
     ).collect()
     return len(alert_ids)
 

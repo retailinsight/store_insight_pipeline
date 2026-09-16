@@ -16,14 +16,16 @@
 from store_insight.pipeline.stages._6_queue.plan import QueueConfig, plan_queue
 from store_insight.pipeline.stages._6_queue.state import (
     copy_carried_forward,
+    ensure_history_view,
     ensure_queue_columns,
     read_action_status,
     read_live_state,
-    read_sent_history,
+    read_resolved_history,
     write_queue_log,
+    write_status_updates,
 )
 
-DEFAULT_ACTION_STATUS_TABLE = 'STORE_INSIGHT_DB.PUBLIC.ACTION_STATUS'
+DEFAULT_ACTION_STATUS_TABLE = 'STORE_INSIGHT_DB.PUBLIC.ALERT_ACTION_STATUS'
 
 
 def _card_signal_type(card: dict) -> str | None:
@@ -33,11 +35,19 @@ def _card_signal_type(card: dict) -> str | None:
     return None
 
 
+def _semantic_identity(signal: dict) -> tuple:
+    return (
+        signal.get('signal_type'), signal.get('store_id'), signal.get('department'),
+        signal.get('dow'), signal.get('period_id'), signal.get('item_id'),
+    )
+
+
 def _light(card: dict) -> dict:
     return {
         'alert_id': card['alert_id'],
         'store_id': card['store_id'],
         'signal_type': _card_signal_type(card),
+        'issue_key': card.get('issue_key'),
         'sort_value': card.get('sort_value') or 0.0,
     }
 
@@ -59,12 +69,30 @@ def apply_queue(
     """
     queue_cfg = queue_cfg or QueueConfig()
     ensure_queue_columns(session, alerts_table)
-    live_state, prev_run_date = read_live_state(session, alerts_table, run_date)
+    ensure_history_view(session, alerts_table, action_status_table)
+    live_state, prev_run_date = read_live_state(
+        session, alerts_table, action_status_table, run_date)
+    candidate_keys = {
+        _semantic_identity(card.get('signal_json') or {}): card.get('issue_key')
+        for card in cards
+    }
+    for row in live_state:
+        row['issue_key'] = (
+            row.get('issue_key')
+            or candidate_keys.get(_semantic_identity(row.get('signal_json') or {}))
+            or f"legacy:{row['alert_id']}"
+        )
     action_status = read_action_status(session, action_status_table)
-    sent_history = read_sent_history(
-        session, alerts_table, run_date, queue_cfg.suppression_days)
+    resolved_history = read_resolved_history(
+        session, alerts_table, action_status_table, run_date, queue_cfg.suppression_days)
+    sent_history = {}
+    for (identity, store_id), resolved_date in resolved_history.items():
+        issue_key = candidate_keys.get(identity) if isinstance(identity, tuple) else identity
+        if issue_key:
+            sent_history[(issue_key, store_id)] = resolved_date
 
-    by_key = {(c['alert_id'], c['store_id']): c for c in cards}
+    by_alert = {(c['alert_id'], c['store_id']): c for c in cards}
+    by_issue = {(c.get('issue_key'), c['store_id']): c for c in cards}
     candidates = [_light(c) for c in cards]
 
     plan = plan_queue(
@@ -72,10 +100,21 @@ def apply_queue(
 
     live_cards, carried_ids = [], []
     for row in plan.live:
-        key = (row['alert_id'], row['store_id'])
-        card = by_key.get(key)
+        alert_key = (row['alert_id'], row['store_id'])
+        issue_key = (row.get('issue_key'), row['store_id'])
+        card = by_alert.get(alert_key) or by_issue.get(issue_key)
         if card is not None:
-            live_cards.append({**card, 'first_sent_date': row['first_sent_date']})
+            refreshed = {
+                **card,
+                'alert_id': row['alert_id'],
+                'signal_id': row['alert_id'],
+                'first_sent_date': row['first_sent_date'],
+            }
+            refreshed['signal_json'] = {
+                **refreshed.get('signal_json', {}),
+                'signal_id': row['alert_id'],
+            }
+            live_cards.append(refreshed)
         else:
             carried_ids.append(row['alert_id'])
 
@@ -93,6 +132,7 @@ def write_queue(
     run_date: str,
     alerts_table: str,
     write_alerts_fn,
+    action_status_table: str = DEFAULT_ACTION_STATUS_TABLE,
     cfg=None,
 ) -> None:
     """Persist the queue plan. ``write_alerts_fn`` is ``pipeline.write_alerts``
@@ -110,3 +150,4 @@ def write_queue(
             session, alerts_table, prev_run_date, run_date, carried_ids)
         print(f'[queue] carried forward {copied} live alert(s) from {prev_run_date}')
     write_queue_log(session, alerts_table, run_date, plan.log)
+    write_status_updates(session, action_status_table, plan.status_updates)

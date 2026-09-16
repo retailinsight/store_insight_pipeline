@@ -76,7 +76,6 @@ import uuid
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 
 from snowflake.snowpark import functions as F
-
 from store_insight.pipeline.config.loader import load_config
 from store_insight.pipeline.pipeline.capabilities import discover_capabilities
 from store_insight.pipeline.pipeline.capabilities import validate as validate_capabilities
@@ -286,12 +285,15 @@ def write_alerts_with_queue(
         suppression_days=queue_settings.suppression_days,
         no_suppression_types=frozenset(queue_settings.no_suppression_types),
     )
+    database, schema, _ = alerts_table.split('.')
+    action_status_table = queue_settings.action_status_table.format(
+        database=database, schema=schema)
     live_cards, carried_ids, prev_run_date, plan = apply_queue(
         session,
         cards,
         run_date,
         alerts_table,
-        action_status_table=queue_settings.action_status_table,
+        action_status_table=action_status_table,
         queue_cfg=queue_cfg,
     )
     return write_queue(
@@ -303,6 +305,7 @@ def write_alerts_with_queue(
         run_date,
         alerts_table,
         write_alerts_fn=write_alerts,
+        action_status_table=action_status_table,
         cfg=cfg,
     )
 
