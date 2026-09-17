@@ -947,10 +947,60 @@ on small feature branches off the merged `main` — no more stacking on the inte
 - [x] **Replace PR #86 row-copy design:** `pipeline/stages/_6_queue/plan.py`, `state.py` and `apply.py` now implement pre-ranking suppression and `ALERTS_HISTORY_V1`. Daily copying, `FIRST_SENT_DATE` emission and carried-card writes were removed.
 - [x] **Define two-view API query contract:** documented in `SNOWFLAKE_CONTRACT_FOR_API_UI_V0.3.md`, `SNOWFLAKE_CONSUMER_CONTRACT.md` and `prds/prd-alert-suppression-and-queue.md`. the API must not recalculate “latest” or read base `ALERTS_PIPELINE`. `ALERTS_HISTORY_V1` returns history plus latest workflow status. documented in `SNOWFLAKE_CONTRACT_FOR_API_UI_V0.3.md`, `SNOWFLAKE_CONSUMER_CONTRACT.md` and `prds/prd-alert-suppression-and-queue.md`.
 - [x] **Align API/UI contracts before PR #85 deployment or queue rollout:** `SNOWFLAKE_CONTRACT_FOR_API_UI_V0.3.md` and `SNOWFLAKE_CONSUMER_CONTRACT.md` updated with current 16 Sep CRT/DEV counts, Big Drop fact differences and `ALERTS_HISTORY_V1` as proposed. Document that CRT still has the shared Big Drop facts while DEV/merged PR #85 uses compact `day_period_grid`, `ppg_lsv`, and `item_lsv`; require API/UI transition handling. Mark `ALERTS_HISTORY_V1` as proposed/not live until DEV creation.
-- [ ] **Add a new REQUESTS_LOG correction entry:** do not rewrite historical entries. Record PR #85 merge, current PR #85 DEV-only data shape, Prompted Markdown source/output distinction, revised PR #86 two-view design, date-specific SHA-256 `ALERT_ID`, stable `ISSUE_KEY`, and the integration-table history dependency.
+- [x] **Add a new REQUESTS_LOG correction entry (R30):** recorded the 16 Sep 2026 accidental CRT `ALERTS_PIPELINE` write, the safe restore from `..._BACKUP_20260916_SAFE`, the creation of `ALERTS_HISTORY_V1` in CRT, the removal of fake Dev Store alerts, and the DEV `issue_key` re-run. See `store_insight_api/REQUESTS_LOG.md`.
 - [ ] **Cornelious API work in parallel (confirmed started 13:05):** read current To Dos from `ALERTS_LATEST_V1`; add eligible In Progress cards from `ALERTS_HISTORY_V1`; exclude current cards already In Progress by `ISSUE_KEY`; keep completed/couldnt-complete/expired cards off the board; retain `ACTION_ID = ALERT_ID`. Set reminder must send `ACTION_ID`, move the matching card to In Progress, keep a link back to the card and make retries idempotent.
 - [ ] **Imran UI work:** show carried In Progress cards alongside three current To Do cards; display `OUTCOME = expired` as “Didn't complete”; open the matching action from a reminder link; confirm history UI can follow without blocking the live fix.
 - [x] **Revalidate revised PR #86 locally and read-only in DEV:** local tests: 809 passed, 2 skipped, 1 known worktree zip artifact; Ruff/diff-check passed. DEV shadow (16 Sep 2026): 362 candidates, 63 In Progress, 5 missing source IDs, 45 expiry candidates, 2 active, 359 eligible after suppression.
 - [x] **DEV rollout after review:** `ALERTS_HISTORY_V1` created in `STORE_INSIGHT_DEV` on 16 Sep 2026. CRT unchanged. Next: validate the combined API result with Cornelious and Imran. No queue enablement or procedure replacement is needed for the view-based live-board flow unless the final design explicitly retains an expiry writer.
 - [ ] **DEV acceptance:** verify three current To Do cards, historical In Progress cards under seven days, `ISSUE_KEY` deduplication, completion/expiry exclusions, seven-day suppression, reminder links, empty results and historical JSON compatibility.
 - [ ] **CRT remains blocked:** prepare a separate PR #85 deployment plus PR #86 view/API rollout and rollback plan only after DEV acceptance. Do not point the API to base `ALERTS_PIPELINE`.
+
+## 2026-09-16 — Two-view API `merge_key` vs `issue_key` (CRT/DEV incident follow-up)
+
+- [x] CRT `ALERTS_PIPELINE` restored to safe 365 rows; `ALERTS_HISTORY_V1` created; validation 20/20.
+- [x] Fake Dev Store alerts (100/101/102) removed from CRT.
+- [x] Cornelious deployed and tested the two-view API in CRT: store 239 shows 1 To Do + 3 In Progress; store 440 shows 1 In Progress.
+- [x] DEV re-run `RUN_DATE=2026-09-17` populated `SIGNAL_JSON:issue_key` in 362/362 new rows.
+- [x] Investigated Cornelious's report that `issue_key` is missing from `ALERTS_HISTORY_V1`: confirmed older `RUN_DATE=2026-09-15` and `2026-09-16` rows only have `merge_key`; `issue_key` exists only on `2026-09-17` rows. This is expected because `issue_key` was added by PR #86 after those runs were generated. The API must use `merge_key` as the stable fallback for old In Progress cards.
+- [x] API: switch deduplication to `merge_key` for now. `issue_key` can become the primary key once old `RUN_DATE`s age out or are reprocessed.
+- [ ] Continue CRT UI/API validation; keep `OSA_BIG_DROP` excluded; do not delete `_BACKUP_20260916` tables until CRT is stable.
+- [ ] Investigate 40 orphaned `ALERT_ACTION_STATUS` rows separately (data-side findings recorded in `INCIDENT_2026-09-16_unintended_crt_write.md`).
+- [x] Scheduled task state checked and normalised: all CRT tasks `started`; DEV `CLONE_PROD_TO_DEV_TASK` `started`; DEV `KPI_AVAILABILITY_BATCH_TASK`, `MONITORING_TASK`, `SOURCE_VOLUME_CHECK_TASK` `suspended`.
+- [x] Snowflake contract files `SNOWFLAKE_CONTRACT_FOR_API_UI_V0.4.md`, `SNOWFLAKE_CONSUMER_CONTRACT.md` and `REQUESTS_LOG.md` updated with CRT `ALERTS_HISTORY_V1`, `merge_key` fallback and closed two-view API status.
+- [ ] **PRD `prd-alert-suppression-and-queue.md` not fully addressed in Snowflake:** Snowflake test found `ALERTS_LATEST_V1` in both CRT and DEV still contains cards whose `merge_key` matches active In Progress or recently resolved issues. The two-view API can hide them, but the `top_n:3` cap was already applied, so the pipeline-side suppression before the cap is missing. Awaiting Dan's approval before any CRT PR #86 deployment or 06:00 run change.
+
+## 2026-09-17 — Morning validation and API read bugs
+
+- [x] 06:00 CRT `RUN_ALERTS_PIPELINE_TASK` succeeded: `RUN_DATE=2026-09-17`, 357 actions across 122 stores. DEV cloned to match. Contract validation `validate_latest_snowflake_contracts.py --require-crt-cap --require-crt-pr83` passed 20/20.
+- [x] Investigated Dan's report that completed card `928d83825279f56f` (store 508, CONFECTIONERY) is not showing in UI. The `ALERT_ACTION_STATUS` row exists with `STATUS='Completed'` (capital C), `OUTCOME='completed'`, `UPDATED_AT=2026-09-16 16:31`. The matching `ALERT_ID` is in `ALERTS_HISTORY_V1` for both `RUN_DATE=2026-09-15` and `2026-09-16` but not in `ALERTS_LATEST_V1` (correct, since it is not a current To Do). The UI is not showing it because the API likely filters for lowercase `status = 'completed'`.
+- [x] Confirmed `ALERT_ACTION_STATUS` has mixed `STATUS` casing: CRT has 19 `Completed`, 1 `completed`, 26 `in-progress`, 1 `todo`; DEV has 102 `Completed`, 68 `in-progress`. Normalized there are 20 completed and 26 in-progress rows in CRT in the last 7 days.
+- [x] **Cornelious fixed API status filter:** Completed cards are now displaying in CRT (Cornelious confirmed 17 Sep). Status normalisation remains the documented contract.
+- [x] Investigated Dan's two orphan `ACTION_ID`s (`ecaa4d4cddd2ed5e`, `a5eebeaaf858504b`). They exist in `ALERT_ACTION_STATUS` and `NOTES`, but not in any `ALERTS_PIPELINE` or `ALERTS_HISTORY_V1` table. The `74` in the `NOTES` row is `USER_ID` (Marie Freak), not `STORE_ID`; store 74 does not exist. This is an API bug: the UI wrote a non-canonical `ACTION_ID`.
+- [ ] **Cornelious to fix `ACTION_ID` write:** the API must store the exact `ALERT_ID` from `ALERTS_LATEST_V1`/`ALERTS_HISTORY_V1` into `ALERT_ACTION_STATUS.ACTION_ID`. Add server-side validation that the `ActionId` exists as an `ALERT_ID` before accepting a status update.
+- [x] Checked Dan's report that store 508 Coggeshall shows only 2 To Do cards. Snowflake has 3 cards in `ALERTS_LATEST_V1` (SOFT DRINKS, CONFECTIONERY, RED TABLE WINES). The CONFECTIONERY card matches the recently completed workflow row `928d83825279f56f` (status `Completed`, updated 16 Sep) by `merge_key`, so the API correctly suppresses it from To Do and shows it in Completed. This is expected two-view behaviour. After PR #86 pipeline-side suppression runs from 18 Sep, a different eligible card should fill the third slot before the cap.
+- [ ] Continue CRT UI/API validation after Cornelious fixes `ACTION_ID` validation; do not delete `_BACKUP_20260916` tables until CRT is stable.
+
+## 2026-09-17 — Dan approved PR #86 CRT deployment (post-pilot)
+
+- [x] Dan approved deploying PR #86 to CRT after today's pilot run.
+- [x] Snapshot CRT `ALERTS_PIPELINE` and `ALERT_ACTION_STATUS` before deployment in safe mode (`ALERTS_PIPELINE_BACKUP_20260917_PRE_PR86`, `ALERT_ACTION_STATUS_BACKUP_20260917`).
+- [x] Deployed PR #86 to CRT `RUN_ALERTS_PIPELINE` stored procedure from `fix/alert-queue-workflow` via temp copy. SP re-registered; `RUN_ALERTS_PIPELINE_TASK` resumed and `started` (06:00 Europe/London, client `eastofengland`, `USE_CORTEX=FALSE`).
+- [x] Unit tests for `_6_queue` + `test_alert_id.py` passed (15/15).
+- [x] Post-deploy sanity checks passed: `ALERTS_LATEST_V1` still 357 rows / 122 stores / 357 unique `ALERT_ID`s; `ALERTS_HISTORY_V1` has 50,874 total historical rows; all CRT tasks `started`.
+- [x] Fixed `scripts/validate_merge_snowflake.py`: added `AFFECTED_PRODUCTS` to `EXPECTED_ALERT_COLUMNS`, made the column-count check `>= len(EXPECTED_ALERT_COLUMNS)` so it tolerates future added columns, and updated the docstring. Validation now passes 21/21.
+- [ ] Monitor 06:00 CRT run on 2026-09-18 for `SUCCEEDED`, then validate new run for PRD suppression and `SIGNAL_JSON:issue_key` presence in all new rows.
+- [ ] Keep `_BACKUP_20260916` and `_BACKUP_20260917_PRE_PR86` until CRT is stable.
+- [ ] `OSA_BIG_DROP` is now enabled in CRT from `RUN_DATE=2026-09-17` (43 cards) after PR #85/86 deployment. Previously it was excluded; confirm with Dan if this is intended.
+- [ ] **Imran/Cornelious to update Big Drop UI chart:** the `FACTS_JSON` keys for `OSA_BIG_DROP` are the current shape (`day_period_grid`, `ppg_lsv_changes`, `item_lsv_changes`, `top_5_lsv_items`). The old integration-table key `top_lsv_items_last_week_top5` is gone. The chart is missing because the UI is likely still looking for the old key/shape.
+- [ ] Remind Cornelious: with PR #86, `ALERT_ID` is now date-specific, so the UI/API must continue using `merge_key`/`issue_key` for deduplication and must match historical workflow rows from `ALERTS_HISTORY_V1` by the `ALERT_ID` that was active when the action was created.
+
+## 2026-09-17 — PRD alignment check (`prd-alert-suppression-and-queue.md`)
+
+- [x] Ran Snowflake checks against CRT.
+- [x] Verified `ALERTS_LATEST_V1`: 357 cards / 122 stores / max 3 per store; `merge_key` present in all rows; `issue_key` not yet present (expected from `RUN_DATE >= 2026-09-18`).
+- [x] Verified overlap with workflow: 10 active In Progress under 7 days, 3 resolved under 7 days, 16 aged In Progress (>=7 days). 1 current To Do overlaps an active In Progress and 1 overlaps a recently resolved row.
+- [x] Aged In Progress rows will be transitioned to `STATUS=completed, OUTCOME=expired` by the pipeline on the next run (PR #86 code includes `write_expired_statuses`).
+- [x] **PRD gap 1 — `ALERTS_HISTORY_V1` shape:** Dan decided to update the PRD to match the current implementation. The PRD now documents that `ALERTS_HISTORY_V1` is a plain `ALERTS_PIPELINE` mirror and the API joins `ALERT_ACTION_STATUS` itself.
+- [x] **PRD gap 2 — top-level `ISSUE_KEY` column:** Dan decided to keep `issue_key` inside `SIGNAL_JSON`. The PRD now documents this and the `merge_key` fallback.
+- [ ] **PRD gap 3 — current data not yet PRD-suppressed:** `RUN_DATE=2026-09-17` was generated before the PR #86 deploy, so the 1 active/1 resolved overlaps were not suppressed before the cap. The next 06:00 run will apply pipeline-side suppression.
+- [ ] **PRD gap 4 — orphaned workflow rows remain:** 16 aged In Progress + 18 rows with no canonical alert source still need Dan's decision (migrate/close/retain).
