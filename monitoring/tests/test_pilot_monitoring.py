@@ -3,6 +3,7 @@
 Run from repo root:
     python -m pytest monitoring/tests/test_pilot_monitoring.py -q
 """
+import datetime
 import sys
 from pathlib import Path
 
@@ -71,6 +72,24 @@ def test_mix_dominated_by_one_type_is_warn():
         585, [585, 590, 570, 600], {'MARKDOWN_SKU': 550, 'OTHER': 35})
     assert status == 'WARN'
     assert 'MARKDOWN_SKU' in details
+
+
+def test_c4_excludes_disabled_types_from_baseline_and_today():
+    def runner(sql):
+        return [
+            {'RUN_DATE': '2026-09-17', 'TYPE': 'Availability', 'N': 300},
+            {'RUN_DATE': '2026-09-17', 'TYPE': 'WASTE_TRIM', 'N': 200},
+            {'RUN_DATE': '2026-09-17', 'TYPE': 'Compliance', 'N': 40},
+            {'RUN_DATE': '2026-09-10', 'TYPE': 'Availability', 'N': 300},
+            {'RUN_DATE': '2026-09-10', 'TYPE': 'WASTE_TRIM', 'N': 145},
+            {'RUN_DATE': '2026-09-10', 'TYPE': 'Compliance', 'N': 40},
+        ]
+
+    result = pm.check_c4_volume_mix(runner, 'DB', datetime.date(2026, 9, 17))
+    assert result['status'] == 'OK'
+    assert result['observed']['total'] == 340  # 300 + 40, no WASTE_TRIM
+    assert result['observed']['by_type'] == {'Availability': 300, 'Compliance': 40}
+    assert 'WASTE_TRIM' not in result['observed']['by_type']
 
 
 # ── classify_quality_log (C1) ────────────────────────────────────────────────

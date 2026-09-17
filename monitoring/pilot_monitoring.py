@@ -35,7 +35,9 @@ import uuid
 # ── Defaults (overridable per row in MONITORING_CONFIG.PARAMS) ───────────────
 VOLUME_BAND_LOW = 0.5     # C4: WARN when today's total < 0.5x baseline
 VOLUME_BAND_HIGH = 2.0    # C4: WARN when today's total > 2x baseline
-MIX_SHARE_WARN = 0.80     # C4: WARN when one TYPE exceeds 80% of alerts
+MIX_SHARE_WARN = 0.90     # C4: WARN when one TYPE exceeds 90% of alerts
+# PR #80/86 disabled these types; exclude them from C4 baseline/mix comparisons.
+EXCLUDED_MIX_TYPES = {'WASTE', 'WASTE_TRIM', 'MARKDOWN_SELLTHROUGH'}
 BASELINE_WEEKS = 4        # C4: trailing same-weekday weeks
 TASK_LOOKBACK_HOURS = 18  # C2/C5: how far back to look in TASK_HISTORY
 KPI_MIN_COLUMNS = 38      # C6: expected column count
@@ -376,16 +378,20 @@ def check_c4_volume_mix(runner, data_db, business_date):
     today_types: dict[str, int] = {}
     totals: dict[str, int] = {}
     for r in rows:
+        alert_type = str(r['TYPE'])
+        if alert_type in EXCLUDED_MIX_TYPES:
+            continue
         d = str(r['RUN_DATE'])
         totals[d] = totals.get(d, 0) + int(r['N'])
         if d == str(business_date):
-            today_types[str(r['TYPE'])] = int(r['N'])
+            today_types[alert_type] = int(r['N'])
     today_total = totals.get(str(business_date), 0)
     baseline_totals = [totals[str(d)] for d in dates if str(d) in totals]
     status, details = classify_volume_mix(today_total, baseline_totals, today_types)
     return _result('C4', status,
                    {'total': today_total, 'by_type': today_types,
-                    'baseline_totals': baseline_totals},
+                    'baseline_totals': baseline_totals,
+                    'excluded_types': sorted(EXCLUDED_MIX_TYPES)},
                    {'band': [VOLUME_BAND_LOW, VOLUME_BAND_HIGH]},
                    {'mix_share_warn': MIX_SHARE_WARN},
                    details, business_date)
