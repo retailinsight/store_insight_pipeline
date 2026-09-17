@@ -103,6 +103,7 @@ def _fmt_lsv_composition_lines(composition):
 def _generate_tick_and_flick(signal: dict) -> dict:
     """Generate narrative for a TICK_AND_FLICK compliance alert."""
     site_name = signal.get("site_name") or f"Store {signal['store_id']}"
+    triggers = signal.get("trigger_types", [])
     this_worked = signal.get("this_week_worked", 0)
     this_tf = signal.get("this_week_tf", 0)
     this_rate = signal.get("this_week_tf_rate", 0.0)
@@ -120,15 +121,39 @@ def _generate_tick_and_flick(signal: dict) -> dict:
     driver = facts.get("driver_assessment", {}) or {}
     likely_driver = driver.get("likely_driver", "COACHING")
 
-    issue = f"{site_name}: tick-and-flick compliance declining"
+    include_wow = "WOW" in triggers or "TICK_AND_FLICK" in triggers
+    include_vs_chain = "VS_CHAIN" in triggers or "TICK_AND_FLICK" in triggers
+
+    if "WOW" in triggers and "VS_CHAIN" in triggers:
+        issue = (
+            f"{site_name}: tick-and-flick rate {this_rate:.1f}% — "
+            f"{above_chain:.1f}pp above chain average and up {rate_change:.1f}pp week-on-week"
+        )
+    elif "VS_CHAIN" in triggers:
+        issue = (
+            f"{site_name}: tick-and-flick rate {this_rate:.1f}% — "
+            f"{above_chain:.1f}pp above chain average"
+        )
+    elif "WOW" in triggers:
+        issue = f"{site_name}: tick-and-flick rate up {rate_change:.1f}pp this week to {this_rate:.1f}%"
+    else:
+        issue = f"{site_name}: tick-and-flick compliance declining"
 
     explanation_lines = [
         f"{this_tf} of {this_worked} alerts worked this week were tick-and-flick ({this_rate:.1f}%).",
-        f"Tick-and-flick rate rose {rate_change:+.1f}pp week-on-week "
-        f"(last week: {last_rate:.1f}%, {last_tf} of {last_worked} alerts).",
-        f"Store tick-and-flick rate is {above_chain:.1f}pp above the chain average of {chain_rate:.1f}%.",
         f"Alert volume is {volume_classification.lower()} ({volume_change_pct:+.1f}% week-on-week).",
     ]
+    if include_wow:
+        explanation_lines.insert(
+            1,
+            f"Tick-and-flick rate rose {rate_change:+.1f}pp week-on-week "
+            f"(last week: {last_rate:.1f}%, {last_tf} of {last_worked} alerts).",
+        )
+    if include_vs_chain:
+        explanation_lines.insert(
+            len(explanation_lines) - 1,
+            f"Store tick-and-flick rate is {above_chain:.1f}pp above the chain average of {chain_rate:.1f}%.",
+        )
 
     cost_if_not_fixed = f"\u00a3{projected_cost:,.2f} per week if not fixed."
 
@@ -156,7 +181,6 @@ def _generate_tick_and_flick(signal: dict) -> dict:
 
 def _generate_markdown_override(signal: dict) -> dict:
     """Generate narrative for a MARKDOWN_OVERRIDE alert."""
-    site_name = signal.get("site_name") or f"Store {signal['store_id']}"
     triggers = signal.get("trigger_types", [])
     this_rate = signal.get("this_week_override_rate", 0.0)
     last_rate = signal.get("last_week_override_rate")
@@ -173,12 +197,26 @@ def _generate_markdown_override(signal: dict) -> dict:
         if str(row.get("dept") or "").strip().lower() not in {"", "unknown", "none", "nan"}
     ]
 
-    if "VS_CHAIN" in triggers and above_chain is not None:
-        issue = f"{site_name}: markdown override rate {this_rate:.1f}% — {above_chain:.1f}pp above chain average"
-    elif "WOW" in triggers and wow_change is not None:
-        issue = f"{site_name}: markdown override rate up {wow_change:.1f}pp this week to {this_rate:.1f}%"
+    if chain_rate is None:
+        chain_str = None
+    elif chain_rate < 1:
+        chain_str = 'under 1%'
     else:
-        issue = f"{site_name}: elevated markdown override rate ({this_rate:.1f}%)"
+        chain_str = f'{chain_rate:.1f}%'
+
+    if dept_bdwn:
+        top = dept_bdwn[0]
+        issue = f'Coach your team on override decisions in {top["dept"]}.'
+        action = (
+            f'{top["overrides"]} of {overrides} overrides this week came from this department'
+            + (f', against a chain average override rate of {chain_str}.' if chain_str else '.')
+        )
+    else:
+        issue = 'Coach your team on override decisions.'
+        action = (
+            f'{overrides} of {total_mds} markdowns were overridden this week ({this_rate:.1f}%)'
+            + (f', against a chain average of {chain_str}.' if chain_str else '.')
+        )
 
     explanation_lines = [
         f"{overrides} of {total_mds} markdowns were overridden this week ({this_rate:.1f}%).",
@@ -196,12 +234,6 @@ def _generate_markdown_override(signal: dict) -> dict:
         explanation_lines.append(
             f"Top department: {top['dept']} ({top['overrides']} overrides, {top['override_rate_pct']:.1f}%)."
         )
-
-    top_dept = dept_bdwn[0]["dept"] if dept_bdwn else None
-    action = (
-        f"Review override decisions{f' in {top_dept}' if top_dept else ''} with the store manager. "
-        "Ensure markdown guidance is followed — overrides should only be made where there is a clear commercial reason."
-    )
 
     cost = (
         "Items overridden at a higher price are at increased risk of reaching end-of-life unsold, "
@@ -345,7 +377,6 @@ def _generate_markdown_sellthrough(signal: dict) -> dict:
 
 def _generate_markdown_sku(signal: dict) -> dict:
     """Generate narrative for a MARKDOWN_SKU alert."""
-    site_name = signal.get("site_name") or f"Store {signal['store_id']}"
     triggers = signal.get("trigger_types", [])
     item_desc = signal.get("item_description") or f"Item {signal.get('item_id', '')}"
     department = signal.get("department", "")
@@ -357,15 +388,27 @@ def _generate_markdown_sku(signal: dict) -> dict:
     facts = signal.get("facts", {})
     history = facts.get("sku_markdown_history", [])
 
-    if "REPEAT_REQUEST" in triggers and "EXCESSIVE_OVERRIDE" in triggers:
-        issue = f"{site_name}: {item_desc} — repeat markdown requests and excessive overrides over {lbk_weeks} weeks"
-    elif "EXCESSIVE_OVERRIDE" in triggers and override_cnt is not None:
-        override_rate = round(override_cnt / req_count * 100) if req_count else 0
-        issue = f"{site_name}: {item_desc} overridden {override_cnt} of {req_count} requests ({override_rate}%) in {lbk_weeks} weeks"
-    else:
-        issue = f"{site_name}: {item_desc} marked down {req_count} times in {lbk_weeks} weeks"
+    item = _clean_item_name(signal.get("item_description")) or "this item"
+    dept = department
+    req = req_count
+    lbk = lbk_weeks
+    ov = override_cnt
 
-    explanation_lines = [f"{item_desc} ({department})."]
+    if "REPEAT_REQUEST" in triggers:
+        issue = f'Check your order quantity for {item} in {dept}.'
+        sentence = f'It has been marked down {req} times in the last {lbk} weeks'
+        depth = f' at an average depth of {avg_pct:.0f}%' if avg_pct is not None else ''
+        subtitle = sentence + depth + ' — reducing the order should cut waste and protect margin.'
+        if "EXCESSIVE_OVERRIDE" in triggers and ov is not None:
+            subtitle += f' The markdown recommendation was also overridden {ov} of {req} times.'
+    else:
+        issue = f'Review the markdown price for {item} in {dept}.'
+        if ov is not None:
+            subtitle = f'The recommended markdown was overridden {ov} of {req} times in the last {lbk} weeks.'
+        else:
+            subtitle = f'The recommended markdown has been repeatedly overridden in the last {lbk} weeks.'
+
+    explanation_lines = [f"{_clean_item_name(item_desc)} ({department})."]
 
     if "REPEAT_REQUEST" in triggers:
         avg_str = f", avg markdown depth {avg_pct:.1f}%" if avg_pct is not None else ""
@@ -390,19 +433,11 @@ def _generate_markdown_sku(signal: dict) -> dict:
             )
 
     if "REPEAT_REQUEST" in triggers:
-        action = (
-            f"Review ordering and ranging for {item_desc} in {department}. "
-            "Consider whether this item suits this store's customer profile or whether order quantities should be reduced."
-        )
         cost = (
             "An item requiring markdown every week represents a recurring ordering cost and waste risk. "
             "If quantities are not adjusted, this pattern is likely to continue."
         )
     else:
-        action = (
-            f"Discuss the pricing guidance for {item_desc} with the store manager. "
-            "If the algorithm recommendation is consistently wrong for this item, escalate to the buying team."
-        )
         cost = (
             "Consistently overriding the recommended markdown means this item is likely to sell at a slower rate, "
             "increasing its risk of reaching end-of-life unsold."
@@ -412,13 +447,12 @@ def _generate_markdown_sku(signal: dict) -> dict:
         "issue": issue,
         "explanation": "\n".join(explanation_lines),
         "cost_if_not_fixed": cost,
-        "recommended_action": action,
+        "recommended_action": subtitle,
     }
 
 
 def _generate_osa_recurring_slot(signal: dict) -> dict:
     """Generate narrative for an OSA_RECURRING_SLOT alert."""
-    site_name      = signal.get('site_name') or f"Store {signal['store_id']}"
     dept           = signal['department']
     dow_name       = signal.get('dow_name', 'Unknown day')
     period_label   = signal.get('period_label', 'Unknown period')
@@ -433,16 +467,42 @@ def _generate_osa_recurring_slot(signal: dict) -> dict:
     trend      = facts.get('slot_trend', 'flat')
     history    = facts.get('slot_history', [])
 
-    issue = (
-        f'{site_name}: {dept} has recurring lost sales on {dow_name} {period_label}'
-    )
+    period_word = {1: 'morning', 2: 'afternoon', 3: 'evening'}.get(signal.get('period_id'))
+    if period_word is None:
+        period_word = period_label.split(' (')[0].lower()
 
+    focus_labels = []
+    for detail in item_details[:3]:
+        label = _clean_item_name(detail.get('item_description'))
+        if label:
+            focus_labels.append(label)
+    if len(focus_labels) <= 1:
+        joined = focus_labels[0] if focus_labels else ''
+    elif len(focus_labels) == 2:
+        joined = f'{focus_labels[0]} and {focus_labels[1]}'
+    else:
+        joined = f'{focus_labels[0]}, {focus_labels[1]}, and {focus_labels[2]}'
+    focus = f' — focus on {joined}' if joined else ''
+
+    issue = f'Check {dow_name} {period_word} availability in {dept}{focus}.'
+
+    weeks = len(history)
+    if not weeks:
+        weeks = max((d.get('repeat_weeks') or 0) for d in item_details) if item_details else 0
+
+    window_phrase = f'over the last {weeks} weeks' if weeks else 'in recent weeks'
     explanation_lines = [
         f'{n_items} item{"s" if n_items != 1 else ""} repeatedly lost sales '
         f'in the {period_label} slot on {dow_name}s, '
-        f'with a total lost sales value of \u00a3{total_lsv:,.2f} across the lookback window.',
-        f'Average weekly lost sales for this slot: \u00a3{avg_weekly_lsv:,.2f}.',
+        f'with a total lost sales value of \u00a3{total_lsv:,.2f} {window_phrase}.',
+        f'When these lines run short they lose about \u00a3{avg_weekly_lsv:,.2f} a week between them.',
     ]
+
+    if history:
+        slot_avg = sum(h["lsv"] for h in history) / len(history)
+        explanation_lines.append(
+            f'Across all lines, this slot averages \u00a3{slot_avg:,.2f} a week in lost sales.'
+        )
 
     if slot_share is not None:
         explanation_lines.append(
@@ -459,15 +519,14 @@ def _generate_osa_recurring_slot(signal: dict) -> dict:
     if item_details:
         explanation_lines.append('Top recurring items:')
         for item in item_details[:5]:
-            desc = item.get('item_description')
-            item_label = f'{desc} ({item["item_code"]})' if desc else item['item_code']
+            item_label = _clean_item_name(item.get('item_description')) or 'Unnamed item'
             explanation_lines.append(
                 f'\u2022 {item_label}: '
                 f'\u00a3{item["total_lsv"]:,.2f} over {item["repeat_weeks"]} week{"s" if item["repeat_weeks"] != 1 else ""}'
             )
 
     if history:
-        explanation_lines.append(f'Weekly slot history (last {len(history)} matched weeks):')
+        explanation_lines.append(f'Weekly slot history (all lines, last {min(5, len(history))} of {len(history)} weeks):')
         for week in history[-5:]:
             explanation_lines.append(
                 f'\u2022 {week["year"]}-W{week["week"]}: '
@@ -483,15 +542,19 @@ def _generate_osa_recurring_slot(signal: dict) -> dict:
     )
 
     cost = (
-        f'If this recurring slot problem continues, the store could lose approximately '
+        f'If these lines keep running short in this slot, the store could lose approximately '
         f'\u00a3{cost_projection:,.2f} over the next {projection_weeks} weeks.'
     )
 
-    action = (
-        f'Investigate operational drivers behind {dow_name} {period_label} shortages in {dept}. '
-        'Check delivery schedules, shelf-filling routines, staffing levels, and demand spikes '
-        'for the flagged items.'
-    )
+    noun = 'line has' if n_items == 1 else 'lines have'
+    if weeks:
+        action = (
+            f'{n_items} {noun} run short repeatedly in this slot over the last {weeks} weeks.'
+        )
+    else:
+        action = (
+            f'{n_items} {noun} run short repeatedly in this slot in recent weeks.'
+        )
 
     return {
         'issue':              issue,
@@ -564,84 +627,197 @@ def _generate_waste_trim(signal: dict) -> dict:
     }
 
 
-def _generate_osa_store_actionable(signal: dict) -> dict:
+_PERIOD_WORDS = {1: 'mornings', 2: 'afternoons', 3: 'evenings'}
+
+
+def _clean_item_name(name) -> str:
+    """Tidy raw source item descriptions: collapse runs of whitespace and drop trailing '#'."""
+    text = ' '.join(str(name or '').split())
+    return text.rstrip('# ').strip()
+
+
+def _osa_actionable_title(signal: dict) -> str:
+    """Action-first card title shared by OSA_STORE_ACTIONABLE and OSA_BIG_DROP."""
     dept = signal['department']
-    triggers = signal.get('trigger_types', [])
     facts = signal.get('facts') or {}
-    lsv = signal.get('this_week_lsv') or {}
-    store_lsv = float(lsv.get('store_controlled') or 0)
-    upstream_lsv = float(lsv.get('upstream') or 0)
-    wow = abs(float(signal.get('wow_drift_pp') or 0))
-    gap = abs(float(signal.get('chain_gap_pp') or 0))
+    slot = facts.get('worst_day_period') or {}
+    day = slot.get('day')
+    period_word = _PERIOD_WORDS.get(slot.get('period_id'))
+    if day and period_word:
+        return f'Give replenishment in {dept} extra attention on {day} {period_word}.'
+    if not day:
+        day = (facts.get('worst_day') or {}).get('day')
+    if day:
+        return f'Give replenishment in {dept} extra attention on {day}s.'
+    return f'Give replenishment in {dept} extra attention this week.'
 
-    if 'WOW' in triggers and ('VS_CHAIN' not in triggers or wow >= gap):
-        issue = f'{dept}: store-controlled OSA dropped {wow:.1f}pp week-on-week.'
-    else:
-        issue = f'{dept}: store-controlled OSA is {gap:.1f}pp below the chain benchmark.'
 
-    explanation = [
-        f'The department had £{store_lsv:,.2f} of lost sales while recorded inventory was positive.'
-    ]
-    if 'WOW' in triggers:
-        explanation.append(
-            f"Store-controlled OSA moved from {signal.get('last_week_osa', 0):.1f}% "
-            f"to {signal.get('this_week_osa', 0):.1f}% ({wow:.1f}pp lower)."
-        )
-    if 'VS_CHAIN' in triggers:
-        explanation.append(
-            f"Store-controlled OSA was {signal.get('this_week_osa', 0):.1f}% versus "
-            f"{signal.get('chain_this_week_osa', 0):.1f}% for the chain ({gap:.1f}pp gap)."
-        )
-    if upstream_lsv:
-        explanation.append(
-            f'An additional £{upstream_lsv:,.2f} of lost sales occurred with non-positive inventory; '
-            'this is upstream context and is excluded from the store-owned cost of inaction.'
-        )
-
+def _osa_leading_ppg_name(facts: dict):
     ppgs = facts.get('ppg_lsv_changes') or facts.get('ppg_contributors') or []
-    if ppgs:
-        ppg = ppgs[0]
-        name = ppg.get('ppg') or ppg.get('ppg_name') or ppg.get('name')
-        value = (ppg.get('latest_week_lsv') or {}).get('store_controlled', 0)
-        explanation.append(f'The leading PPG was {name} (£{value:,.2f} store-controlled LSV).')
+    if not ppgs:
+        return None
+    ppg = ppgs[0]
+    return ppg.get('ppg') or ppg.get('ppg_name') or ppg.get('name')
 
-    items = facts.get('item_lsv_changes') or []
-    if items:
-        item = items[0]
-        change = (item.get('lsv_change') or {}).get('store_controlled', 0)
-        explanation.append(
-            f"The largest item offender was {item.get('item_name') or item.get('item_code')} "
-            f"with a £{change:+,.2f} change from the preceding week."
-        )
 
+def _osa_actionable_cost(facts: dict, store_lsv: float) -> str:
     projection = facts.get('cost_projection') or {}
     weeks = int(projection.get('projection_weeks') or facts.get('projection_weeks') or 4)
     cost = float(projection.get('store_controlled_cost_of_inaction') or store_lsv * weeks)
-    cost_if_not_fixed = (
+    return (
         f'If this continues at the same rate, store-controlled lost sales could cost '
         f'approximately £{cost:,.2f} over the next {weeks} weeks.'
     )
 
-    action = [f'Prioritise shelf availability in {dept}.']
-    if items:
-        labels = []
-        for item in items[:2]:
-            identifiers = item.get('eans') or item.get('upcs') or []
-            suffix = f" ({identifiers[0]})" if identifiers else f" ({item.get('item_code')})"
-            labels.append(f"{item.get('item_name') or item.get('item_code')}{suffix}")
-        action.append(f"Check backstock, gaps, and replenishment for {', '.join(labels)}.")
-    worst_slot = facts.get('worst_day_period')
-    worst_day = facts.get('worst_day')
-    if worst_slot:
-        action.append(f"Complete checks before {worst_slot.get('day')} {worst_slot.get('period_label')}.")
-    elif worst_day:
-        action.append(f"Complete checks before the {worst_day.get('day')} trading peak.")
+
+def _generate_osa_store_actionable(signal: dict) -> dict:
+    dept = signal['department']
+    facts = signal.get('facts') or {}
+    lsv = signal.get('this_week_lsv') or {}
+    store_lsv = float(lsv.get('store_controlled') or 0)
+
+    issue = _osa_actionable_title(signal)
+
+    this_osa = signal.get('this_week_osa')
+    last_osa = signal.get('last_week_osa')
+    chain_osa = signal.get('chain_this_week_osa')
+    if chain_osa is None:
+        chain_osa = facts.get('chain_store_this_week_osa')
+
+    explanation = []
+    dropped = last_osa is not None and this_osa is not None and this_osa < last_osa
+    if dropped and chain_osa is not None:
+        explanation.append(
+            f'Store-controlled OSCA in {dept} has dropped to {this_osa:.1f}% in the '
+            f'last 7 days compared with {last_osa:.1f}% in the week before, and a '
+            f'Society average of {chain_osa:.1f}%.'
+        )
+    elif dropped:
+        explanation.append(
+            f'Store-controlled OSCA in {dept} has dropped to {this_osa:.1f}% in the '
+            f'last 7 days compared with {last_osa:.1f}% in the week before.'
+        )
+    elif this_osa is not None and chain_osa is not None:
+        explanation.append(
+            f'Store-controlled OSCA in {dept} was {this_osa:.1f}% in the last 7 days '
+            f'against a Society average of {chain_osa:.1f}%.'
+        )
+    elif this_osa is not None:
+        explanation.append(
+            f'Store-controlled OSCA in {dept} was {this_osa:.1f}% in the last 7 days.'
+        )
+    else:
+        explanation.append(
+            f'{dept} recorded £{store_lsv:,.2f} of store-controlled lost sales in the last 7 days.'
+        )
+
+    ppg_name = _osa_leading_ppg_name(facts)
+    if ppg_name:
+        explanation.append(f'{ppg_name} is the worst performing PPG.')
+
+    subtitle = explanation[0]
+    if ppg_name:
+        subtitle += f' {ppg_name} is the worst performing PPG.'
 
     return {
         'issue': issue,
         'explanation': '\n'.join(explanation),
-        'cost_if_not_fixed': cost_if_not_fixed,
-        'recommended_action': ' '.join(action),
+        'cost_if_not_fixed': _osa_actionable_cost(facts, store_lsv),
+        'recommended_action': subtitle,
+    }
+
+
+def _join_names(names: list) -> str:
+    if len(names) <= 2:
+        return ' and '.join(names)
+    return ', '.join(names[:-1]) + ' and ' + names[-1]
+
+
+def _generate_osa_big_drop(signal: dict) -> dict:
+    """Narrative for an OSA_BIG_DROP day-on-day alert.
+
+    The card title is an investigation prompt naming the department and the
+    two compared trading days; the subtitle names the top three contributing
+    PPGs on the drop day.
+    """
+    dept = signal['department']
+    facts = signal.get('facts') or {}
+    lsv = signal.get('this_week_lsv') or {}
+    store_lsv = float(lsv.get('store_controlled') or 0)
+    drift = abs(float(signal.get('wow_drift_pp') or 0))
+
+    last_osa = signal.get('last_week_osa')
+    this_osa = signal.get('this_week_osa')
+    prior_day = signal.get('prior_day')
+    latest_day = signal.get('latest_day')
+    day_word = latest_day or 'that day'
+
+    if last_osa is not None and this_osa is not None:
+        if prior_day and latest_day:
+            issue = (
+                f'Investigate why store-controlled OSCA dropped in {dept} '
+                f'from {last_osa:g}% on {prior_day} to {this_osa:g}% on {latest_day}.'
+            )
+            drop_sentence = (
+                f'Store-controlled OSCA in {dept} dropped {drift:.1f}pp in a single '
+                f'day — from {last_osa:.1f}% on {prior_day} to {this_osa:.1f}% on {latest_day}.'
+            )
+        else:
+            issue = (
+                f'Investigate why store-controlled OSCA dropped in {dept} '
+                f'from {last_osa:g}% to {this_osa:g}%.'
+            )
+            drop_sentence = (
+                f'Store-controlled OSCA in {dept} dropped {drift:.1f}pp in a single '
+                f'day — from {last_osa:.1f}% to {this_osa:.1f}%.'
+            )
+        explanation = [drop_sentence]
+    else:
+        issue = f'Investigate why store-controlled OSCA dropped in {dept}.'
+        drop_sentence = (
+            f'{dept} recorded £{store_lsv:,.2f} of lost sales in a single day '
+            f'while recorded inventory was positive.'
+        )
+        explanation = []
+    explanation.append(
+        f'The department had £{store_lsv:,.2f} of lost sales on {day_word} while recorded inventory was positive.'
+    )
+
+    ppgs = facts.get('ppg_lsv') or []
+    if ppgs:
+        ppg = ppgs[0]
+        name = ppg.get('ppg')
+        value = float(ppg.get('store_controlled_lsv') or 0)
+        explanation.append(f'On {day_word} the leading PPG was {name} (£{value:,.2f} store-controlled lost sales).')
+
+    items = facts.get('item_lsv') or []
+    if items:
+        item = items[0]
+        name = _clean_item_name(item.get('item_name')) or item.get('item_code')
+        latest = float(item.get('store_controlled_lsv') or 0)
+        explanation.append(
+            f"The largest item offender on {day_word} was {name} "
+            f"with £{latest:,.2f} of store-controlled lost sales."
+        )
+
+    weeks = 4
+    cost = round(store_lsv * 7 * weeks, 2)
+    cost_text = (
+        f"If {day_word}'s rate of loss continued, store-controlled lost sales could cost "
+        f"approximately £{cost:,.2f} over the next {weeks} weeks."
+    )
+
+    ppg_names = [ppg['ppg'] for ppg in ppgs[:3] if ppg.get('ppg')]
+    subtitle = (
+        f'The top contributing PPGs were {_join_names(ppg_names)}.'
+        if ppg_names else drop_sentence
+    )
+
+    return {
+        'issue': issue,
+        'explanation': '\n'.join(explanation),
+        'cost_if_not_fixed': cost_text,
+        'recommended_action': subtitle,
     }
 
 
@@ -850,6 +1026,98 @@ def _generate_expiry_date_compliance(signal: dict) -> dict:
     }
 
 
+def _generate_big_drop_compliance(signal: dict, label: str, due_key: str, completed_key: str,
+                                  completed_label: str, routine: str, volume_label: str) -> dict:
+    site_name = signal.get('site_name') or f"Store {signal['store_id']}"
+    due = signal.get(due_key, 0)
+    completed = signal.get(completed_key, 0)
+    rate = signal.get('this_day_compliance_rate', 0.0)
+    previous_rate = signal.get('prev_day_compliance_rate')
+    drop = signal.get('drop_pp') or 0.0
+    chain_rate = signal.get('chain_compliance_rate')
+    below_chain = signal.get('below_chain_pp')
+    facts = signal.get('facts') or {}
+    driver = facts.get('driver_assessment') or {}
+    worst_depts = [
+        row for row in facts.get('worst_departments_top3', [])
+        if str(row.get('dept') or '').strip()
+    ]
+
+    explanation_lines = [
+        f'{completed} of {due} {completed_label} today ({rate:.1f}%).',
+    ]
+    if previous_rate is not None:
+        explanation_lines.append(
+            f'The previous available day was {previous_rate:.1f}% — a drop of {drop:.1f}pp.'
+        )
+    if chain_rate is not None and below_chain is not None:
+        explanation_lines.append(
+            f'Chain average is {chain_rate:.1f}% — this store is {below_chain:.1f}pp below.'
+        )
+    if worst_depts:
+        dept_list = ', '.join(
+            f"{row['dept']} ({row['compliance_pct']:.1f}%)" for row in worst_depts[:3]
+        )
+        explanation_lines.append(f'Worst departments this week: {dept_list}.')
+
+    focus = ', '.join(row['dept'] for row in worst_depts[:3]) or 'the worst-performing departments'
+    target = f'{previous_rate:.1f}%' if previous_rate is not None else 'the previous-day rate'
+    volume = driver.get('volume_classification', 'STABLE')
+    volume_change = driver.get('volume_change_pct')
+    if driver.get('likely_driver') == 'WORKLOAD' and volume_change is not None:
+        action = (
+            f'{volume_label} volume is up {volume_change:.0f}% while compliance dropped {drop:.0f}pp. '
+            f'Store manager to review staffing and task coverage today, focusing on {focus}. '
+            f'Review tomorrow against {target}.'
+        )
+    else:
+        volume_context = (
+            f'{volume_label} volume is down {abs(volume_change):.0f}%'
+            if volume == 'DECREASING' and volume_change is not None
+            else f'{volume_label} volume is broadly unchanged'
+        )
+        action = (
+            f'{volume_context}, so workload does not explain the sudden drop. Store manager to review '
+            f'the {routine} with the team today, focusing on {focus}. Review tomorrow against {target}.'
+        )
+
+    at_risk = float(signal.get('this_day_at_risk_value') or 0.0)
+    cost = (
+        f'£{at_risk:,.2f} is at risk from today’s missed activity.'
+        if at_risk else f'The sudden fall in {label.lower()} increases immediate waste and availability risk.'
+    )
+    return {
+        'issue': f'{site_name}: {label} dropped {drop:.1f}pp to {rate:.1f}%',
+        'explanation': '\n'.join(explanation_lines),
+        'cost_if_not_fixed': cost,
+        'recommended_action': action,
+    }
+
+
+def _generate_big_drop_prompted_markdown_compliance(signal: dict) -> dict:
+    return _generate_big_drop_compliance(
+        signal, 'prompted-markdown compliance', 'this_day_prompts_issued',
+        'this_day_prompts_actioned_on_time', 'prompts were actioned on time',
+        'prompt response routine', 'Prompt',
+    )
+
+
+def _generate_big_drop_markdown_compliance(signal: dict) -> dict:
+    return _generate_big_drop_compliance(
+        signal, 'markdown compliance', 'this_day_markdowns_due',
+        'this_day_completed_on_time', 'markdowns were completed on time',
+        'markdown routine', 'Markdown',
+    )
+
+
+def _generate_big_drop_expiry_date_compliance(signal: dict) -> dict:
+    return _generate_big_drop_compliance(
+        signal, 'expiry-date compliance', 'this_day_checks_due',
+        'this_day_checks_completed', 'expiry checks were completed',
+        'expiry-check routine', 'Expiry check',
+    )
+
+
 def _generate_straight_to_bin(signal: dict) -> dict:
     """Generate narrative for a STRAIGHT_TO_BIN alert."""
     site_name = signal.get('site_name') or f"Store {signal['store_id']}"
@@ -938,12 +1206,11 @@ def generate(signal: dict) -> dict:
     -------
     dict with keys: issue, explanation, cost_if_not_fixed, recommended_action
     """
-    triggers = signal["trigger_types"]
-
-    if "TICK_AND_FLICK" in triggers:
-        return _generate_tick_and_flick(signal)
-
+    triggers = signal.get("trigger_types", [])
     signal_type = signal.get("signal_type", "")
+
+    if signal_type == "COMPLIANCE":
+        return _generate_tick_and_flick(signal)
 
     if signal_type == "MARKDOWN_COMPLIANCE":
         return _generate_markdown_compliance(signal)
@@ -954,12 +1221,14 @@ def generate(signal: dict) -> dict:
     if signal_type == "PROMPTED_MARKDOWN_COMPLIANCE":
         return _generate_prompted_markdown_compliance(signal)
 
+    if "TICK_AND_FLICK" in triggers:
+        return _generate_tick_and_flick(signal)
+
     if signal_type == "OSA_STORE_ACTIONABLE":
         return _generate_osa_store_actionable(signal)
 
     if signal_type == "OSA_BIG_DROP":
-        # Same signal shape as OSA_STORE_ACTIONABLE — reuse its narrative.
-        return _generate_osa_store_actionable(signal)
+        return _generate_osa_big_drop(signal)
 
     if signal_type == "MARKDOWN_OVERRIDE":
         return _generate_markdown_override(signal)
@@ -978,6 +1247,15 @@ def generate(signal: dict) -> dict:
 
     if signal_type == 'WASTE_TRIM':
         return _generate_waste_trim(signal)
+
+    if signal_type == 'BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE':
+        return _generate_big_drop_prompted_markdown_compliance(signal)
+
+    if signal_type == 'BIG_DROP_MARKDOWN_COMPLIANCE':
+        return _generate_big_drop_markdown_compliance(signal)
+
+    if signal_type == 'BIG_DROP_EXPIRY_DATE_COMPLIANCE':
+        return _generate_big_drop_expiry_date_compliance(signal)
 
     if signal_type == 'STRAIGHT_TO_BIN':
         return _generate_straight_to_bin(signal)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import datetime
+
 from snowflake.snowpark import functions as F
 
 from store_insight.pipeline.pipeline._shared import (
@@ -33,22 +35,28 @@ def detect(
     min_big_drop_positive_rows=5,
     max_actionable_unknown_row_pct=10.0,
 ):
-    today = str(this_week_end)
-    prev_dates = (
+    requested_date = str(this_week_end)
+    available_dates = (
         osa
-        .filter(F.col('DATE') < today)
-        .agg(F.max('DATE').alias('PREV_DATE'))
+        .filter(F.col('DATE') <= requested_date)
+        .select('DATE')
+        .distinct()
+        .sort(F.col('DATE').desc())
+        .limit(2)
         .collect()
     )
-    if not prev_dates or prev_dates[0]['PREV_DATE'] is None:
-        print(f'[osa_big_drop.big_drop] no sales day found before {today}')
+    if len(available_dates) < 2:
+        print(f'[osa_big_drop.big_drop] fewer than two sales days available by {requested_date}')
         return []
-    yesterday = str(prev_dates[0]['PREV_DATE'])
-    print(f'[osa_big_drop.big_drop] comparing {today} vs {yesterday}')
+    latest_date = str(available_dates[0]['DATE']).split()[0]
+    prior_date = str(available_dates[1]['DATE']).split()[0]
+    latest_day = datetime.date.fromisoformat(latest_date).strftime('%A')
+    prior_day = datetime.date.fromisoformat(prior_date).strftime('%A')
+    print(f'[osa_big_drop.big_drop] comparing {latest_date} vs {prior_date}')
 
     group_cols = ['STORE_ID', section]
-    prior = window_metrics(osa, yesterday, yesterday, group_cols, 'PRIOR')
-    latest = window_metrics(osa, today, today, group_cols, 'LATEST')
+    prior = window_metrics(osa, prior_date, prior_date, group_cols, 'PRIOR')
+    latest = window_metrics(osa, latest_date, latest_date, group_cols, 'LATEST')
     rows = (
         prior
         .join(latest, on=group_cols, how='inner')
@@ -92,6 +100,10 @@ def detect(
             last_week_lsv=prior_lsv,
             this_week_lsv=latest_lsv,
             lsv_change=subtract_attributed(latest_lsv, prior_lsv),
+            latest_day=latest_day,
+            prior_day=prior_day,
+            latest_date=latest_date,
+            prior_date=prior_date,
             quality={'previous_day': prior_quality, 'current_day': latest_quality},
         ))
 

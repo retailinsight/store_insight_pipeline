@@ -12,12 +12,14 @@ connection:
   warehouse: STORE_INSIGHT_WH
 
 output:
-  top_n_per_store: 10
+  emit_affected_products: true
+  # Total cap of 3 alerts/store/day signed off by Dave (13 Sep). Tested on the
+  # 13 Sep run: 1,152 -> 362 alerts, 120 stores x 3, 2 stores x 1, none empty.
+  top_n_per_store: 3
   # Variety cap agreed with Daniel (21 Aug): at most 2 alerts of one signal
   # type per store per day, so MARKDOWN_SKU cannot fill every slot. The cap
   # is broken only when a store has no other signal types to fill top_n
-  # (see apply_top_n_filter). Target of 3 alerts/store/day awaits Dave's
-  # sign-off; top_n_per_store stays at 10 until then.
+  # (see apply_top_n_filter).
   max_per_type_per_store: 2
 
 detectors:
@@ -26,14 +28,10 @@ detectors:
     - osa_store_actionable.vs_chain
     - osa_big_drop.big_drop
     - osa_recurring_slot.recurring_slot
-    - compliance.tick_and_flick
+    - compliance.tick_and_flick_wow
+    - compliance.tick_and_flick_vs_chain
     - markdown_override.vs_chain
     - markdown_override.wow
-    - waste.vs_chain
-    - waste.wow
-    - waste_trim.trim
-    - markdown_sellthrough.vs_chain
-    - markdown_sellthrough.wow
     - markdown_sku.repeat_request
     - markdown_sku.excessive_override
 
@@ -41,16 +39,42 @@ detector_config:
   thresholds:
     OSA_STORE_ACTIONABLE:
       min_actionable_wow_drop:        0.01
-      min_actionable_chain_gap:       0.02
-      min_actionable_lsv:             200.0
-      min_actionable_positive_rows:   10
+      min_actionable_chain_gap:       0.01
+      min_actionable_lsv:             50.0
+      min_actionable_positive_rows:   3
+      # NOTE: DetectorConfig.from_config() flattens all threshold groups into
+      # one flat namespace, so this field name is shared with OSA_BIG_DROP's
+      # max_actionable_unknown_row_pct below and the *last* group processed
+      # wins for both detectors. Keep these two values equal (10.0) until
+      # separate per-detector field names are introduced. See PR #80 review.
       max_actionable_unknown_row_pct: 10.0
 
     OSA_BIG_DROP:
-      min_actionable_big_drop:        0.05
-      min_osa_big_drop_lsv:           50.0
-      min_big_drop_positive_rows:     5
+      min_actionable_big_drop:        0.02
+      min_osa_big_drop_lsv:           10.0
+      min_big_drop_positive_rows:     2
       max_actionable_unknown_row_pct: 10.0
+
+    OSA_RECURRING_SLOT:
+      min_item_repeat_weeks: 4
+      min_item_pattern_lsv:  25.0
+      min_items:             2
+
+    COMPLIANCE:
+      min_compliance_wow_drop:   0.03
+      min_compliance_chain_gap:  0.02
+      min_alerts_worked:         3
+
+    MARKDOWN_OVERRIDE:
+      min_override_chain_gap:    0.01
+      min_override_wow_increase: 0.01
+      min_total_markdowns:       2
+
+    MARKDOWN_SKU:
+      min_markdown_weeks:      4
+      min_markdown_requests:   12
+      min_sku_override_rate:   0.75
+      min_sku_requests:        4
 
 investigation:
   COMPLIANCE:

@@ -20,7 +20,8 @@ file that exposes a ``detect`` callable is loaded automatically by the registry.
     repeat.py       REPEAT         Items in store-dept have persistent weekly failures
 
   detectors/compliance/
-    tick_and_flick.py  TICK_AND_FLICK  Store tick-and-flick rate rising above chain average
+    tick_and_flick_wow.py       WOW       Store tick-and-flick rate rose week-on-week
+    tick_and_flick_vs_chain.py  VS_CHAIN  Store tick-and-flick rate above chain average
 
 Adding a New Detector
 ---------------------
@@ -102,6 +103,7 @@ def _merge_signals(all_signals):
                 'total_last_week_osa', 'total_this_week_osa',
                 'chain_this_week_osa', 'total_chain_this_week_osa',
                 'chain_gap_pp', 'chain_wow_drift_pp',
+                'latest_day', 'prior_day', 'latest_date', 'prior_date',
                 # WASTE fields
                 'last_week_stb_rate', 'this_week_stb_rate', 'wow_change_pp',
                 'chain_stb_rate', 'above_chain_pp',

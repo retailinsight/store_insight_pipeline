@@ -15,7 +15,7 @@ from snowflake.snowpark import functions as F
 # Required columns per contract (loaded DataFrames are already filtered).
 _REQUIRED_COLUMNS = {
     'osa': [
-        'STORE_ID', 'ITEM_CODE', 'ANALYSIS_DATE',
+        'STORE_ID', 'ITEM_CODE', 'DATE',
         'ACTUAL_SALES_VOLUME', 'LOST_SALES_VOLUME', 'LOST_SALES_VALUE',
     ],
     'feedback': [
@@ -37,7 +37,7 @@ _REQUIRED_COLUMNS = {
 _NON_NEGATIVE_COLUMNS = {
     'osa': ['ACTUAL_SALES_VOLUME', 'LOST_SALES_VOLUME', 'LOST_SALES_VALUE'],
     'markdown_log': ['QTY_MARKDOWN'],
-    'markdown_sales': ['MARKDOWN_QUANTITY', 'MARKDOWN_VALUE'],
+    'markdown_sales': ['MARKDOWN_QUANTITY'],
     'wastage': ['WASTE_QUANTITY', 'ORIGINAL_PRICE'],
 }
 
@@ -221,10 +221,12 @@ def validate_source_data(
     issues = []
 
     strict = False
+    gate_enabled = False
     if cfg is not None:
         dq = getattr(cfg, 'data_quality', None)
         if dq is not None:
             strict = bool(getattr(dq, 'strict', False))
+            gate_enabled = bool(getattr(dq, 'gate_enabled', False))
 
     enabled = _detect_enabled_detectors(cfg)
     needs_osa = bool(enabled) or cfg is None
@@ -239,19 +241,20 @@ def validate_source_data(
     if needs_osa:
         _check_non_empty(osa, 'osa', issues)
         _check_required_columns(osa, _REQUIRED_COLUMNS['osa'], 'osa', issues)
-        # Use ANALYSIS_DATE if available, otherwise DATE.
-        date_col = 'ANALYSIS_DATE' if osa and 'ANALYSIS_DATE' in [c.name for c in osa.schema.fields] else 'DATE'
-        _check_date_coverage(
-            osa, date_col,
-            windows['last_week_start'], windows['this_week_end'],
-            'osa', issues,
-        )
+        date_col = 'DATE'
+        if not gate_enabled:
+            _check_date_coverage(
+                osa, date_col,
+                windows['last_week_start'], windows['this_week_end'],
+                'osa', issues,
+            )
         _check_negative_values(osa, _NON_NEGATIVE_COLUMNS['osa'], 'osa', issues)
-        _check_store_coverage(
-            osa, date_col,
-            windows['this_week_start'], windows['this_week_end'],
-            expected_stores, 'osa', issues,
-        )
+        if not gate_enabled:
+            _check_store_coverage(
+                osa, date_col,
+                windows['this_week_start'], windows['this_week_end'],
+                expected_stores, 'osa', issues,
+            )
 
     # Feedback is only required when the compliance detector runs.
     if needs_feedback:
@@ -259,11 +262,12 @@ def validate_source_data(
         _check_required_columns(
             feedback, _REQUIRED_COLUMNS['feedback'], 'feedback', issues,
         )
-        _check_date_coverage(
-            feedback, 'DATE',
-            windows['last_week_start'], windows['this_week_end'],
-            'feedback', issues,
-        )
+        if not gate_enabled:
+            _check_date_coverage(
+                feedback, 'DATE',
+                windows['last_week_start'], windows['this_week_end'],
+                'feedback', issues,
+            )
 
     # WMD tables are required by markdown and waste detectors.
     if needs_wmd and wmd:
@@ -273,11 +277,12 @@ def validate_source_data(
             _check_required_columns(
                 df, _REQUIRED_COLUMNS[key], key, issues,
             )
-            _check_date_coverage(
-                df, 'DATE',
-                windows['wmd_lookback'], windows['this_week_end'],
-                key, issues,
-            )
+            if not gate_enabled:
+                _check_date_coverage(
+                    df, 'DATE',
+                    windows['wmd_lookback'], windows['this_week_end'],
+                    key, issues,
+                )
             _check_negative_values(
                 df, _NON_NEGATIVE_COLUMNS.get(key, []), key, issues,
             )

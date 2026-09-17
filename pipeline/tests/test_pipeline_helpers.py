@@ -14,6 +14,7 @@ from store_insight.pipeline.pipeline.pipeline import (
     _build_card,
     _debug_table_name,
     _make_alert_id,
+    _make_issue_key,
     _write_investigations_debug_table,
     _write_score_audit_table,
     _write_signals_debug_table,
@@ -91,6 +92,21 @@ def test_make_alert_id_differs_across_business_keys():
     assert len(set(ids.values())) == 4
 
 
+def test_issue_key_is_stable_across_analysis_dates():
+    sig = make_osa_signal(store_id=1, department='CHILLED', trigger_types=['WOW'])
+    assert _make_issue_key(None, sig) == _make_issue_key(None, sig)
+    assert _make_alert_id(None, sig, '2026-09-14') != _make_alert_id(None, sig, '2026-09-15')
+
+
+def test_issue_key_distinguishes_recurring_slots():
+    first = {
+        'signal_type': 'OSA_RECURRING_SLOT', 'store_id': 1, 'department': 'FRUIT',
+        'dow': 4, 'period_id': 2,
+    }
+    second = {**first, 'dow': 6, 'period_id': 3}
+    assert _make_issue_key(None, first) != _make_issue_key(None, second)
+
+
 def test_make_alert_id_uses_client_name_when_available():
     sig = make_osa_signal(store_id=1, department='CHILLED', trigger_types=['WOW'])
 
@@ -153,6 +169,7 @@ def test_build_card_stamps_signal_id_into_signal_json():
     card = _build_card(sig, narrative, sort_value=500.0, analysis_date='2025-01-19')
 
     assert card['signal_json']['signal_id'] == card['signal_id']
+    assert card['signal_json']['issue_key'] == card['issue_key']
 
 
 def test_build_card_ids_are_deterministic_across_calls():
@@ -413,3 +430,64 @@ def test_run_pipeline_from_signals_returns_intermediates_when_requested(
     assert len(cards) == 1
     assert raw == [sig]
     assert enriched == [sig]
+
+
+def test_investigation_failure_skips_one_signal_in_parallel(monkeypatch, capsys):
+    failed = make_osa_signal(
+        store_id=1, department='D1', trigger_types=['WOW'], this_week_lsv=100.0,
+    )
+    healthy = make_osa_signal(
+        store_id=2, department='D2', trigger_types=['WOW'], this_week_lsv=100.0,
+    )
+    failed['score'] = 1.0
+    healthy['score'] = 0.9
+
+    monkeypatch.setattr(
+        'store_insight.pipeline.pipeline.pipeline._resolve_config',
+        lambda *a, **k: DetectorConfig(),
+    )
+    monkeypatch.setattr('store_insight.pipeline.pipeline.pipeline.score_all', lambda *a, **k: None)
+    monkeypatch.setattr('store_insight.pipeline.pipeline.pipeline.apply_top_n_filter', lambda s, **k: s)
+    monkeypatch.setattr(
+        'store_insight.pipeline.pipeline.pipeline.enrich_signals',
+        lambda *a, **k: [failed, healthy],
+    )
+
+    def investigate_one(signal, **kwargs):
+        if signal['store_id'] == 1:
+            raise KeyError('department')
+        return {
+            'issue': 'i', 'explanation': 'e', 'cost_if_not_fixed': 'c',
+            'recommended_action': 'r', '_engine': 'rule_based',
+        }
+
+    monkeypatch.setattr('store_insight.pipeline.pipeline.pipeline.investigate', investigate_one)
+
+    class Cfg:
+        class output:
+            alerts = 'DB.SCHEMA.ALERTS_PIPELINE'
+            top_n_per_store = 0
+            max_per_type_per_store = 0
+            signal_type_buckets = {}
+        class scoring:
+            score_weights = None
+        class investigation:
+            max_workers = 2
+        class logging:
+            write_signals = False
+            write_enriched = False
+            write_run_log = False
+
+    cards = run_pipeline_from_signals(
+        [failed, healthy], osa=None,
+        last_week_start='2025-01-06', last_week_end='2025-01-12',
+        this_week_start='2025-01-13', this_week_end='2025-01-19',
+        session=None, run_date='2025-01-19', cfg=Cfg(),
+    )
+
+    assert len(cards) == 1
+    assert cards[0]['store_id'] == 2
+    warning = capsys.readouterr().out
+    assert 'WARNING: investigation skipped' in warning
+    assert 'store_id=1' in warning
+    assert "KeyError: 'department'" in warning

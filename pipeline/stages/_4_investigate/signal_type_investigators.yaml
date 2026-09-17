@@ -53,6 +53,21 @@ PROMPTED_MARKDOWN_COMPLIANCE:
   skill_file: ""
   description: Prompted-markdown on-time response alerts — WOW and VS_CHAIN triggers
 
+BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE:
+  engine: rule_based
+  skill_file: ""
+  description: Day-on-day big-drop prompted-markdown compliance alerts — BIG_DROP trigger
+
+BIG_DROP_MARKDOWN_COMPLIANCE:
+  engine: rule_based
+  skill_file: ""
+  description: Day-on-day big-drop markdown compliance alerts — BIG_DROP trigger
+
+BIG_DROP_EXPIRY_DATE_COMPLIANCE:
+  engine: rule_based
+  skill_file: ""
+  description: Day-on-day big-drop expiry-date compliance alerts — BIG_DROP trigger
+
 MARKDOWN_OVERRIDE:
   engine: rule_based
   skill_file: skills/markdown_override_investigation_skill.md

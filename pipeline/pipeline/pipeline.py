@@ -137,25 +137,37 @@ def _resolve_config(config: "DetectorConfig" = None, cfg=None) -> DetectorConfig
     return DetectorConfig()
 
 
+def _identity_parts(cfg, signal: dict) -> list[str]:
+    client = getattr(cfg, "client_name", None) or "default"
+    parts = [client, signal.get("signal_type", ""), str(signal.get("store_id", ""))]
+    if signal.get("department"):
+        parts.append(str(signal["department"]))
+    if signal.get("dow") is not None:
+        parts.append(str(signal["dow"]))
+    if signal.get("period_id") is not None:
+        parts.append(str(signal["period_id"]))
+    if signal.get("item_id") is not None:
+        parts.append(str(signal["item_id"]))
+    return parts
+
+
+def _make_issue_key(cfg, signal: dict) -> str:
+    """Return the stable business-issue identity, excluding the analysis date."""
+    return hashlib.sha256("|".join(_identity_parts(cfg, signal)).encode("utf-8")).hexdigest()[:16]
+
+
 def _make_alert_id(cfg, signal: dict, analysis_date: str | None) -> str:
     """Return a deterministic, stable ID for a signal / alert card.
 
     The hash is based on the business identity of the issue:
     client, analysis_date, signal_type, store_id, and (when present)
-    department or item_id.  This keeps the same ID across re-runs and
-    makes it possible to track an alert over time.
+    department, dow/period_id (for slot-scoped signals such as
+    OSA_RECURRING_SLOT, where a single store+department can have several
+    distinct slots alerting at once), or item_id.  This keeps the same ID
+    across re-runs and makes it possible to track an alert over time.
     """
-    client = getattr(cfg, "client_name", None) or "default"
-    parts = [
-        client,
-        analysis_date or "unknown",
-        signal.get("signal_type", ""),
-        str(signal.get("store_id", "")),
-    ]
-    if signal.get("department"):
-        parts.append(str(signal["department"]))
-    if signal.get("item_id") is not None:
-        parts.append(str(signal["item_id"]))
+    identity = _identity_parts(cfg, signal)
+    parts = [identity[0], analysis_date or "unknown", *identity[1:]]
     return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
 
 
@@ -265,8 +277,10 @@ def _build_card(
 ) -> dict:
     """Assemble a single alert-card dict from enriched signal + narrative + score."""
     alert_id = _make_alert_id(cfg, sig, analysis_date)
+    issue_key = _make_issue_key(cfg, sig)
     signal_wo_facts = {k: v for k, v in sig.items() if k != "facts"}
     signal_wo_facts["signal_id"] = alert_id
+    signal_wo_facts["issue_key"] = issue_key
 
     # Get signal type bucket from config, use default if not provided
     default_type = 'Availability'
@@ -287,6 +301,7 @@ def _build_card(
     return {
         "signal_id": alert_id,
         "alert_id": alert_id,
+        "issue_key": issue_key,
         "analysis_date": analysis_date,
         "engine_used": narrative.get("_engine", "rule_based"),
         "alert_type": ",".join(sorted(sig["trigger_types"])),
@@ -537,7 +552,11 @@ def _write_investigations_debug_table(session, table_name, results, run_date, cf
     print(f"[pipeline] {len(rows)} investigations written → {table_name}")
 
 
-def _card_to_row(card: dict, run_date: str, emit_affected_products: bool = False) -> tuple:
+def _card_to_row(
+    card: dict,
+    run_date: str,
+    emit_affected_products: bool = False,
+) -> tuple:
     """Serialise one card dict to a row tuple matching ``_card_schema``."""
     row = (
         run_date,
@@ -897,6 +916,26 @@ def run_pipeline_from_signals(
         scoring_cfg=cfg.scoring if cfg and cfg.scoring else None,
     )
 
+    for signal in signals:
+        signal["issue_key"] = _make_issue_key(cfg, signal)
+
+    queue_cfg = getattr(cfg, "queue", None) if cfg else None
+    if queue_cfg and queue_cfg.enabled and session is not None:
+        from store_insight.pipeline.stages._6_queue.apply import apply_workflow_suppression
+
+        output_table = _output_table(cfg)
+        database, schema, _ = output_table.split('.')
+        action_table = queue_cfg.action_status_table.format(database=database, schema=schema)
+        signals, _, _ = apply_workflow_suppression(
+            session,
+            signals,
+            run_date or this_week_end,
+            output_table,
+            action_table,
+            suppression_days=queue_cfg.suppression_days,
+            cfg=cfg,
+        )
+
     if debug_tables and getattr(logging_cfg, "write_run_log", False):
         _write_score_audit_table(
             session,
@@ -956,7 +995,17 @@ def run_pipeline_from_signals(
     cortex_budget = budget_from_config(cfg)
 
     def _investigate_one(sig):
-        return sig, investigate(sig, session=session, cfg=cfg, cortex_budget=cortex_budget)
+        try:
+            return sig, investigate(sig, session=session, cfg=cfg, cortex_budget=cortex_budget)
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"[pipeline] WARNING: investigation skipped for "
+                f"signal_type={sig.get('signal_type', 'UNKNOWN')} "
+                f"store_id={sig.get('store_id', 'UNKNOWN')} "
+                f"signal_id={sig.get('signal_id', 'UNKNOWN')}: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            return None
 
     cards = []
     if max_workers and max_workers > 1 and len(enriched) > 1:
@@ -964,9 +1013,9 @@ def run_pipeline_from_signals(
             f"[pipeline] Investigating {len(enriched)} signals with {max_workers} parallel workers..."
         )
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            results = list(pool.map(_investigate_one, enriched))
+            results = [result for result in pool.map(_investigate_one, enriched) if result is not None]
     else:
-        results = [_investigate_one(sig) for sig in enriched]
+        results = [result for sig in enriched if (result := _investigate_one(sig)) is not None]
 
     if debug_tables and getattr(logging_cfg, "write_run_log", False):
         _write_investigations_debug_table(
@@ -1059,7 +1108,8 @@ def write_alerts(
     ]
     table = target_table or _output_table(cfg)
     df = session.create_dataframe(
-        rows, schema=_card_schema(emit_affected_products=emit_affected_products)
+        rows,
+        schema=_card_schema(emit_affected_products=emit_affected_products),
     )
 
     if full_replace:

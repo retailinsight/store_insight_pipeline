@@ -30,10 +30,20 @@ cur.execute(f"CALL {db}.PUBLIC.SP_RUN_MONITORING({bd}, '{db}', 'STORE_INSIGHT_DB
 print(cur.fetchone()[0])
 
 print("\n--- LATEST_SYSTEM_HEALTH ---")
-cur.execute(f"SELECT CHECK_ID, COMPONENT_ID, STATUS, DATA_AS_OF, DETAILS "
+cur.execute(f"SELECT CHECK_ID, HUMAN_NAME, AFFECTED_PART, STATUS, COLOUR, "
+            f"DATA_AS_OF, LAST_CHECK_TIME, IMPACT, FIRST_RESPONSE, OWNER, DETAILS "
             f"FROM {db}.PUBLIC.LATEST_SYSTEM_HEALTH ORDER BY CHECK_ID")
 for r in cur.fetchall():
-    print(f"  {r[0]} [{r[1]}] {r[2]} (as of {r[3]}): {r[4]}")
+    (cid, human_name, part, status, colour, data_as_of, last_check,
+     impact, first_response, owner, details) = r
+    print(f"\n  {cid} {human_name}")
+    print(f"    status: {status} ({colour})")
+    print(f"    affected: {part}")
+    print(f"    as of: {data_as_of} / last check: {last_check}")
+    print(f"    owner: {owner}")
+    print(f"    impact: {impact}")
+    print(f"    first check: {first_response}")
+    print(f"    details: {details}")
 
 print("\n--- Open incidents ---")
 cur.execute(f"SELECT INCIDENT_KEY, SEVERITY, OPENED_AT "

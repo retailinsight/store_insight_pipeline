@@ -23,27 +23,15 @@ OSA_STORE_ACTIONABLE:
   - name: osa_store_actionable_day_periods
     description: Top day-period rows by store-controlled LSV
   - name: osa_item_time_patterns
-    description: Complete 7x3 day-period grid, prior-week top items, and repeat timing patterns
+    description: Complete 7x3 day-period grid, latest-week top items, and repeat timing patterns
   - name: osa_store_actionable_chain_drift
     description: Store-controlled chain OSA drift context
   - name: osa_store_actionable_cost_projection
     description: Attributed four-week cost-of-inaction projection
 
 OSA_BIG_DROP:
-  - name: osa_store_actionable_ppg_drilldown
-    description: Top latest-week PPGs with prior-week attributed LSV changes
-  - name: osa_store_actionable_item_lsv_changes
-    description: Top item offenders with prior-week changes and UPC/EAN arrays
-  - name: osa_store_actionable_dow
-    description: Seven chronological day rows with attributed LSV and source status
-  - name: osa_store_actionable_day_periods
-    description: Top day-period rows by store-controlled LSV
-  - name: osa_item_time_patterns
-    description: Complete 7x3 day-period grid, prior-week top items, and repeat timing patterns
-  - name: osa_store_actionable_chain_drift
-    description: Store-controlled chain OSA drift context
-  - name: osa_store_actionable_cost_projection
-    description: Attributed four-week cost-of-inaction projection
+  - name: osa_big_drop_day_drilldown
+    description: Compact time-of-day grid, PPG, and item store-controlled LSV facts
 
 OSA_RECURRING_SLOT:
   - name: osa_recurring_slot_facts
@@ -51,9 +39,13 @@ OSA_RECURRING_SLOT:
 
 COMPLIANCE:
   - name: tick_and_flick_breakdown
-    description: Tick-and-flick alert-type breakdown for each flagged store (requires feedback DataFrame)
+    description: Tick-and-flick alert-type breakdown, seven-day trailing tick-and-flick count series, and driver assessment for each flagged store (requires feedback DataFrame)
 
 MARKDOWN_COMPLIANCE:
+  - name: markdown_compliance_facts
+    description: Daily on-time completion breakdown, worst departments, and workload/coaching driver assessment (requires canonical synthetic DataFrame)
+
+BIG_DROP_MARKDOWN_COMPLIANCE:
   - name: markdown_compliance_facts
     description: Daily on-time completion breakdown, worst departments, and workload/coaching driver assessment (requires canonical synthetic DataFrame)
 
@@ -61,7 +53,15 @@ EXPIRY_DATE_COMPLIANCE:
   - name: expiry_date_compliance_facts
     description: Chain movement, complete daily performance, worst departments, expiry markdown movement, and driver assessment from synthetic rows
 
+BIG_DROP_EXPIRY_DATE_COMPLIANCE:
+  - name: expiry_date_compliance_facts
+    description: Chain movement, complete daily performance, worst departments, expiry markdown movement, and driver assessment from synthetic rows
+
 PROMPTED_MARKDOWN_COMPLIANCE:
+  - name: prompted_markdown_compliance_facts
+    description: Daily on-time actioned breakdown, worst departments, and workload/coaching driver assessment from synthetic rows
+
+BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE:
   - name: prompted_markdown_compliance_facts
     description: Daily on-time actioned breakdown, worst departments, and workload/coaching driver assessment from synthetic rows
 

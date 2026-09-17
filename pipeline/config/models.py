@@ -177,15 +177,15 @@ class ThresholdsConfig(BaseModel):
     @classmethod
     def validate_compliance_thresholds(cls, v: dict[str, Any]) -> dict[str, Any]:
         """Validate COMPLIANCE threshold ranges."""
-        if "min_wow_increase" in v:
-            if not 0.0 <= v["min_wow_increase"] <= 1.0:
+        if "min_compliance_wow_drop" in v:
+            if not 0.0 <= v["min_compliance_wow_drop"] <= 1.0:
                 raise ValueError(
-                    f"COMPLIANCE.min_wow_increase must be between 0.0 and 1.0, got {v['min_wow_increase']}"
+                    f"COMPLIANCE.min_compliance_wow_drop must be between 0.0 and 1.0, got {v['min_compliance_wow_drop']}"
                 )
-        if "min_chain_outperform" in v:
-            if not 0.0 <= v["min_chain_outperform"] <= 1.0:
+        if "min_compliance_chain_gap" in v:
+            if not 0.0 <= v["min_compliance_chain_gap"] <= 1.0:
                 raise ValueError(
-                    f"COMPLIANCE.min_chain_outperform must be between 0.0 and 1.0, got {v['min_chain_outperform']}"
+                    f"COMPLIANCE.min_compliance_chain_gap must be between 0.0 and 1.0, got {v['min_compliance_chain_gap']}"
                 )
         return v
 
@@ -334,6 +334,7 @@ class GatherersConfig(BaseModel):
 
     OSA: list[str] = []
     OSA_STORE_ACTIONABLE: list[str] = []
+    OSA_BIG_DROP: list[str] = []
     OSA_RECURRING_SLOT: list[str] = []
     COMPLIANCE: list[str] = []
     MARKDOWN_OVERRIDE: list[str] = []
@@ -347,7 +348,7 @@ class GatherersConfig(BaseModel):
     @classmethod
     def validate_gatherer_names(cls, v: list[str], info) -> list[str]:
         """Validate that all gatherer names exist in the gatherer registry."""
-        if info.field_name in ["OSA", "OSA_STORE_ACTIONABLE", "OSA_RECURRING_SLOT", "COMPLIANCE", "MARKDOWN_OVERRIDE", "WASTE", "WASTE_TRIM", "MARKDOWN_SELLTHROUGH", "MARKDOWN_SKU", "STRAIGHT_TO_BIN"]:
+        if info.field_name in ["OSA", "OSA_STORE_ACTIONABLE", "OSA_BIG_DROP", "OSA_RECURRING_SLOT", "COMPLIANCE", "MARKDOWN_OVERRIDE", "WASTE", "WASTE_TRIM", "MARKDOWN_SELLTHROUGH", "MARKDOWN_SKU", "STRAIGHT_TO_BIN"]:
             known_gatherers = {mod.__name__.split(".")[-1] for mod in gatherer_registry.ALL_GATHERERS}
             unknown = set(v) - known_gatherers
             if unknown:
@@ -415,6 +416,23 @@ class ScoringConfig(BaseModel):
     wow_ceilings: dict[str, float] = {}
 
 
+class QueueSettings(BaseModel):
+    """Alert queue — suppression, expiry and daily admission caps (stage 6).
+
+    Rules agreed with Daniel, 9 Sep 2026. ``no_suppression_types`` alerts may
+    re-fire immediately; everything else is suppressed for
+    ``suppression_days`` after a send.
+    """
+
+    enabled: bool = False
+    max_live_per_store: int = 8
+    max_new_per_day: int = 3
+    expiry_days: int = 7
+    suppression_days: int = 7
+    no_suppression_types: list[str] = []
+    action_status_table: str = "{database}.{schema}.ALERT_ACTION_STATUS"
+
+
 class LoggingConfig(BaseModel):
     """Logging and intermediate write configuration."""
 
@@ -477,6 +495,7 @@ class PipelineConfig(BaseModel):
     schedule: ScheduleConfig
     scoring: ScoringConfig
     logging: LoggingConfig
+    queue: QueueSettings = QueueSettings()
     data_quality: DataQualityConfig = DataQualityConfig()
     client_name: str = "default"
 

@@ -32,13 +32,13 @@ def _patch_card_serialisers(monkeypatch):
     """
     monkeypatch.setattr(
         pipeline_module, '_card_to_row',
-        lambda card, run_date, emit_affected_products=False: (
+        lambda card, run_date, emit_affected_products=False, emit_first_sent_date=False: (
             'row', run_date, card.get('alert_type', 'X'),
         ),
     )
     monkeypatch.setattr(
         pipeline_module, '_card_schema',
-        lambda emit_affected_products=False: 'fake_schema',
+        lambda emit_affected_products=False, emit_first_sent_date=False: 'fake_schema',
     )
 
 
@@ -261,6 +261,19 @@ def test_flag_off_row_length_unchanged():
         card, '2026-04-21', emit_affected_products=True,
     )
     assert len(row_on) == len(row_off) + 1
+
+
+def test_queue_disabled_schema_preserves_existing_columns():
+    names = [f.name for f in pipeline_module._card_schema().fields]
+    assert 'FIRST_SENT_DATE' not in names
+
+
+def test_workflow_suppression_does_not_change_canonical_alert_schema():
+    card = _minimal_card({'item_id': 42})
+    schema = pipeline_module._card_schema()
+    row = pipeline_module._card_to_row(card, '2026-09-09')
+    assert 'FIRST_SENT_DATE' not in [field.name for field in schema.fields]
+    assert len(row) == len(schema.fields)
 
 
 def test_affected_products_item_scoped_signal():

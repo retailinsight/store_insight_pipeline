@@ -69,9 +69,8 @@ detectors:
   enabled:
     - osa_big_drop.big_drop
     - osa_recurring_slot.recurring_slot
-    - compliance.tick_and_flick
-    - markdown_compliance.wow
-    - markdown_compliance.vs_chain
+    - compliance.tick_and_flick_wow
+    - compliance.tick_and_flick_vs_chain
     - markdown_override.vs_chain
     - markdown_override.wow
     - waste.vs_chain
@@ -109,9 +108,9 @@ detector_config:
       min_items:             2        # min qualifying items in the slot to fire
 
     COMPLIANCE:
-      min_wow_increase:        0.10   # TICK_AND_FLICK — min WoW rise
-      min_chain_outperform:    0.05   # TICK_AND_FLICK — min gap above chain
-      min_alerts_worked:       5      # TICK_AND_FLICK — min alerts worked
+      min_compliance_wow_drop:   0.10   # TICK_AND_FLICK — min WoW rise in TF rate
+      min_compliance_chain_gap:  0.05   # TICK_AND_FLICK — min gap above chain TF rate
+      min_alerts_worked:         5      # TICK_AND_FLICK — min alerts worked
 
     MARKDOWN_COMPLIANCE:
       min_markdown_compliance_wow_drop:    0.05 # WOW — min WoW drop (ratio)
@@ -127,6 +126,18 @@ detector_config:
       min_prompted_markdown_compliance_wow_drop:    0.05 # WOW — min WoW drop (ratio)
       min_prompted_markdown_compliance_chain_gap:   0.05 # VS_CHAIN — min gap below chain (ratio)
       min_prompted_markdown_compliance_volume:        50   # min prompts issued this week
+
+    BIG_DROP_MARKDOWN_COMPLIANCE:
+      min_big_drop_markdown_compliance_drop:         0.05
+      min_big_drop_markdown_compliance_volume:         10
+
+    BIG_DROP_EXPIRY_DATE_COMPLIANCE:
+      min_big_drop_expiry_compliance_drop:           0.05
+      min_big_drop_expiry_compliance_volume:           10
+
+    BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE:
+      min_big_drop_prompted_markdown_compliance_drop: 0.05
+      min_big_drop_prompted_markdown_compliance_volume: 10
 
     MARKDOWN_OVERRIDE:
       min_override_chain_gap:    0.05 # pp — min gap vs chain to fire VS_CHAIN
@@ -171,13 +182,7 @@ gatherers:
     - osa_store_actionable_chain_drift
     - osa_store_actionable_cost_projection
   OSA_BIG_DROP:
-    - osa_store_actionable_ppg_drilldown
-    - osa_store_actionable_item_lsv_changes
-    - osa_store_actionable_dow
-    - osa_store_actionable_day_periods
-    - osa_item_time_patterns
-    - osa_store_actionable_chain_drift
-    - osa_store_actionable_cost_projection
+    - osa_big_drop_day_drilldown
   OSA_RECURRING_SLOT:
     - osa_recurring_slot_facts
   COMPLIANCE:
@@ -368,3 +373,31 @@ logging:
   write_signals:  false
   write_enriched: false
   write_run_log:  false
+
+# ── Alert queue (stage 6) ────────────────────────────────────────────────────
+# Suppression, expiry and daily admission caps. Rules agreed with Daniel,
+# 9 Sep 2026 (see prds/prd-alert-suppression-and-queue.md).
+#
+# ALERTS_PIPELINE carries only the live queue, re-written under each day's
+# RUN_DATE (the store app reads everything at the latest RUN_DATE per store).
+# Suppressed / expired / actioned / not-admitted alerts go to
+# <alerts_table>_QUEUE_LOG instead.
+#
+#   enabled              : master switch — off until the client is ready
+#   max_live_per_store   : hard ceiling on live alerts per store
+#   max_new_per_day      : newly admitted alerts per store per day (hard cap;
+#                          freed slots do not raise it). Cold-start stores
+#                          fill straight to max_live_per_store instead
+#   expiry_days          : unactioned alerts expire after this many days
+#                          (in_progress alerts are exempt)
+#   suppression_days     : re-alert window for suppressed families
+#   no_suppression_types : signal types that may re-fire immediately
+#   action_status_table  : where the store app records completed/in_progress
+queue:
+  enabled:              false
+  max_live_per_store:   8
+  max_new_per_day:      3
+  expiry_days:          7
+  suppression_days:     7
+  no_suppression_types: []
+  action_status_table:  "{database}.{schema}.ALERT_ACTION_STATUS"

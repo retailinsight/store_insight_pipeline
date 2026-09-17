@@ -102,7 +102,6 @@ def run(
         _output_table,
         derive_windows,
         run_pipeline,
-        write_alerts,
     )
 
     # ── skip if this analysis_date was already processed (idempotent daily task)
@@ -121,7 +120,12 @@ def run(
         except Exception as exc:  # table may not exist yet — proceed with the run
             print(f"[handler] Existing-run check skipped: {exc}")
 
-    from store_insight.pipeline.pipeline.run_batch import load_feedback, load_osa, load_wmd
+    from store_insight.pipeline.pipeline.run_batch import (
+        load_feedback,
+        load_osa,
+        load_wmd,
+        write_alerts_with_queue,
+    )
 
     w = derive_windows(analysis_date)
     run_date = str(datetime.date.today())
@@ -134,18 +138,10 @@ def run(
     print(f"[handler] wmd lookback  : {w['wmd_lookback']} – {w['this_week_end']}")
 
     # ── select narrative engine ──────────────────────────────────────────────
-    signal_types = (
-        "OSA",
-        "COMPLIANCE",
-        "MARKDOWN_OVERRIDE",
-        "WASTE",
-        "MARKDOWN_SELLTHROUGH",
-        "MARKDOWN_SKU",
-    )
     engine_name = "cortex" if use_cortex else "rule_based"
-    for signal_type in signal_types:
-        type_config = getattr(cfg.investigation, signal_type)
-        type_config["engine"] = engine_name
+    for _, type_config in cfg.investigation:
+        if isinstance(type_config, dict) and type_config:
+            type_config["engine"] = engine_name
 
     if use_cortex:
         import store_insight.pipeline.stages._4_investigate.investigate as _investigate
@@ -202,8 +198,8 @@ def run(
         gate_plan=gate_plan,
     )
 
-    write_alerts(session, cards, run_date=run_date, overwrite=overwrite, cfg=cfg)
+    write_alerts_with_queue(session, cards, run_date=run_date, overwrite=overwrite, cfg=cfg)
 
-    summary = f"[handler] Done — {len(cards)} alert cards written for {analysis_date}"
+    summary = f"[handler] Done — {len(cards)} candidate alert cards processed for {analysis_date}"
     print(summary)
     return summary

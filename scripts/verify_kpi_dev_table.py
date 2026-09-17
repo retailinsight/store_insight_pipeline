@@ -1,4 +1,4 @@
-"""Verify DEV KPI table after batch run: no dup rows, 28 columns intact, TOD populated."""
+"""Verify DEV KPI table after batch run: no duplicates and OSCA details populated."""
 import sys
 from pathlib import Path
 
@@ -17,28 +17,30 @@ for c in cols:
     print(f"  {c[0]}: {c[1]}")
 
 cur.execute("""
-    SELECT RUN_DATE, COUNT(*), COUNT(DISTINCT STORE_ID)
+    SELECT RUN_DATE, COUNT(*), COUNT(DISTINCT STORE_ID),
+           COUNT(OSCA_PCT), COUNT(OSCA_DETAILS_JSON),
+           COUNT(STORE_CONTROLLABLE_OSCA_PCT),
+           COUNT(STORE_CONTROLLABLE_OSCA_DETAILS_JSON)
     FROM STORE_INSIGHT_DEV.PUBLIC.KPI_AVAILABILITY_SUMMARY
-    WHERE RUN_DATE = '2026-08-18'
+    WHERE RUN_DATE = (
+        SELECT MAX(RUN_DATE) FROM STORE_INSIGHT_DEV.PUBLIC.KPI_AVAILABILITY_SUMMARY
+    )
     GROUP BY RUN_DATE
 """)
-print("\nRows for run date 2026-08-18 (rows, distinct stores):", cur.fetchall())
+print("\nLatest rows, stores and populated OSCA fields:", cur.fetchall())
 
 cur.execute("""
-    SELECT COUNT(*), COUNT(TIME_OF_DAY_BREAKDOWN)
+    SELECT COUNT(*),
+           COUNT_IF(PARSE_JSON(OSCA_DETAILS_JSON):category_performance IS NOT NULL),
+           COUNT_IF(PARSE_JSON(OSCA_DETAILS_JSON):time_of_day_analysis IS NOT NULL),
+           COUNT_IF(PARSE_JSON(STORE_CONTROLLABLE_OSCA_DETAILS_JSON):category_performance IS NOT NULL),
+           COUNT_IF(PARSE_JSON(STORE_CONTROLLABLE_OSCA_DETAILS_JSON):time_of_day_analysis IS NOT NULL)
     FROM STORE_INSIGHT_DEV.PUBLIC.KPI_AVAILABILITY_SUMMARY
-    WHERE RUN_DATE = '2026-08-18'
+    WHERE RUN_DATE = (
+        SELECT MAX(RUN_DATE) FROM STORE_INSIGHT_DEV.PUBLIC.KPI_AVAILABILITY_SUMMARY
+    )
 """)
-print("TOD populated (total, non-null):", cur.fetchone())
-
-cur.execute("""
-    SELECT TIME_OF_DAY_BREAKDOWN
-    FROM STORE_INSIGHT_DEV.PUBLIC.KPI_AVAILABILITY_SUMMARY
-    WHERE RUN_DATE = '2026-08-18' AND TIME_OF_DAY_BREAKDOWN IS NOT NULL
-    LIMIT 1
-""")
-row = cur.fetchone()
-print("\nSample TOD value:", (row[0][:300] if row and row[0] else None))
+print("OSCA details populated (total, OSCA category/TOD, store category/TOD):", cur.fetchone())
 
 cur.close()
 conn.close()

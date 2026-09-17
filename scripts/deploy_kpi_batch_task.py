@@ -47,13 +47,28 @@ REFRESH_TASK_NAME = "KPI_AVAILABILITY_REFRESH_TASK"
 STAGE_NAME = "KPI_BATCH_CODE_STAGE"
 CRON = "USING CRON 30 6 * * * UTC"  # daily 06:30 UTC, ~30 min after the 06:00 alerts pipeline
 REFRESH_CRON = "USING CRON 45 11 * * * Europe/London"  # after the 11:30 source check
-CORTEX_MODEL = "mistral-large2"
+OSCA_COLUMNS = {
+    "OSCA_PCT": "FLOAT",
+    "OSCA_WOW_CHANGE_PP": "FLOAT",
+    "OSCA_CLUSTER_PCT": "FLOAT",
+    "OSCA_TREND_DIRECTION": "VARCHAR",
+    "OSCA_DETAILS_JSON": "VARCHAR",
+    "STORE_CONTROLLABLE_OSCA_PCT": "FLOAT",
+    "STORE_CONTROLLABLE_OSCA_WOW_CHANGE_PP": "FLOAT",
+    "STORE_CONTROLLABLE_OSCA_CLUSTER_PCT": "FLOAT",
+    "STORE_CONTROLLABLE_OSCA_TREND_DIRECTION": "VARCHAR",
+    "STORE_CONTROLLABLE_OSCA_DETAILS_JSON": "VARCHAR",
+}
+
+
+def _ensure_osca_columns(session: Session, table: str) -> None:
+    for name, data_type in OSCA_COLUMNS.items():
+        session.sql(
+            f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {data_type}"
+        ).collect()
 
 
 def _sp_handler(session: Session, analysis_date: str, run_date: str, output_table: str) -> str:
-    import os
-
-    os.environ["KPI_CORTEX_MODEL"] = os.environ.get("KPI_CORTEX_MODEL", "mistral-large2")
     import kpi_availability_batch as kb
 
     return kb.run_batch_sp(
@@ -82,6 +97,9 @@ def main() -> None:
 
     print(f"Deploying to {db} (output table: {table})")
 
+    print("  Ensuring additive OSCA columns exist...")
+    _ensure_osca_columns(session, table)
+
     print(f"  Creating stage {fq_stage} if missing...")
     session.sql(f"CREATE STAGE IF NOT EXISTS {fq_stage}").collect()
 
@@ -102,7 +120,7 @@ def main() -> None:
         packages=["snowflake-snowpark-python"],
         input_types=None,
         execute_as="owner",
-        comment="Daily KPI availability batch (28-col schema, delete-by-run-date + append). Source: kpi/kpi_availability_batch.py",
+        comment="Daily KPI availability batch (38-col schema, delete-by-run-date + append). Source: kpi/kpi_availability_batch.py",
     )
 
     parent = env["parent_task"]

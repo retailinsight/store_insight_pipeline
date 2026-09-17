@@ -38,14 +38,15 @@ VOLUME_BAND_HIGH = 2.0    # C4: WARN when today's total > 2x baseline
 MIX_SHARE_WARN = 0.80     # C4: WARN when one TYPE exceeds 80% of alerts
 BASELINE_WEEKS = 4        # C4: trailing same-weekday weeks
 TASK_LOOKBACK_HOURS = 18  # C2/C5: how far back to look in TASK_HISTORY
-KPI_MIN_COLUMNS = 28      # C6: expected column count
+KPI_MIN_COLUMNS = 38      # C6: expected column count
 
-# Slack notification integration (SD-67936). Messages fire only when a check
-# is not OK or when an open incident recovers — never on all-clear runs.
+# Slack notification integration (SD-67936). A message is sent every run:
+# problem blocks when a check is not OK, a recovery line when an open
+# incident clears, and a short all-green note when everything is healthy.
 SLACK_INTEGRATION = 'SLACK__STORE_INSIGHT_NOTIFICATIONS'
 
 OWNERS = {
-    'C1': 'feed owner (respond) / Elaheh (build)',
+    'C1': '',
     'C2': 'Dan',
     'C3': 'Dan',
     'C4': 'Dan / Bryan',
@@ -66,12 +67,113 @@ CHECK_COMPONENTS = {
     'C9': 'monitor',
 }
 
+CHECK_DESCRIPTIONS = {
+    'C1': {
+        'title': 'Source feed freshness and volume',
+        'description': ('Checks the five source feeds (OSA, feedback, markdown log, '
+                       'markdown sales, wastage) are fresh and have healthy row counts.'),
+        'part': 'source feeds',
+        'impact': ('Stores may see fewer smart actions, or some alert types may be missing, '
+                   'if a feed is short or stale. The gate may skip detectors.'),
+        'first_response': ('Check DATA_QUALITY_LOG for today. Probe MAX(DATE) on the named source view. '
+                           'If the feed is genuinely short, chase the feed-load owner. '
+                           'If data has since landed, rerun the pipeline with overwrite.'),
+    },
+    'C2': {
+        'title': 'Alerts pipeline task execution',
+        'description': ('Checks TASK_HISTORY for RUN_ALERTS_PIPELINE_TASK so the daily 06:00 '
+                       'task completed successfully within the lookback window.'),
+        'part': 'alerts pipeline task',
+        'impact': 'If the task fails, no new smart actions are generated and stores see yesterday’s alerts.',
+        'first_response': ('Read the ERROR_MESSAGE in TASK_HISTORY. Fix the fault, then rerun '
+                           'RUN_ALERTS_PIPELINE manually or redeploy the SP if the code is stale.'),
+    },
+    'C3': {
+        'title': 'Alert output present',
+        'description': ('Confirms that ALERTS_PIPELINE has rows for today. '
+                       'A SUCCEEDED task with zero rows is still a failure.'),
+        'part': 'alerts pipeline output',
+        'impact': 'Stores have no new smart actions to act on today.',
+        'first_response': ('Check C7 to see whether the gate skipped detectors. If the gate skipped and '
+                           'data has since landed, rerun with overwrite. If rows are genuinely zero, '
+                           'treat as pilot-blocking.'),
+    },
+    'C4': {
+        'title': 'Alert volume and mix sanity',
+        'description': ('Compares today’s total alert count to a 4-week same-weekday median '
+                       'and warns if one alert type dominates the mix.'),
+        'part': 'alert volume and mix',
+        'impact': 'Stores may see too few, too many, or one-note alerts that hide other problems.',
+        'first_response': ('Cross-check C1 and C7 for a data cause. If those are clean, investigate the '
+                           'affected alert type without paging anyone.'),
+    },
+    'C5': {
+        'title': 'KPI batch task execution',
+        'description': ('Checks TASK_HISTORY for KPI_AVAILABILITY_BATCH_TASK, which runs after '
+                       'the alerts pipeline, to confirm the KPI task completed.'),
+        'part': 'KPI batch task',
+        'impact': 'KPI tiles in the app will be stale if the KPI task fails.',
+        'first_response': ('Check TASK_HISTORY for the error, then run SP_KPI_AVAILABILITY_BATCH manually. '
+                           'Redeploy the KPI task if the SP is stale.'),
+    },
+    'C6': {
+        'title': 'KPI output fresh and complete',
+        'description': ('Confirms KPI_AVAILABILITY_SUMMARY has rows for today, the expected 38 '
+                       'columns, exact five-field OSCA breakdowns and dated time-of-day entries.'),
+        'part': 'KPI output',
+        'impact': 'KPI tiles may be empty, stale, or missing sections such as the time-of-day breakdown.',
+        'first_response': ('Re-run the KPI batch. If validation still fails, check the latest RUN_DATE, '
+                           'JSON contract and 38-column schema before altering anything.'),
+    },
+    'C7': {
+        'title': 'Quality gate result',
+        'description': ('Checks whether the in-pipeline data-quality gate skipped detectors '
+                       'or flagged signals as SUSPECT today.'),
+        'part': 'quality gate',
+        'impact': 'Detectors may be skipped, so stores get fewer alert types, or SUSPECT signals may reduce confidence.',
+        'first_response': ('Review ACTION_TAKEN in DATA_QUALITY_LOG. A correct skip means the gate is working; '
+                           'pair with C1. A wrong skip means a lag/config bug that needs a branch fix and SP redeploy.'),
+    },
+    'C9': {
+        'title': 'Monitor heartbeat',
+        'description': ('Self-report that the monitoring stored procedure completed its run. '
+                       'A missing run means the other checks are blind.'),
+        'part': 'monitor',
+        'impact': 'If the monitor itself fails, no one is alerted to problems until they are noticed manually.',
+        'first_response': ('Run scripts/run_monitoring_supervised.py manually to restore coverage, then check '
+                           'TASK_HISTORY and redeploy the task if needed.'),
+    },
+}
+
+STATUS_COLOUR = {
+    'OK': 'green',
+    'WARN': 'amber',
+    'FAIL': 'red',
+    'UNKNOWN': 'grey',
+}
+
+STATUS_EMOJI = {
+    'OK': ':white_check_mark:',
+    'WARN': ':warning:',
+    'FAIL': ':red_circle:',
+    'UNKNOWN': ':white_circle:',
+}
+
 
 # ── DDL ──────────────────────────────────────────────────────────────────────
 
 def ddl_statements(db: str, schema: str = 'PUBLIC') -> list[str]:
     """Idempotent object creation for the monitoring layer."""
     p = f'{db}.{schema}'
+
+    def _sq(x: str) -> str:
+        return str(x).replace("'", "''")
+
+    _desc_rows = ", ".join(
+        f"('{_sq(cid)}', '{_sq(d['title'])}', '{_sq(d['description'])}', "
+        f"'{_sq(d['part'])}', '{_sq(d['impact'])}', '{_sq(d['first_response'])}')"
+        for cid, d in CHECK_DESCRIPTIONS.items()
+    )
     return [
         f"""CREATE TABLE IF NOT EXISTS {p}.MONITORING_CONFIG (
             CHECK_ID STRING,
@@ -114,6 +216,17 @@ def ddl_statements(db: str, schema: str = 'PUBLIC') -> list[str]:
             RESOLVED_AT TIMESTAMP_TZ,
             LAST_RUN_ID STRING
         )""",
+        f"""CREATE OR REPLACE TABLE {p}.MONITORING_CHECK_DESCRIPTIONS (
+            CHECK_ID STRING,
+            TITLE STRING,
+            DESCRIPTION STRING,
+            AFFECTED_PART STRING,
+            IMPACT STRING,
+            FIRST_RESPONSE STRING
+        )""",
+        f"""INSERT INTO {p}.MONITORING_CHECK_DESCRIPTIONS
+            (CHECK_ID, TITLE, DESCRIPTION, AFFECTED_PART, IMPACT, FIRST_RESPONSE)
+            VALUES {_desc_rows}""",
         f"""CREATE OR REPLACE VIEW {p}.LATEST_SYSTEM_HEALTH AS
             WITH latest AS (
                 SELECT CHECK_ID, COMPONENT_ID, STATUS, BUSINESS_DATE,
@@ -122,9 +235,28 @@ def ddl_statements(db: str, schema: str = 'PUBLIC') -> list[str]:
                 QUALIFY ROW_NUMBER() OVER (
                     PARTITION BY CHECK_ID ORDER BY CHECKED_AT DESC) = 1
             )
-            SELECT CHECK_ID, COMPONENT_ID, STATUS, BUSINESS_DATE AS DATA_AS_OF,
-                   CHECKED_AT, DETAILS, OWNER
-            FROM latest""",
+            SELECT
+                l.CHECK_ID,
+                l.COMPONENT_ID,
+                COALESCE(d.TITLE, l.CHECK_ID) AS HUMAN_NAME,
+                COALESCE(d.DESCRIPTION, '') AS DESCRIPTION,
+                COALESCE(d.AFFECTED_PART, l.COMPONENT_ID) AS AFFECTED_PART,
+                COALESCE(d.IMPACT, '') AS IMPACT,
+                COALESCE(d.FIRST_RESPONSE, 'See RUNBOOK.md') AS FIRST_RESPONSE,
+                l.STATUS,
+                CASE l.STATUS
+                    WHEN 'OK' THEN 'green'
+                    WHEN 'WARN' THEN 'amber'
+                    WHEN 'FAIL' THEN 'red'
+                    ELSE 'grey'
+                END AS COLOUR,
+                l.BUSINESS_DATE AS DATA_AS_OF,
+                l.CHECKED_AT AS LAST_CHECK_TIME,
+                l.DETAILS,
+                COALESCE(NULLIF(l.OWNER, ''), 'Owner not yet agreed') AS OWNER
+            FROM latest l
+            LEFT JOIN {p}.MONITORING_CHECK_DESCRIPTIONS d
+                ON l.CHECK_ID = d.CHECK_ID""",
     ]
 
 
@@ -260,11 +392,17 @@ def check_c4_volume_mix(runner, data_db, business_date):
 
 
 def check_c6_kpi_output(runner, data_db, business_date):
+    table = f'{data_db}.PUBLIC.KPI_AVAILABILITY_SUMMARY'
     rows = runner(
-        f"SELECT COUNT(*) AS N FROM {data_db}.PUBLIC.KPI_AVAILABILITY_SUMMARY "
-        f"WHERE RUN_DATE = '{business_date}'"
+        f"SELECT COUNT(*) AS N, COUNT(DISTINCT STORE_ID) AS STORES, "
+        f"COUNT_IF(ARRAY_SIZE(OBJECT_KEYS(PARSE_JSON(OSCA_DETAILS_JSON):performance_breakdown)) = 5) AS OSCA_OK, "
+        f"COUNT_IF(ARRAY_SIZE(OBJECT_KEYS(PARSE_JSON(STORE_CONTROLLABLE_OSCA_DETAILS_JSON):performance_breakdown)) = 5) AS STORE_OSCA_OK "
+        f"FROM {table} WHERE RUN_DATE = '{business_date}'"
     )
     n = int(rows[0]['N']) if rows else 0
+    stores = int(rows[0]['STORES']) if rows else 0
+    osca_ok = int(rows[0]['OSCA_OK']) if rows else 0
+    store_osca_ok = int(rows[0]['STORE_OSCA_OK']) if rows else 0
     cols = runner(
         f"SELECT COUNT(*) AS NCOLS, "
         f"COUNT_IF(COLUMN_NAME = 'TIME_OF_DAY_BREAKDOWN') AS HAS_TOD "
@@ -272,8 +410,18 @@ def check_c6_kpi_output(runner, data_db, business_date):
         f"WHERE TABLE_SCHEMA = 'PUBLIC' "
         f"AND TABLE_NAME = 'KPI_AVAILABILITY_SUMMARY'"
     )
+    dates = runner(
+        f"SELECT COUNT(*) AS TOD_ENTRIES, "
+        f"COUNT_IF(o.value:date IS NULL) + COUNT_IF(s.value:date IS NULL) AS MISSING_DATES "
+        f"FROM {table} k, "
+        f"LATERAL FLATTEN(input => PARSE_JSON(k.OSCA_DETAILS_JSON):time_of_day_analysis) o, "
+        f"LATERAL FLATTEN(input => PARSE_JSON(k.STORE_CONTROLLABLE_OSCA_DETAILS_JSON):time_of_day_analysis) s "
+        f"WHERE k.RUN_DATE = '{business_date}' AND o.index = s.index"
+    )
     ncols = int(cols[0]['NCOLS']) if cols else 0
     has_tod = bool(int(cols[0]['HAS_TOD'])) if cols else False
+    tod_entries = int(dates[0]['TOD_ENTRIES']) if dates else 0
+    missing_dates = int(dates[0]['MISSING_DATES']) if dates else 0
     if n == 0:
         status, details = 'FAIL', f'no KPI rows for RUN_DATE {business_date}'
     elif not has_tod or ncols < KPI_MIN_COLUMNS:
@@ -281,11 +429,21 @@ def check_c6_kpi_output(runner, data_db, business_date):
         details = (f'schema regression: {ncols} columns '
                    f'(expected >= {KPI_MIN_COLUMNS}), TIME_OF_DAY_BREAKDOWN '
                    f'{"present" if has_tod else "MISSING"}')
+    elif stores != n or osca_ok != n or store_osca_ok != n or tod_entries == 0 or missing_dates:
+        status = 'FAIL'
+        details = (f'contract regression: rows={n}, stores={stores}, OSCA={osca_ok}/{n}, '
+                   f'store OSCA={store_osca_ok}/{n}, TOD entries={tod_entries}, '
+                   f'missing dates={missing_dates}')
     else:
-        status, details = 'OK', f'{n} rows, {ncols} columns, TOD present'
+        status = 'OK'
+        details = f'{n} rows/stores, exact OSCA contracts, {tod_entries} dated TOD entries'
     return _result('C6', status,
-                   {'rows': n, 'columns': ncols, 'has_tod': has_tod},
-                   {'rows': '> 0', 'columns': f'>= {KPI_MIN_COLUMNS}'},
+                   {'rows': n, 'stores': stores, 'columns': ncols, 'has_tod': has_tod,
+                    'osca_contract_rows': osca_ok, 'store_osca_contract_rows': store_osca_ok,
+                    'tod_entries': tod_entries, 'missing_dates': missing_dates},
+                   {'rows': 'one per store', 'columns': f'>= {KPI_MIN_COLUMNS}',
+                    'osca_contract_rows': n, 'store_osca_contract_rows': n,
+                    'missing_dates': 0},
                    {}, details, business_date)
 
 
@@ -371,29 +529,31 @@ def write_results(runner, monitor_db: str, run_id: str, results: list[dict],
 
 def update_incidents(runner, monitor_db: str, run_id: str, results: list[dict],
                      schema: str = 'PUBLIC') -> list[str]:
-    """Open/refresh an incident per FAILing check; resolve on OK.
+    """Open/refresh an incident per non-OK check; resolve on OK.
 
-    Returns the incident keys resolved by this run (for recovery messages).
+    WARN and UNKNOWN open incidents too, so a later OK run produces a
+    recovery message. Returns the incident keys resolved by this run.
     """
     p = f'{monitor_db}.{schema}'
     resolved: list[str] = []
     for r in results:
         key = r['check_id']
-        if r['status'] == 'FAIL':
+        if r['status'] != 'OK':
             runner(
                 f"MERGE INTO {p}.MONITORING_INCIDENT t "
                 f"USING (SELECT '{key}' AS INCIDENT_KEY) s "
                 f"ON t.INCIDENT_KEY = s.INCIDENT_KEY AND t.STATUS = 'OPEN' "
                 f"WHEN MATCHED THEN UPDATE SET "
+                f"  SEVERITY = '{r['status']}', "
                 f"  LAST_OBSERVED_AT = CURRENT_TIMESTAMP(), LAST_RUN_ID = '{run_id}' "
                 f"WHEN NOT MATCHED THEN INSERT "
                 f"  (INCIDENT_KEY, CHECK_ID, COMPONENT_ID, SEVERITY, STATUS, "
                 f"   OPENED_AT, LAST_OBSERVED_AT, LAST_RUN_ID) "
                 f"VALUES ('{key}', '{r['check_id']}', '{r['component_id']}', "
-                f"'FAIL', 'OPEN', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), "
+                f"'{r['status']}', 'OPEN', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), "
                 f"'{run_id}')"
             )
-        elif r['status'] == 'OK':
+        else:  # OK resolves any open incident for this check
             open_rows = runner(
                 f"SELECT INCIDENT_KEY FROM {p}.MONITORING_INCIDENT "
                 f"WHERE INCIDENT_KEY = '{key}' AND STATUS = 'OPEN'"
@@ -411,26 +571,75 @@ def update_incidents(runner, monitor_db: str, run_id: str, results: list[dict],
 
 def build_notification(results: list[dict], resolved: list[str],
                        business_date, run_id: str) -> str | None:
-    """Slack message text, or None when there is nothing worth sending.
+    """Slack message text — one is sent every run.
 
-    Fires when any check is FAIL/WARN/UNKNOWN (missing data is never OK) or
-    when a previously open incident has recovered. Silent on all-OK runs.
+    Problem blocks when any check is FAIL/WARN/UNKNOWN (missing data is never
+    OK), a recovery line when a previously open incident has cleared, and a
+    short all-green note when everything is healthy so the channel always has
+    a daily heartbeat. The format is compact: one short block per problem
+    check with the first response step only. Full troubleshooting lives in
+    the pinned channel guide.
     """
     problems = [r for r in results if r['status'] != 'OK']
-    if not problems and not resolved:
-        return None
     lines = []
+    lines.append(
+        f'Store Insight pilot monitoring — {business_date} / {run_id}')
+
     if problems:
         worst = overall_status(results)
-        lines.append(
-            f'Store Insight pilot monitoring {business_date}: {worst}')
+        severity = {'FAIL': 0, 'WARN': 1, 'UNKNOWN': 2}
+        problems.sort(key=lambda r: (severity.get(r['status'], 99), r['check_id']))
+        fail = sum(1 for r in problems if r['status'] == 'FAIL')
+        warn = sum(1 for r in problems if r['status'] == 'WARN')
+        unknown = sum(1 for r in problems if r['status'] == 'UNKNOWN')
+        lines.append(f'Overall: {worst} ({fail} FAIL, {warn} WARN, {unknown} UNKNOWN)')
+        lines.append('')
+
         for r in problems:
+            cid = r['check_id']
+            desc = CHECK_DESCRIPTIONS.get(cid, {})
+            status = r['status']
+            emoji = STATUS_EMOJI.get(status, status)
+            title = desc.get('title', cid)
+            full_first = desc.get('first_response', 'See the pinned channel guide')
+            # Use just the first sentence for Slack; the pinned guide has the rest
+            first = full_first.split('. ')[0]
+            if not first.endswith('.'):
+                first += '.'
+            lines.append(f"{emoji} *{cid} {status} — {title}*")
+            lines.append(f"  what is wrong: {r['details']}")
+            lines.append(f"  affected: {desc.get('part', r['component_id'])}")
             lines.append(
-                f"- {r['check_id']} {r['status']} ({r['component_id']}): "
-                f"{r['details']} [owner: {r['owner']}]")
+                f"  what stores may see: "
+                f"{desc.get('impact', 'Impact not yet defined')}")
+            lines.append(f"  owner: {r['owner'] or 'Owner not yet agreed'}")
+            lines.append(f"  first check: {first}")
+            lines.append(
+                f"  data date / run: "
+                f"{r.get('business_date', business_date)} / {run_id}")
+            lines.append('')
+
     if resolved:
-        lines.append('Recovered since last run: ' + ', '.join(sorted(resolved)))
-    lines.append(f'(run {run_id})')
+        lines.append('=== Recovered ===')
+        for cid in sorted(resolved):
+            desc = CHECK_DESCRIPTIONS.get(cid, {})
+            title = desc.get('title', cid)
+            part = desc.get('part', '')
+            suffix = f' ({part})' if part else ''
+            lines.append(
+                f":white_check_mark: {cid} — {title}{suffix} is back to healthy")
+        lines.append('No action needed — earlier problem resolved.')
+        lines.append('')
+
+    if not problems:
+        ok_count = sum(1 for r in results if r['status'] == 'OK')
+        lines.append(
+            f':large_green_circle: All {ok_count}/{len(results)} checks green — '
+            'feeds, pipeline, quality gate and KPIs all healthy. '
+            'No action needed today.')
+        lines.append('')
+
+    lines.append('Full guide, live dashboard and support model: see the pinned items in this channel.')
     return '\n'.join(lines)
 
 

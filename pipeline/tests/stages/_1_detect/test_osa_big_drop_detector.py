@@ -10,7 +10,17 @@ class _Frame:
     def filter(self, *_args, **_kwargs):
         return self
 
-    def agg(self, *_args, **_kwargs):
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def distinct(self):
+        return self
+
+    def sort(self, *_args, **_kwargs):
+        return self
+
+    def limit(self, count):
+        self.rows = self.rows[:count]
         return self
 
     def join(self, *_args, **_kwargs):
@@ -34,8 +44,11 @@ def _metric_values(prefix, osa, lsv, rows=20, unknown=0):
     }
 
 
-def _osa_frame_with_prev_date(prev_date='2026-09-07'):
-    return _Frame([{'PREV_DATE': prev_date}])
+def _osa_frame_with_dates(latest_date='2026-09-08', prior_date='2026-09-07'):
+    rows = [{'DATE': latest_date}]
+    if prior_date is not None:
+        rows.append({'DATE': prior_date})
+    return _Frame(rows)
 
 
 def test_big_drop_emits_signal_on_sharp_drop(monkeypatch):
@@ -49,12 +62,33 @@ def test_big_drop_emits_signal_on_sharp_drop(monkeypatch):
     monkeypatch.setattr(
         big_drop, 'window_metrics', lambda *_args, **_kwargs: metrics_frame
     )
-    signals = big_drop.detect(_osa_frame_with_prev_date(), '2026-09-08')
+    signals = big_drop.detect(_osa_frame_with_dates(), '2026-09-08')
     assert len(signals) == 1
     assert signals[0]['signal_type'] == 'OSA_BIG_DROP'
     assert signals[0]['trigger_types'] == ['BIG_DROP']
     assert signals[0]['wow_drift_pp'] == -10.0
     assert signals[0]['this_week_lsv']['store_controlled'] == 250.0
+    assert signals[0]['latest_day'] == 'Tuesday'
+    assert signals[0]['prior_day'] == 'Monday'
+    assert signals[0]['latest_date'] == '2026-09-08'
+    assert signals[0]['prior_date'] == '2026-09-07'
+
+
+def test_big_drop_uses_latest_two_available_dates_when_requested_date_is_missing(monkeypatch):
+    calls = []
+    metrics_frame = _Frame([])
+
+    def _window_metrics(_osa, start, end, _group_cols, prefix):
+        calls.append((start, end, prefix))
+        return metrics_frame
+
+    monkeypatch.setattr(big_drop, 'window_metrics', _window_metrics)
+    big_drop.detect(_osa_frame_with_dates('2026-09-08', '2026-09-07'), '2026-09-09')
+
+    assert calls == [
+        ('2026-09-07', '2026-09-07', 'PRIOR'),
+        ('2026-09-08', '2026-09-08', 'LATEST'),
+    ]
 
 
 def test_big_drop_suppresses_small_drop(monkeypatch):
@@ -68,7 +102,7 @@ def test_big_drop_suppresses_small_drop(monkeypatch):
     monkeypatch.setattr(
         big_drop, 'window_metrics', lambda *_args, **_kwargs: metrics_frame
     )
-    assert big_drop.detect(_osa_frame_with_prev_date(), '2026-09-08') == []
+    assert big_drop.detect(_osa_frame_with_dates(), '2026-09-08') == []
 
 
 def test_big_drop_suppresses_low_lsv(monkeypatch):
@@ -82,7 +116,7 @@ def test_big_drop_suppresses_low_lsv(monkeypatch):
     monkeypatch.setattr(
         big_drop, 'window_metrics', lambda *_args, **_kwargs: metrics_frame
     )
-    assert big_drop.detect(_osa_frame_with_prev_date(), '2026-09-08') == []
+    assert big_drop.detect(_osa_frame_with_dates(), '2026-09-08') == []
 
 
 def test_big_drop_suppresses_insufficient_positive_rows(monkeypatch):
@@ -96,9 +130,9 @@ def test_big_drop_suppresses_insufficient_positive_rows(monkeypatch):
     monkeypatch.setattr(
         big_drop, 'window_metrics', lambda *_args, **_kwargs: metrics_frame
     )
-    assert big_drop.detect(_osa_frame_with_prev_date(), '2026-09-08') == []
+    assert big_drop.detect(_osa_frame_with_dates(), '2026-09-08') == []
 
 
 def test_big_drop_returns_empty_when_no_prior_sales_day():
-    signals = big_drop.detect(_osa_frame_with_prev_date(None), '2026-09-08')
+    signals = big_drop.detect(_osa_frame_with_dates(prior_date=None), '2026-09-08')
     assert signals == []

@@ -3,8 +3,10 @@
 Per `prds/prd-pilot-monitoring-and-stability.md` §13. One section per check: user
 impact, how to validate independently, first safe fix step, owner, escalation.
 
-**Where alerts arrive:** Slack #store-insight-pilot-alerts (fires on FAIL/WARN/UNKNOWN
-and on recovery; silent when all OK). Monitor runs daily 07:00 UK (`MONITORING_TASK`).
+**Where alerts arrive:** Slack #store-insight-pilot-alerts (posts every run: problem
+blocks on FAIL/WARN/UNKNOWN, a recovery line when an incident clears, and an
+all-green note when everything is OK — no message means the monitor did not run).
+Monitor runs daily 07:00 UK (`MONITORING_TASK`).
 **Escalation default:** unresolved by end of working day → Dave/Bryan. Dave decides all
 store-facing communication — component owners never contact stores directly.
 **Record every incident + resolution in `RISK_VALIDATION.md`** (interim incident log).
@@ -78,11 +80,12 @@ python scripts/run_monitoring_supervised.py  # re-run all checks + see LATEST_SY
 ## C6 — KPI output fresh + complete (kpi_batch)
 
 - **Impact:** empty/stale tiles (Imran's 19 Aug issue) or silent schema drift.
-- **Validate:** rows for today in `KPI_AVAILABILITY_SUMMARY`, 28 columns,
-  `TIME_OF_DAY_BREAKDOWN` present. Note: waste/markdown columns carry forward
-  placeholders by design — NULLs there are not a fault.
-- **First fix:** re-run the KPI batch (C5). Schema drift → stop, diff against the
-  28-column DDL before touching the table.
+- **Validate:** one row per store for today in `KPI_AVAILABILITY_SUMMARY`, at least
+  38 columns, exact five-field OSCA breakdowns and a date on every OSCA time-of-day
+  entry. Waste/markdown columns carry forward placeholders by design — NULLs there
+  are not a fault.
+- **First fix:** re-run the KPI batch (C5). If validation still fails, check the
+  latest `RUN_DATE`, JSON contract and 38-column schema before altering the table.
 - **Owner:** Elaheh. **Escalate:** Cornelious (app impact), Dave.
 
 ## C7 — Quality-gate result (quality_gate)

@@ -21,8 +21,8 @@ _DAY_NAME = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
 METADATA = GathererInfo(
     name         = 'tick_and_flick_breakdown',
     signal_types = ['COMPLIANCE'],
-    facts_keys   = ['tf_by_alert_type', 'alert_volume_by_day', 'driver_assessment'],
-    description  = 'Alert type is the unchanged source ALERT_TYPE_NAME label: the kind of alert intervention the store actioned. It is not a department, severity, SKU grouping, or a category derived by this pipeline. For each alert type, this adds current-week interventions worked, tick-and-flicked dismissals, and tick-and-flick rate = dismissals / interventions worked. Also builds a daily volume breakdown and a workload/coaching driver assessment.',
+    facts_keys   = ['tf_by_alert_type', 'alert_volume_by_day', 'trailing_7d_tf', 'driver_assessment'],
+    description  = 'Alert type is the unchanged source ALERT_TYPE_NAME label: the kind of alert intervention the store actioned. It is not a department, severity, SKU grouping, or a category derived by this pipeline. For each alert type, this adds current-week interventions worked, tick-and-flicked dismissals, and tick-and-flick rate = dismissals / interventions worked. Also builds a daily volume breakdown, a seven-day trailing tick-and-flick count series, and a workload/coaching driver assessment.',
 )
 
 
@@ -57,13 +57,14 @@ def gather(feedback, signals, this_week_start, this_week_end):
         {
             'tf_by_alert_type': [...],
             'alert_volume_by_day': [...],
+            'trailing_7d_tf': [...],
         }
     """
-    tf_store_ids = [
+    tf_store_ids = sorted({
         sig['store_id']
         for sig in signals
-        if 'TICK_AND_FLICK' in sig.get('trigger_types', [])
-    ]
+        if sig.get('signal_type') == 'COMPLIANCE'
+    })
     if not tf_store_ids:
         return {}
 
@@ -107,7 +108,25 @@ def gather(feedback, signals, this_week_start, this_week_end):
         )
     )
 
-    grouped = defaultdict(lambda: {'tf_by_alert_type': [], 'alert_volume_by_day': []})
+    trailing_end = datetime.date.fromisoformat(this_week_end)
+    trailing_start = trailing_end - datetime.timedelta(days=6)
+    trailing_start_str = trailing_start.isoformat()
+
+    trailing_7d = (
+        feedback
+        .filter(
+            (F.col('DATE') >= trailing_start_str) &
+            (F.col('DATE') <= this_week_end)
+        )
+        .filter(cond)
+        .group_by('STORE_ID', 'DATE')
+        .agg(
+            F.count('ALERT_SOURCE_ID').alias('WORKED'),
+            _tf_count_col().alias('TF_COUNT'),
+        )
+    )
+
+    grouped = defaultdict(lambda: {'tf_by_alert_type': [], 'alert_volume_by_day': [], 'trailing_7d_tf': []})
 
     for r in breakdown.collect():
         grouped[int(r['STORE_ID'])]['tf_by_alert_type'].append({
@@ -127,6 +146,29 @@ def gather(feedback, signals, this_week_start, this_week_end):
             'worked':    int(r['WORKED'] or 0),
             'tf_count':  int(r['TF_COUNT'] or 0),
         })
+
+    trailing_found = defaultdict(dict)
+    for r in trailing_7d.collect():
+        date_val = r['DATE']
+        d = datetime.date.fromisoformat(str(date_val)) if isinstance(date_val, str) else date_val
+        trailing_found[int(r['STORE_ID'])][d] = {
+            'date':     str(d),
+            'day':      _DAY_NAME[d.weekday()],
+            'worked':   int(r['WORKED'] or 0),
+            'tf_count': int(r['TF_COUNT'] or 0),
+        }
+
+    for sid in tf_store_ids:
+        daily = []
+        for i in range(7):
+            d = trailing_start + datetime.timedelta(days=i)
+            daily.append(trailing_found[sid].get(d, {
+                'date':     str(d),
+                'day':      _DAY_NAME[d.weekday()],
+                'worked':   0,
+                'tf_count': 0,
+            }))
+        grouped[sid]['trailing_7d_tf'] = daily
 
     for _sid, items in grouped.items():
         items['tf_by_alert_type'] = sorted(items['tf_by_alert_type'], key=lambda x: x['tf_rate'], reverse=True)
@@ -160,6 +202,7 @@ def extract_facts(signal, raw_result):
     return {
         'tf_by_alert_type': store_data.get('tf_by_alert_type', []),
         'alert_volume_by_day': store_data.get('alert_volume_by_day', []),
+        'trailing_7d_tf': store_data.get('trailing_7d_tf', []),
         'driver_assessment': {
             'volume_classification': volume_classification,
             'volume_change_pct': workload.get('volume_change_pct', 0.0),

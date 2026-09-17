@@ -251,6 +251,27 @@ def _date_range(start: datetime.date, end: datetime.date):
         current += datetime.timedelta(days=1)
 
 
+def write_alerts_with_queue(
+    session,
+    cards,
+    run_date: str,
+    overwrite: bool = False,
+    full_replace: bool = False,
+    target_table: str | None = None,
+    cfg=None,
+):
+    """Write the current selected cards; historical workflow stays in its view."""
+    return write_alerts(
+        session,
+        cards,
+        run_date=run_date,
+        overwrite=overwrite,
+        full_replace=full_replace,
+        target_table=target_table,
+        cfg=cfg,
+    )
+
+
 def run_single_date(
     session,
     analysis_date: datetime.date,
@@ -347,7 +368,7 @@ def run_single_date(
         cards = pipeline_result
         raw_signals = enriched_signals = None
 
-    write_alerts(
+    write_alerts_with_queue(
         session,
         cards,
         run_date=run_date,
