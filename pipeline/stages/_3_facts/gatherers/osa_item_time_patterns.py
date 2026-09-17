@@ -34,6 +34,7 @@ import datetime
 from collections import defaultdict
 
 from snowflake.snowpark import functions as F
+
 from store_insight.pipeline.pipeline._shared import build_store_dept_filter, sunday_first_dow
 from store_insight.pipeline.stages._3_facts.config import GathererInfo
 
