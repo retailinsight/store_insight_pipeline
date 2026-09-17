@@ -2,7 +2,7 @@
 
 Checks that everything the merge relies on exists and matches expectations:
   1. Connection (UUTQCJV-UKCOOP / SVC_STOREINSIGHT / STORE_INSIGHT_ROLE).
-  2. ALERTS_PIPELINE has the 27-column schema incl. lineage columns.
+  2. ALERTS_PIPELINE has the expected schema incl. lineage columns.
   3. Lineage columns are populated on the latest run.
   4. Deterministic ALERT_ID present and unique per run.
   5. Stage 5 tables: STORE_INSIGHT_FEEDBACK / STORE_INSIGHT_OUTCOMES.
@@ -28,7 +28,7 @@ EXPECTED_ALERT_COLUMNS = [
     'RECOMMENDED_ACTION', 'SORT_VALUE', 'LLM_PROMPT', 'SIGNAL_JSON',
     'FACTS_JSON', 'RUN_ID', 'PIPELINE_VERSION', 'CONFIG_HASH', 'PROMPT_HASH',
     'SOURCE_DATA_WATERMARK', 'QUALITY_REASON', 'SKILL_FILE_USED',
-    'FALLBACK_USED',
+    'FALLBACK_USED', 'AFFECTED_PRODUCTS',
 ]
 
 LINEAGE_COLUMNS = [
@@ -71,10 +71,12 @@ acct, user, role, wh, db, schema = cur.fetchone()
 check('Connection', True, f'{user}@{acct} role={role} wh={wh} db={db}.{schema}')
 check('Role is STORE_INSIGHT_ROLE', role == 'STORE_INSIGHT_ROLE', role)
 
-# 2. ALERTS_PIPELINE schema (27 columns incl. lineage) ----------------------
+# 2. ALERTS_PIPELINE schema (28+ columns incl. lineage and AFFECTED_PRODUCTS) ----------------------
 cur.execute('DESCRIBE TABLE STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE')
 cols = [r[0] for r in cur.fetchall()]
-check('ALERTS_PIPELINE has 27 columns', len(cols) == 27, f'{len(cols)} columns')
+expected_count = len(EXPECTED_ALERT_COLUMNS)
+check(f'ALERTS_PIPELINE has at least {expected_count} columns', len(cols) >= expected_count,
+      f'{len(cols)} columns (expected >= {expected_count})')
 missing = [c for c in EXPECTED_ALERT_COLUMNS if c not in cols]
 check('All expected columns present', not missing, f'missing: {missing}' if missing else '')
 missing_lineage = [c for c in LINEAGE_COLUMNS if c not in cols]

@@ -3,13 +3,13 @@
 **Updated:** 16 September 2026
 **Owner:** Elaheh
 **Requested by:** Dan and Dave
-**Status:** Two-view design approved by Dan and Cornelious. `ALERTS_HISTORY_V1` is live in `STORE_INSIGHT_DEV` as of 16 Sep 2026. DEV validation passed; API/UI acceptance and CRT rollout remain pending.
+**Status:** Two-view design approved by Dan and Cornelious. `ALERTS_HISTORY_V1` is live in both `STORE_INSIGHT_DEV` and `STORE_INSIGHT_DB` (CRT) as of 17 Sep 2026. PR #86 deployed to the CRT `RUN_ALERTS_PIPELINE` stored procedure on 17 Sep 2026. API/UI acceptance ongoing.
 
 ## Read this first
 
 Two production cards moved to In Progress disappeared the next day. Their workflow rows remained in `ALERT_ACTION_STATUS`, but `ALERTS_LATEST_V1` only exposed the latest pipeline output.
 
-The approved fix keeps the base table internal. The API reads current To Do cards from `ALERTS_LATEST_V1` and historical In Progress cards from a new `ALERTS_HISTORY_V1`. The pipeline suppresses resolved and already-active issues before it applies the three-card cap, so each store can still receive three eligible To Do cards.
+The approved fix keeps the base table internal. The API reads current To Do cards from `ALERTS_LATEST_V1` and historical In Progress cards from a new `ALERTS_HISTORY_V1` (a plain mirror of `ALERTS_PIPELINE`), joining `ALERT_ACTION_STATUS` itself to find workflow state. The pipeline suppresses resolved and already-active issues before it applies the three-card cap, so each store can still receive three eligible To Do cards.
 
 ## Agreed live-board behaviour
 
@@ -29,7 +29,7 @@ Dan approved these rules. Cornelious approved the two-view/API design and starte
 | Need | Object | State |
 |---|---|---|
 | Current To Do cards | `<DB>.PUBLIC.ALERTS_LATEST_V1` | Live |
-| Historical workflow cards | `<DB>.PUBLIC.ALERTS_HISTORY_V1` | Live in `STORE_INSIGHT_DEV`; CRT after API/UI acceptance |
+| Historical workflow cards | `<DB>.PUBLIC.ALERTS_HISTORY_V1` | Live in both `STORE_INSIGHT_DEV` and `STORE_INSIGHT_DB` (CRT) |
 | Workflow state | `<DB>.PUBLIC.ALERT_ACTION_STATUS` | Live |
 | Candidate and alert history storage | `<DB>.PUBLIC.ALERTS_PIPELINE` | Internal only |
 
@@ -40,7 +40,7 @@ Suppression must happen before top-three selection. Otherwise the API can remove
 For each run:
 
 1. Generate all current candidates.
-2. Add a stable `ISSUE_KEY` to each candidate.
+2. Add a stable `ISSUE_KEY` to each candidate inside `SIGNAL_JSON:issue_key`.
 3. Read the latest workflow state from `ALERT_ACTION_STATUS`.
 4. Find issues currently In Progress and under seven days old.
 5. Find issues resolved in the previous seven days.
@@ -59,9 +59,9 @@ No historical card is copied into the new pipeline run.
 For each store:
 
 1. Read current To Do cards from `ALERTS_LATEST_V1`. Do not add a date filter; the view already selects the latest `RUN_DATE`.
-2. Read cards from `ALERTS_HISTORY_V1` whose latest workflow status is `in_progress` and whose In Progress age is under seven days.
+2. Read cards from `ALERTS_HISTORY_V1` and join `ALERT_ACTION_STATUS` on `ACTION_ID = ALERT_ID`. Take the latest row per `ACTION_ID` and filter for `in_progress` status with age under seven days.
 3. Combine both sets.
-4. Do not show a current To Do card when its `ISSUE_KEY` is already represented by an In Progress card.
+4. Do not show a current To Do card when its stable issue key is already represented by an In Progress card. The stable key is `COALESCE(SIGNAL_JSON:issue_key, TO_JSON(SIGNAL_JSON:merge_key))`.
 5. Keep `completed`, `partial`, `couldnt_complete` and `expired` cards off the live board.
 6. Show `ANALYSIS_DATE` as the evidence date.
 
@@ -81,7 +81,7 @@ ALERT_ACTION_STATUS.ACTION_ID = ALERT_ID
 
 ### `ISSUE_KEY`
 
-Identifies the same business issue across runs and excludes analysis date.
+Identifies the same business issue across runs and excludes analysis date. It is stored inside `SIGNAL_JSON:issue_key` (not a top-level column). A `SIGNAL_JSON:merge_key` fallback exists for runs generated before `ISSUE_KEY` was introduced.
 
 | Signal kind | Identity fields |
 |---|---|
@@ -120,31 +120,12 @@ Do not rewrite old workflow rows merely to normalise spelling.
 
 ## `ALERTS_HISTORY_V1`
 
-The proposed view returns alert history joined to the latest workflow row for the same `ACTION_ID`.
+The view is a plain mirror of `ALERTS_PIPELINE`. It exposes all alert rows across every historical run, including the stable identity keys inside `SIGNAL_JSON`:
 
-It must expose at least:
+- `SIGNAL_JSON:issue_key` — for runs generated after `ISSUE_KEY` was introduced.
+- `SIGNAL_JSON:merge_key` — fallback stable identity for all runs.
 
-```text
-RUN_DATE
-ANALYSIS_DATE
-ALERT_ID
-ISSUE_KEY
-STORE_ID
-TYPE
-ISSUE
-RECOMMENDED_ACTION
-EXPLANATION
-SORT_VALUE
-WORKFLOW_STATUS
-WORKFLOW_OUTCOME
-ASSIGNEE_INITIALS
-WORKFLOW_NOTES
-WORKFLOW_UPDATED_AT
-```
-
-Rows without workflow state return `WORKFLOW_STATUS = todo`.
-
-The API may filter this view. It must not receive SELECT access to base `ALERTS_PIPELINE`.
+The API joins `ALERT_ACTION_STATUS` on `ACTION_ID = ALERT_ID` to obtain the latest workflow state for a historical alert. It must not receive `SELECT` access to base `ALERTS_PIPELINE`.
 
 ## Set reminder dependency
 
@@ -210,7 +191,8 @@ Do not invent source cards. Migrate or explicitly close these workflows before C
 - Daily row-copy code is removed.
 - Full tests, Ruff, diff and credential checks pass.
 - Read-only DEV shadow results account for missing and expiring workflows.
-- `ALERTS_HISTORY_V1` is validated in DEV.
+- `ALERTS_HISTORY_V1` is validated in both DEV and CRT.
+- Pipeline-side suppression runs before the three-card cap and `SIGNAL_JSON:issue_key` is populated on new runs.
 - Cornelious's API combines the two views correctly.
 - Imran confirms live-board and reminder behaviour.
-- CRT remains unchanged until separate approval.
+- CRT rollout approved by Dan and executed on 17 Sep 2026.
