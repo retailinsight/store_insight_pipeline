@@ -953,9 +953,7 @@ def _prompted_markdown_compliance(**overrides):
         'wow_change_pp': -16.4,
         'chain_compliance_rate': 81.7,
         'below_chain_pp': 20.2,
-        'median_response_minutes': 74.0,
-        'this_week_at_risk_value': 176.25,
-        'projected_cost': 176.25,
+        'projected_cost': 0.0,
         'workload': {
             'this_period_volume': 327,
             'prev_period_volume': 241,
@@ -986,14 +984,9 @@ def _prompted_markdown_compliance(**overrides):
 def test_prompted_markdown_compliance_workload_narrative_matches_example():
     out = generate(_prompted_markdown_compliance())
     _assert_card_keys(out)
-    assert 'Debenham' in out['issue']
-    assert '£176.25' in out['cost_if_not_fixed']
-    assert 'per week if not fixed' in out['cost_if_not_fixed']
-    assert 'up 36%' in out['recommended_action']
-    assert 'fallen 16pp' in out['recommended_action']
-    assert 'PRODUCE, CHILLED CONVENIENCE, IN-STORE BAKERY' in out['recommended_action']
-    assert '77.9%' in out['recommended_action']
-    assert '£176.25' in out['explanation'] or '£705.00' in out['explanation']
+    assert out['issue'] == 'Ensure the team are dedicating enough time to work the prompted alerts.'
+    assert 'Compliance has dropped from 77.9% to 61.5% in the last 7 days' in out['recommended_action']
+    assert 'alert volume rose above the weekly average' in out['recommended_action']
 
 
 def test_prompted_markdown_compliance_coaching_narrative():
@@ -1004,8 +997,7 @@ def test_prompted_markdown_compliance_coaching_narrative():
         this_week_compliance_rate=63.4,
         last_week_compliance_rate=78.6,
         wow_change_pp=-15.2,
-        this_week_at_risk_value=127.59,
-        projected_cost=127.59,
+        projected_cost=0.0,
         workload={
             'this_period_volume': 249,
             'prev_period_volume': 244,
@@ -1027,14 +1019,22 @@ def test_prompted_markdown_compliance_coaching_narrative():
                 {'dept': 'CHILLED CONVENIENCE', 'prompts': 52, 'actioned_on_time': 38, 'compliance_pct': 73.08},
                 {'dept': 'IN-STORE BAKERY', 'prompts': 41, 'actioned_on_time': 31, 'compliance_pct': 75.61},
             ],
+            'daily_performance_last_7d': [
+                {'day': 'Monday', 'checks_due': 40, 'actioned_on_time': 36, 'compliance_pct': 90.0},
+                {'day': 'Tuesday', 'checks_due': 38, 'actioned_on_time': 34, 'compliance_pct': 89.5},
+                {'day': 'Wednesday', 'checks_due': 36, 'actioned_on_time': 22, 'compliance_pct': 61.1},
+                {'day': 'Thursday', 'checks_due': 35, 'actioned_on_time': 30, 'compliance_pct': 85.7},
+                {'day': 'Friday', 'checks_due': 40, 'actioned_on_time': 14, 'compliance_pct': 35.0},
+                {'day': 'Saturday', 'checks_due': 34, 'actioned_on_time': 12, 'compliance_pct': 35.3},
+                {'day': 'Sunday', 'checks_due': 26, 'actioned_on_time': 10, 'compliance_pct': 38.5},
+            ],
         },
     )
     out = generate(signal)
     _assert_card_keys(out)
-    assert 'broadly unchanged' in out['recommended_action']
-    assert 'review the prompt response routine' in out['recommended_action']
-    assert 'PRODUCE, CHILLED CONVENIENCE, IN-STORE BAKERY' in out['recommended_action']
-    assert '78.6%' in out['recommended_action']
+    assert out['issue'] == 'Coach the team on the prompted markdown process, focusing on Friday and Saturday.'
+    assert 'Compliance has dropped from 78.6% to 63.4% in the last 7 days' in out['recommended_action']
+    assert 'alert volume rose' not in out['recommended_action']
 
 
 # ---------------------------------------------------------------------------

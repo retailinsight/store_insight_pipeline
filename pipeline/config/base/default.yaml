@@ -34,6 +34,7 @@ tables:
   wastage:             "{database}.{schema}.WASTAGE_V1"
   store_hierarchy:     "{database}.{schema}.STORE_HIERARCHY_V1"
   wmd_hierarchy:       "{database}.{schema}.WMD_HIERARCHY_V1"
+  prompted_compliance: "{database}.{schema}.PROMPTED_COMPLIANCE_V1"
 
 # ── Output tables ─────────────────────────────────────────────────────────────
 # {database} and {schema} are interpolated from the connection block above.

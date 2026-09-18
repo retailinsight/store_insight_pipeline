@@ -233,8 +233,6 @@ def test_prompted_markdown_compliance_wow_and_vs_chain_merge():
         'last_week_compliance_rate': 80.0,
         'chain_compliance_rate': 85.0,
         'below_chain_pp': 15.0,
-        'median_response_minutes': 74.0,
-        'this_week_at_risk_value': 100.0,
         'workload': {'volume_classification': 'STABLE'},
     }
     wow = make_prompted_markdown_compliance_signal(
@@ -249,4 +247,3 @@ def test_prompted_markdown_compliance_wow_and_vs_chain_merge():
     assert merged[0]['wow_change_pp'] == -10.0
     assert merged[0]['below_chain_pp'] == 15.0
     assert merged[0]['this_week_prompts_issued'] == 100
-    assert merged[0]['median_response_minutes'] == 74.0

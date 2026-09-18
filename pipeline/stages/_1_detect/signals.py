@@ -160,8 +160,6 @@ class PromptedMarkdownComplianceSignal(TypedDict):
     wow_change_pp: float | None
     chain_compliance_rate: float | None
     below_chain_pp: float | None
-    median_response_minutes: float | None
-    this_week_at_risk_value: float  # internal projected-cost basis
     workload: dict
 
 
@@ -179,8 +177,6 @@ class BigDropPromptedMarkdownComplianceSignal(TypedDict):
     drop_pp: float | None
     chain_compliance_rate: float | None
     below_chain_pp: float | None
-    median_response_minutes: float | None
-    this_day_at_risk_value: float
     workload: dict
 
 
@@ -870,8 +866,6 @@ def make_prompted_markdown_compliance_signal(
     wow_change_pp: float | None = None,
     chain_compliance_rate: float | None = None,
     below_chain_pp: float | None = None,
-    median_response_minutes: float | None = None,
-    this_week_at_risk_value: float = 0.0,
     workload: dict | None = None,
 ) -> PromptedMarkdownComplianceSignal:
     """
@@ -889,8 +883,6 @@ def make_prompted_markdown_compliance_signal(
     wow_change_pp                    : float | None — WoW change in percentage points
     chain_compliance_rate            : float | None — chain-wide on-time actioned % this week
     below_chain_pp                   : float | None — pp below chain average (positive = below)
-    median_response_minutes          : float | None — median response time this week in minutes
-    this_week_at_risk_value          : float — internal projected-cost basis (£ at risk this week)
     workload                         : dict | None — volume classification evidence
     """
     return {
@@ -906,8 +898,6 @@ def make_prompted_markdown_compliance_signal(
         'wow_change_pp':                       wow_change_pp,
         'chain_compliance_rate':               chain_compliance_rate,
         'below_chain_pp':                      below_chain_pp,
-        'median_response_minutes':             median_response_minutes,
-        'this_week_at_risk_value':             this_week_at_risk_value,
         'workload':                            workload or {},
     }
 
@@ -923,8 +913,6 @@ def make_big_drop_prompted_markdown_compliance_signal(
     drop_pp: float | None = None,
     chain_compliance_rate: float | None = None,
     below_chain_pp: float | None = None,
-    median_response_minutes: float | None = None,
-    this_day_at_risk_value: float = 0.0,
     workload: dict | None = None,
 ) -> BigDropPromptedMarkdownComplianceSignal:
     return {
@@ -940,8 +928,6 @@ def make_big_drop_prompted_markdown_compliance_signal(
         'drop_pp':                             drop_pp,
         'chain_compliance_rate':               chain_compliance_rate,
         'below_chain_pp':                      below_chain_pp,
-        'median_response_minutes':             median_response_minutes,
-        'this_day_at_risk_value':              this_day_at_risk_value,
         'workload':                            workload or {},
     }
 

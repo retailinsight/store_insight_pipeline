@@ -63,6 +63,7 @@ def enrich_signals(
     wastage=None,
     straight_to_bin=None,
     item_hierarchy=None,
+    prompted_compliance=None,
     cfg: dict = None,
 ):
     """
@@ -110,6 +111,7 @@ def enrich_signals(
         wastage=wastage,
         straight_to_bin=straight_to_bin,
         item_hierarchy=item_hierarchy,
+        prompted_compliance=prompted_compliance,
         last_week_start=last_week_start,
         last_week_end=last_week_end,
         this_week_start=this_week_start,

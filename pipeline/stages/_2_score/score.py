@@ -141,6 +141,13 @@ def score_all(
         else:
             signal['score'] = signal['projected_cost']
 
+        # Scorers may pin a fixed score via a FIXED_SCORE module constant —
+        # used when a signal type has no meaningful cost basis but must still
+        # rank (e.g. PROMPTED_MARKDOWN_COMPLIANCE).
+        fixed_score = getattr(scorer, 'FIXED_SCORE', None)
+        if fixed_score is not None:
+            signal['score'] = fixed_score
+
     print(f'[4_score] {len(signals)} signals scored')
 
 

@@ -54,20 +54,16 @@ def test_expiry_big_drop_emits_daily_signal_with_workload():
 def test_prompted_big_drop_emits_daily_signal_with_workload():
     rows = []
     for actioned in [True] * 9 + [False]:
-        rows.append({'DATE': '2026-09-09', 'STORE_ID': 1, 'SITE_NAME': 'Store 1',
-                     'DEPARTMENT_NAME': 'PRODUCE', 'ACTIONED_ON_TIME': actioned,
-                     'RESPONSE_MINUTES': 20.0, 'AT_RISK_VALUE': 0.0})
+        rows.append({'ALERT_DATE': '2026-09-09', 'STORE_ID': 1,
+                     'ITEM_HIERARCHY_2': 'PRODUCE', 'COMPLIANT': actioned})
     for actioned in [True] * 10 + [False] * 10:
-        rows.append({'DATE': '2026-09-10', 'STORE_ID': 1, 'SITE_NAME': 'Store 1',
-                     'DEPARTMENT_NAME': 'PRODUCE', 'ACTIONED_ON_TIME': actioned,
-                     'RESPONSE_MINUTES': 40.0, 'AT_RISK_VALUE': 5.0})
+        rows.append({'ALERT_DATE': '2026-09-10', 'STORE_ID': 1,
+                     'ITEM_HIERARCHY_2': 'PRODUCE', 'COMPLIANT': actioned})
     for actioned in [True] * 18 + [False] * 2:
-        rows.append({'DATE': '2026-09-10', 'STORE_ID': 2, 'SITE_NAME': 'Store 2',
-                     'DEPARTMENT_NAME': 'PRODUCE', 'ACTIONED_ON_TIME': actioned,
-                     'RESPONSE_MINUTES': 10.0, 'AT_RISK_VALUE': 0.0})
+        rows.append({'ALERT_DATE': '2026-09-10', 'STORE_ID': 2,
+                     'ITEM_HIERARCHY_2': 'PRODUCE', 'COMPLIANT': actioned})
     signals = prompted.detect(_FakeDF(rows), '2026-09-10')
     signal = signals[0]
     assert signal['signal_type'] == 'BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE'
     assert signal['drop_pp'] == 40.0
-    assert signal['this_day_at_risk_value'] == 100.0
     assert signal['workload']['volume_classification'] == 'INCREASING'

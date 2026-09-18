@@ -128,6 +128,23 @@ def load_feedback(session, last_week_start, this_week_end, cfg=None, capabilitie
     )
 
 
+def load_prompted_compliance(session, lookback_start, analysis_date, cfg=None, capabilities=None):
+    """
+    Load and cache prompted compliance data for the lookback window.
+
+    Returns None (without querying Snowflake) if ``capabilities`` is given
+    and doesn't include 'prompted_compliance'.
+    """
+    if capabilities is not None and "prompted_compliance" not in capabilities:
+        return None
+    return (
+        session.table(cfg.tables.prompted_compliance if cfg else "PROMPTED_COMPLIANCE_V1")
+        .filter(F.col("ALERT_DATE") >= lookback_start)
+        .filter(F.col("ALERT_DATE") <= analysis_date)
+        .cache_result()
+    )
+
+
 def load_osa(session, lookback_start, analysis_date, cfg=None):
     """
     Load and join OSA + item hierarchy data for the lookback window.
@@ -339,6 +356,12 @@ def run_single_date(
     _count_or_skip("Item hierarchy  rows", wmd["item_hierarchy"])
     _count_or_skip("Store hierarchy rows", wmd["store_hierarchy"])
 
+    print("[run_batch] Loading prompted compliance data...")
+    prompted_compliance = load_prompted_compliance(
+        session, w["lookback_start"], w["this_week_end"], cfg=cfg, capabilities=capabilities
+    )
+    _count_or_skip("Prompted compliance rows", prompted_compliance)
+
     pipeline_result = run_pipeline(
         osa,
         last_week_start=w["last_week_start"],
@@ -355,6 +378,7 @@ def run_single_date(
         wastage=wmd["wastage"],
         item_hierarchy=wmd["item_hierarchy"],
         store_hierarchy=wmd["store_hierarchy"],
+        prompted_compliance=prompted_compliance,
         cfg=cfg,
         return_intermediates=deterministic,
         run_id=run_id,

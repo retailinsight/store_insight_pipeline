@@ -60,6 +60,7 @@ PARAM_TO_CONTRACTS: dict[str, list[str]] = {
     'wastage':         ['wastage'],
     'item_hierarchy':  ['wmd_item_hierarchy'],
     'store_hierarchy': ['wmd_store_hierarchy'],
+    'prompted_compliance': ['prompted_compliance'],
 }
 
 

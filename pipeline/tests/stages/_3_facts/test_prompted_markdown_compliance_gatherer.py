@@ -27,34 +27,34 @@ def _fixture_rows():
         due = 8 - i
         for _ in range(due - 2):
             rows.append({
-                'DATE': d, 'STORE_ID': 1, 'SITE_NAME': 'Manningtree',
-                'DEPARTMENT_NAME': 'PRODUCE',
-                'ACTIONED_ON_TIME': False, 'RESPONSE_MINUTES': None, 'AT_RISK_VALUE': 1.0,
+                'ALERT_DATE': d, 'STORE_ID': 1,
+                'ITEM_HIERARCHY_2': 'PRODUCE',
+                'COMPLIANT': False,
             })
         for _ in range(2):
             rows.append({
-                'DATE': d, 'STORE_ID': 1, 'SITE_NAME': 'Manningtree',
-                'DEPARTMENT_NAME': 'PRODUCE',
-                'ACTIONED_ON_TIME': True, 'RESPONSE_MINUTES': 20.0, 'AT_RISK_VALUE': 0.0,
+                'ALERT_DATE': d, 'STORE_ID': 1,
+                'ITEM_HIERARCHY_2': 'PRODUCE',
+                'COMPLIANT': True,
             })
     # DAIRY: 6 per day, 1 actioned per day (worse than PRODUCE)
     for _i, d in enumerate(dates):
         for _ in range(5):
             rows.append({
-                'DATE': d, 'STORE_ID': 1, 'SITE_NAME': 'Manningtree',
-                'DEPARTMENT_NAME': 'DAIRY',
-                'ACTIONED_ON_TIME': False, 'RESPONSE_MINUTES': None, 'AT_RISK_VALUE': 2.0,
+                'ALERT_DATE': d, 'STORE_ID': 1,
+                'ITEM_HIERARCHY_2': 'DAIRY',
+                'COMPLIANT': False,
             })
         rows.append({
-            'DATE': d, 'STORE_ID': 1, 'SITE_NAME': 'Manningtree',
-            'DEPARTMENT_NAME': 'DAIRY',
-            'ACTIONED_ON_TIME': True, 'RESPONSE_MINUTES': 50.0, 'AT_RISK_VALUE': 0.0,
+            'ALERT_DATE': d, 'STORE_ID': 1,
+            'ITEM_HIERARCHY_2': 'DAIRY',
+            'COMPLIANT': True,
         })
     # Row outside the window to ensure filtering works
     rows.append({
-        'DATE': '2026-08-24', 'STORE_ID': 1, 'SITE_NAME': 'Manningtree',
-        'DEPARTMENT_NAME': 'PRODUCE',
-        'ACTIONED_ON_TIME': False, 'RESPONSE_MINUTES': None, 'AT_RISK_VALUE': 50.0,
+        'ALERT_DATE': '2026-08-24', 'STORE_ID': 1,
+        'ITEM_HIERARCHY_2': 'PRODUCE',
+        'COMPLIANT': False,
     })
     return rows
 

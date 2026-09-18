@@ -633,6 +633,7 @@ def run_pipeline(
     straight_to_bin=None,
     item_hierarchy=None,
     store_hierarchy=None,
+    prompted_compliance=None,
     config: DetectorConfig = None,
     cfg=None,
     return_intermediates: bool = False,
@@ -704,6 +705,7 @@ def run_pipeline(
         windows=windows,
         cfg=cfg,
         store_hierarchy=store_hierarchy,
+        prompted_compliance=prompted_compliance,
     )
 
     signals = detect_signals(
@@ -721,6 +723,7 @@ def run_pipeline(
         straight_to_bin=straight_to_bin,
         item_hierarchy=item_hierarchy,
         store_hierarchy=store_hierarchy,
+        prompted_compliance=prompted_compliance,
         config=det_cfg,
         cfg=cfg,
         gate_plan=gate_plan,
@@ -745,6 +748,7 @@ def run_pipeline(
         wastage=wastage,
         straight_to_bin=straight_to_bin,
         item_hierarchy=item_hierarchy,
+        prompted_compliance=prompted_compliance,
         config=det_cfg,
         cfg=cfg,
         return_intermediates=return_intermediates,
@@ -812,6 +816,7 @@ def run_pipeline_from_signals(
     wastage=None,
     straight_to_bin=None,
     item_hierarchy=None,
+    prompted_compliance=None,
     config: DetectorConfig = None,
     cfg=None,
     return_intermediates: bool = False,
@@ -978,6 +983,7 @@ def run_pipeline_from_signals(
         wastage=wastage,
         straight_to_bin=straight_to_bin,
         item_hierarchy=item_hierarchy,
+        prompted_compliance=prompted_compliance,
         cfg=cfg,
     )
 

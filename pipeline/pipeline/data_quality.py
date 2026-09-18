@@ -31,6 +31,9 @@ _REQUIRED_COLUMNS = {
     'wastage': [
         'STORE_ID', 'UPC', 'DATE', 'WASTE_QUANTITY', 'ORIGINAL_PRICE',
     ],
+    'prompted_compliance': [
+        'STORE_ID', 'UPC', 'ALERT_DATE', 'COMPLIANT', 'TOTAL_UNITS',
+    ],
 }
 
 # Columns that must be non-negative.
@@ -196,6 +199,7 @@ def validate_source_data(
     windows,
     cfg=None,
     store_hierarchy=None,
+    prompted_compliance=None,
 ):
     """
     Validate source data completeness before detection.
@@ -234,6 +238,7 @@ def validate_source_data(
     needs_wmd = bool(
         enabled & {'markdown_override', 'markdown_sellthrough', 'waste', 'markdown_sku'}
     ) or cfg is None
+    needs_prompted_compliance = 'prompted_compliance' in enabled or cfg is None
 
     expected_stores = _expected_stores(store_hierarchy)
 
@@ -285,6 +290,19 @@ def validate_source_data(
                 )
             _check_negative_values(
                 df, _NON_NEGATIVE_COLUMNS.get(key, []), key, issues,
+            )
+
+    # Prompted compliance data is required when a prompted_compliance detector runs.
+    if needs_prompted_compliance:
+        _check_non_empty(prompted_compliance, 'prompted_compliance', issues)
+        _check_required_columns(
+            prompted_compliance, _REQUIRED_COLUMNS['prompted_compliance'], 'prompted_compliance', issues,
+        )
+        if not gate_enabled:
+            _check_date_coverage(
+                prompted_compliance, 'ALERT_DATE',
+                windows['lookback_start'], windows['this_week_end'],
+                'prompted_compliance', issues,
             )
 
     if issues:
