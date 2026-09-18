@@ -1,15 +1,22 @@
 import inspect
 import zipfile
 
+import pytest
+
 from store_insight.pipeline.config.loader import load_config
-from store_insight.pipeline.deploy import deploy
-from store_insight.pipeline.deploy.handler import _prepare_runtime, run
+from store_insight.pipeline.deploy import deploy, handler
+from store_insight.pipeline.deploy.handler import (
+    _assert_output_in_session_database,
+    _prepare_runtime,
+    run,
+)
 from store_insight.pipeline.pipeline import run_batch
 
 
 class FakeSession:
-    def __init__(self):
+    def __init__(self, database="STORE_INSIGHT_DB"):
         self.statements = []
+        self._database = database
 
     def sql(self, statement):
         self.statements.append(statement)
@@ -17,6 +24,53 @@ class FakeSession:
 
     def collect(self):
         return []
+
+    def get_current_database(self):
+        return f'"{self._database}"'
+
+
+@pytest.mark.parametrize("session_db, output_table", [
+    ("STORE_INSIGHT_DB", "STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE"),
+    ("STORE_INSIGHT_DEV", "STORE_INSIGHT_DEV.PUBLIC.ALERTS_PIPELINE"),
+    ("STORE_INSIGHT_DEV", '"store_insight_dev".PUBLIC.ALERTS_PIPELINE'),
+])
+def test_environment_guard_allows_output_in_session_database(session_db, output_table):
+    _assert_output_in_session_database(FakeSession(session_db), output_table)
+
+
+def test_environment_guard_refuses_dev_procedure_writing_crt():
+    # Regression for the 16 Sep 2026 routing: a DEV procedure loading the EoE
+    # config (connection.database: STORE_INSIGHT_DB) must not write CRT even
+    # though the scheduled path sets trusted_scheduled_write=True.
+    with pytest.raises(PermissionError, match="STORE_INSIGHT_DEV.*STORE_INSIGHT_DB"):
+        _assert_output_in_session_database(
+            FakeSession("STORE_INSIGHT_DEV"), "STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE"
+        )
+
+
+def test_environment_guard_refuses_unqualified_output():
+    with pytest.raises(ValueError, match="not fully qualified"):
+        _assert_output_in_session_database(FakeSession(), "ALERTS_PIPELINE")
+
+
+def test_handler_environment_guard_runs_before_any_read_or_write(monkeypatch):
+    calls = []
+    cfg = load_config("eastofengland")  # output -> STORE_INSIGHT_DB
+    monkeypatch.setattr(handler, "_prepare_runtime", lambda: None)
+    monkeypatch.setattr("store_insight.pipeline.config.loader.load_config", lambda client: cfg)
+    monkeypatch.setattr(
+        "store_insight.pipeline.stages._0_quality.quality_gate.run_quality_gate",
+        lambda *a, **k: calls.append("run_quality_gate"),
+    )
+    for name in ("load_osa", "load_feedback", "load_wmd", "write_alerts_with_queue"):
+        monkeypatch.setattr(run_batch, name, lambda *a, _n=name, **k: calls.append(_n))
+
+    session = FakeSession("STORE_INSIGHT_DEV")
+    with pytest.raises(PermissionError, match="Refusing run"):
+        run(session, client="eastofengland", analysis_date="2026-09-18")
+
+    assert calls == []
+    assert session.statements == []  # not even the existing-run SELECT was issued
 
 
 def _set_env(monkeypatch):
@@ -53,6 +107,8 @@ def test_daily_handler_runs_quality_gate_and_passes_plan():
     assert "run_quality_gate(" in source
     assert "trusted_scheduled_write=True" in source
     assert "gate_plan=gate_plan" in source
+    # Environment guard must precede the first Snowflake read.
+    assert source.index("_assert_output_in_session_database(") < source.index("session.sql(")
 
 
 def test_daily_handler_routes_writes_through_queue_wrapper():

@@ -115,6 +115,14 @@ Development and scheduled production targets must be explicit. Do not change the
 
 A mismatch between declared environment and fully qualified target must fail closed.
 
+### Scheduled procedure environment guard
+
+The trusted scheduled path proves who is writing (the stored procedure), not where it runs. Because the packaged client configuration pins `connection.database: STORE_INSIGHT_DB`, a procedure deployed to `STORE_INSIGHT_DEV` would otherwise resolve its output to CRT and write it with the trusted flag — the same routing as the 16 September incident.
+
+The handler must therefore compare the database of the resolved output table with the procedure's current session database before the first Snowflake read. If they differ, the run stops with a clear message and nothing is read or written. A CRT procedure running in `STORE_INSIGHT_DB` is unaffected.
+
+Consequence: DEV alert runs through the stored procedure require the DEV deployment to route output to `STORE_INSIGHT_DEV`. Until that is agreed, DEV test runs use `run_batch.py --target-table` against a DEV table.
+
 ## Phase 2 — Snowflake permissions
 
 Code controls are defense in depth. Snowflake permissions are the permanent boundary.
