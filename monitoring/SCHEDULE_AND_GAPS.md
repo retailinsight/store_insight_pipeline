@@ -6,7 +6,7 @@
 |---|---|---|---|---|---|
 | **06:00** | Smart Action pipeline | `RUN_ALERTS_PIPELINE_TASK` | SUSPENDED | STARTED | Produces alerts and actions. Uses D-2 source data at this time. |
 | **~06:30** | KPI batch | `KPI_AVAILABILITY_BATCH_TASK` | SUSPENDED | STARTED | Chained to run after the 06:00 pipeline. |
-| **07:00** | Monitoring and Slack warnings | `MONITORING_TASK` | SUSPENDED | STARTED | Posts to `#store-insight-pilot-alerts` only on WARN/FAIL/UNKNOWN or recovery. |
+| **07:00** | Monitoring and Slack status | `MONITORING_TASK` | SUSPENDED | STARTED | Posts one daily status to `#store-insight-pilot-alerts`: all-green, problem details, and any recoveries. |
 | **11:30** | Source-volume check | `SOURCE_VOLUME_CHECK_TASK` | SUSPENDED | STARTED | Log-only check after feeds have landed; writes `DATA_QUALITY_LOG`. |
 | **11:45** | KPI refresh | `KPI_AVAILABILITY_REFRESH_TASK` | SUSPENDED | STARTED | Separate KPI run to pick up freshly landed data. |
 

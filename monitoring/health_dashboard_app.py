@@ -247,30 +247,43 @@ else:
     st.dataframe(incidents.reset_index(drop=True), use_container_width=True)
 
 # ── Reference documents ──────────────────────────────────────────────────────
-with st.expander("Reference documents"):
-    st.write("Click a file to open it in a new tab; right-click → Save as to download.")
+with st.expander("Essential guides and reference documents"):
+    st.write("Start with the essential guides. Technical documents are included for deeper investigation.")
     try:
         rows = session.sql(f"LIST @{STAGE}").collect()
     except Exception as e:
         st.error(f"Could not list documents: {e}")
         rows = []
+    available = {Path(str(row[0])).name for row in rows}
+    documents = {
+        "Essential guides": [
+            ("CHANNEL_GUIDE.md", "How to read alerts, status words, ownership and urgency."),
+            ("PILOT_MONITORING_ONE_PAGER.md", "The current monitoring and support model at a glance."),
+            ("RUNBOOK.md", "Safe validation and response steps for each C-code."),
+            ("SCHEDULE_AND_GAPS.md", "Daily task schedule, rerun process and unresolved ownership gaps."),
+        ],
+        "Technical reference": [
+            ("prd-pilot-monitoring-and-stability.md", "Full monitoring design, decisions and acceptance criteria."),
+            ("RISK_VALIDATION.md", "Detailed validation evidence and incident history."),
+        ],
+    }
     if not rows:
         st.info("No documents in the stage yet.")
     else:
-        for row in rows:
-            # First column of LIST is the file path (name, size, md5, last_modified)
-            path = str(row[0])
-            name = Path(path).name
-            if not name.endswith(".md") or name == "health_dashboard_app.md":
-                continue
-            try:
-                url_row = session.sql(
-                    f"SELECT GET_PRESIGNED_URL('@{STAGE}', '{name}')"
-                ).collect()
-                url = url_row[0][0]
-                st.markdown(f"- [{name}]({url})")
-            except Exception as e:
-                st.write(f"{name} — link unavailable ({e})")
+        for heading, items in documents.items():
+            st.markdown(f"**{heading}**")
+            for name, description in items:
+                if name not in available:
+                    st.write(f"{name} — not currently available")
+                    continue
+                try:
+                    url_row = session.sql(
+                        f"SELECT GET_PRESIGNED_URL('@{STAGE}', '{name}')"
+                    ).collect()
+                    url = url_row[0][0]
+                    st.markdown(f"- [{name}]({url}) — {description}")
+                except Exception as e:
+                    st.write(f"{name} — link unavailable ({e})")
 
 st.markdown("---")
 

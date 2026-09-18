@@ -1,8 +1,8 @@
 # #store-insight-pilot-alerts — Pinned guide
 
 ## What this channel is for
-This channel is the pilot's early-warning system. It posts automatically every morning: a green "all healthy" note when everything is fine, a warning block when a daily check finds something wrong, and a recovery note when a previous problem has cleared. 
-**No message at all means the monitor itself did not run** — tell Elaheh.
+This channel is the pilot's early-warning system. It posts automatically every morning: a green "all healthy" note when everything is fine, a warning block when a daily check finds something wrong, and a recovery note when a previous problem has cleared.
+**No morning message means the monitor itself may not have run** — check the live dashboard and tell Elaheh.
 
 ## How to read a post
 A post has three parts:
@@ -17,7 +17,7 @@ Each post ends with a link back to this pinned guide.
 
 | Status | Colour | What it means for the pilot |
 |---|---|---|
-| **OK / PASS** | green | All good. No message is sent. |
+| **OK / PASS** | green | All good. The daily post says all checks are healthy. |
 | **WARN** | amber | Something is not quite right but stores are not misled. The owner investigates the same day. |
 | **FAIL** | red | Stores could see wrong, missing or stale data. The owner acts straight away. Escalate if not fixed in the working day. |
 | **UNKNOWN** | grey | We could not run the check or had no data. Treat like a warning and check again. |
@@ -27,13 +27,13 @@ Each post ends with a link back to this pinned guide.
 
 | C-code | What it checks | Where the data comes from | What stores may see | Who to tell |
 |---|---|---|---|---|
-| **C1** | Source feeds (OSA, feedback, markdown, wastage) | `DATA_QUALITY_LOG` | Too few smart actions for some alert types, or a type is missing. | Feed-load owner — **to be named by Dan** |
+| **C1** | Source feeds (OSA, feedback, markdown, wastage) | `DATA_QUALITY_LOG` | The post names the dropped source, current/baseline volume and source-specific impact. A feedback-only warning does not mean current OSA actions are affected. | Elaheh / source owner |
 | **C2** | The 06:00 alerts task | `TASK_HISTORY` for `RUN_ALERTS_PIPELINE_TASK` | No new smart actions today. | Dan |
 | **C3** | Whether alerts were written | `ALERTS_PIPELINE` row count for the run date | Stores get no new smart actions. | Dan |
-| **C4** | Number and mix of alerts | `ALERTS_PIPELINE` count and `TYPE` distribution | Too few, too many, or only one type of alert. | Dan / Bryan |
+| **C4** | Number and mix of enabled alerts | `ALERTS_PIPELINE` count and `TYPE` distribution | Too few, too many, or one enabled type exceeds 90%. Disabled Waste families are excluded. | Dan / Bryan |
 | **C5** | The KPI batch task | `TASK_HISTORY` for `KPI_AVAILABILITY_BATCH_TASK` | KPI tiles in the app are stale. | Elaheh |
 | **C6** | KPI tables are fresh and complete | `KPI_AVAILABILITY_SUMMARY` output rows/columns | Empty or missing KPI tiles. | Elaheh |
-| **C7** | Data quality gate | `DATA_QUALITY_LOG` gate actions | Fewer or weaker alerts because the gate skipped detectors. | Dan |
+| **C7** | Data quality gate | `DATA_QUALITY_LOG` gate actions | Fewer alerts because the gate actually skipped detectors. `FLAGGED` alone is reported by C1 and does not create a second warning. | Dan |
 | **C8** | .NET API liveness | External probe on the .NET health endpoint | The app is unavailable. | Cornelious / DevOps |
 | **C9** | The monitor itself | `MONITORING_LOG` / `MONITORING_RUN` | We would not know if other checks broke. | Elaheh |
 

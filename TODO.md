@@ -977,6 +977,7 @@ on small feature branches off the merged `main` — no more stacking on the inte
 - [x] Added a dashboard source-feed table showing source data date, status, current-versus-baseline volume, gate action, and source-specific impact.
 - [x] Monitoring verification passed: 35/35 tests; monitor and dashboard modules compile.
 - [x] Redeployed the CRT monitoring procedure/task and Streamlit dashboard. Supervised run `MON_2026-09-18_c0151fa8` sent one clear C1 warning; C7 is now OK (`FLAGGED` but no detectors skipped). `MONITORING_TASK` remains started at 07:00 Europe/London and `PILOT_HEALTH_DASHBOARD` is live.
+- [x] Curated dashboard documents into **Essential guides** (`CHANNEL_GUIDE`, one-pager, `RUNBOOK`, schedule/gaps) and **Technical reference** (full PRD, `RISK_VALIDATION`), with a plain-English description for each. Updated the four essential guides for daily all-green posts, source-specific C1, non-duplicative C7, C4’s 90% threshold and disabled-type exclusions.
 
 ## 2026-09-18 — `OSA_BIG_DROP` heatmap window bug
 
