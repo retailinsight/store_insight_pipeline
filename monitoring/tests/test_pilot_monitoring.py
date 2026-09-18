@@ -110,14 +110,39 @@ def test_quality_failed_source_is_fail():
 
 
 def test_quality_suspect_source_is_warn():
-    rows = [{'SOURCE_NAME': 'wastage', 'STATUS': 'SUSPECT'}]
-    status, _ = pm.classify_quality_log(rows)
+    rows = [{
+        'SOURCE_NAME': 'feedback', 'STATUS': 'SUSPECT',
+        'ROW_COUNT': 1210, 'BASELINE_ROWS': 1724, 'ACTION_TAKEN': 'FLAGGED',
+    }]
+    status, details = pm.classify_quality_log(rows)
     assert status == 'WARN'
+    assert '1,210 rows vs 1,724 baseline' in details
+    assert '70.2% of baseline' in details
+    assert 'current OSA actions are unaffected' in details
 
 
 def test_quality_no_rows_is_unknown():
     status, _ = pm.classify_quality_log([])
     assert status == 'UNKNOWN'
+
+
+def test_c7_flagged_without_skips_is_ok():
+    result = pm.check_c7_gate_result(
+        lambda _sql: [{'ACTION_TAKEN': 'NONE', 'N': 4},
+                      {'ACTION_TAKEN': 'FLAGGED', 'N': 1}],
+        'DB', datetime.date(2026, 9, 18),
+    )
+    assert result['status'] == 'OK'
+    assert 'skipped no detectors' in result['details']
+
+
+def test_c7_detector_skip_is_fail():
+    result = pm.check_c7_gate_result(
+        lambda _sql: [{'ACTION_TAKEN': 'DETECTORS_SKIPPED', 'N': 1}],
+        'DB', datetime.date(2026, 9, 18),
+    )
+    assert result['status'] == 'FAIL'
+    assert 'intervened' in result['details']
 
 
 def _c6_runner(contract_rows=121, stores=121, tod_entries=847, missing_dates=0):

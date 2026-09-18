@@ -48,7 +48,7 @@ KPI_MIN_COLUMNS = 38      # C6: expected column count
 SLACK_INTEGRATION = 'SLACK__STORE_INSIGHT_NOTIFICATIONS'
 
 OWNERS = {
-    'C1': '',
+    'C1': 'Elaheh / source owner',
     'C2': 'Dan',
     'C3': 'Dan',
     'C4': 'Dan / Bryan',
@@ -75,8 +75,8 @@ CHECK_DESCRIPTIONS = {
         'description': ('Checks the five source feeds (OSA, feedback, markdown log, '
                        'markdown sales, wastage) are fresh and have healthy row counts.'),
         'part': 'source feeds',
-        'impact': ('Stores may see fewer smart actions, or some alert types may be missing, '
-                   'if a feed is short or stale. The gate may skip detectors.'),
+        'impact': ('The named source detail below says which output may be affected. '
+                   'A feedback-only warning does not reduce current OSA actions.'),
         'first_response': ('Check DATA_QUALITY_LOG for today. Probe MAX(DATE) on the named source view. '
                            'If the feed is genuinely short, chase the feed-load owner. '
                            'If data has since landed, rerun the pipeline with overwrite.'),
@@ -453,17 +453,48 @@ def check_c6_kpi_output(runner, data_db, business_date):
                    {}, details, business_date)
 
 
+SOURCE_IMPACTS = {
+    'osa': 'Availability actions may be missing or incomplete.',
+    'feedback': 'Feedback analysis may be incomplete; current OSA actions are unaffected.',
+    'markdown_log': 'Markdown compliance output may be incomplete.',
+    'markdown_sales': 'Markdown sales output may be incomplete.',
+    'wastage': 'Waste-related output may be incomplete.',
+}
+
+
+def _source_quality_detail(row: dict) -> str:
+    source = str(row['SOURCE_NAME'])
+    status = str(row['STATUS']).upper()
+    current = row.get('ROW_COUNT')
+    baseline = row.get('BASELINE_ROWS')
+    action = row.get('ACTION_TAKEN')
+    volume = ''
+    if current is not None and baseline not in (None, 0):
+        current = int(current)
+        baseline = float(baseline)
+        pct = current / baseline
+        volume = (
+            f': {current:,} rows vs {baseline:,.0f} baseline '
+            f'({pct:.1%} of baseline, {(1 - pct):.1%} lower)'
+        )
+    elif current is not None:
+        volume = f': {int(current):,} rows; no usable baseline'
+    impact = SOURCE_IMPACTS.get(source, 'Output depending on this source may be incomplete.')
+    action_text = f'; gate action={action}' if action else ''
+    return f'{source} {status}{volume}{action_text}; impact: {impact}'
+
+
 def classify_quality_log(rows: list[dict]) -> tuple[str, str]:
     """Worst-status classification of today's DATA_QUALITY_LOG rows (C1)."""
     if not rows:
         return 'UNKNOWN', 'no DATA_QUALITY_LOG rows for today'
     statuses = {str(r['STATUS']).upper() for r in rows}
-    bad = [f"{r['SOURCE_NAME']}={r['STATUS']}" for r in rows
+    bad = [_source_quality_detail(r) for r in rows
            if str(r['STATUS']).upper() != 'OK']
     if 'FAILED' in statuses:
-        return 'FAIL', 'source(s) FAILED: ' + ', '.join(bad)
+        return 'FAIL', 'source failed — ' + ' | '.join(bad)
     if 'SUSPECT' in statuses or 'UNKNOWN' in statuses:
-        return 'WARN', 'source(s) degraded: ' + ', '.join(bad)
+        return 'WARN', 'source degraded — ' + ' | '.join(bad)
     return 'OK', f'{len(rows)} source-day rows, all OK'
 
 
@@ -493,7 +524,7 @@ def check_c7_gate_result(runner, data_db, business_date):
         status = 'FAIL'
         details = f'gate intervened: {actions}'
     elif any('FLAG' in a.upper() for a in actions):
-        status, details = 'WARN', f'gate flagged signals: {actions}'
+        status, details = 'OK', f'gate flagged suspect-source signals but skipped no detectors: {actions}'
     else:
         status, details = 'OK', f'gate/check actions: {actions}'
     return _result('C7', status, {'actions': actions},

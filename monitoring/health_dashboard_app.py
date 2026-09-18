@@ -100,6 +100,40 @@ else:
             f"Escalate to Dave if not fixed today."
         )
 
+st.markdown("---")
+st.subheader("Source feed detail")
+source_health = session.sql(f"""
+    SELECT SOURCE_NAME, CHECK_DATE, ROW_COUNT, BASELINE_ROWS, STATUS, ACTION_TAKEN
+    FROM {DB}.PUBLIC.DATA_QUALITY_LOG
+    WHERE RUN_DATE = (SELECT MAX(RUN_DATE) FROM {DB}.PUBLIC.DATA_QUALITY_LOG)
+    ORDER BY SOURCE_NAME
+""").to_pandas()
+if source_health.empty:
+    st.info("No source-quality rows for the latest run date.")
+else:
+    source_health["Current vs baseline"] = source_health.apply(
+        lambda r: (
+            f"{int(r['ROW_COUNT']):,} vs {float(r['BASELINE_ROWS']):,.0f} "
+            f"({float(r['ROW_COUNT']) / float(r['BASELINE_ROWS']):.1%})"
+            if pd.notna(r["ROW_COUNT"]) and pd.notna(r["BASELINE_ROWS"])
+            and float(r["BASELINE_ROWS"]) > 0
+            else f"{int(r['ROW_COUNT']):,}" if pd.notna(r["ROW_COUNT"]) else "No count"
+        ), axis=1)
+    source_health["Impact"] = source_health["SOURCE_NAME"].map({
+        "osa": "Availability actions may be missing or incomplete.",
+        "feedback": "Feedback analysis may be incomplete; current OSA actions are unaffected.",
+        "markdown_log": "Markdown compliance output may be incomplete.",
+        "markdown_sales": "Markdown sales output may be incomplete.",
+        "wastage": "Waste-related output may be incomplete.",
+    }).fillna("Output depending on this source may be incomplete.")
+    source_health = source_health.rename(columns={
+        "SOURCE_NAME": "Source", "CHECK_DATE": "Source data date",
+        "STATUS": "Status", "ACTION_TAKEN": "Gate action",
+    })
+    st.dataframe(source_health[["Source", "Source data date", "Status",
+                                "Current vs baseline", "Gate action", "Impact"]],
+                 use_container_width=True)
+
 # ── Health check table (plain English) ───────────────────────────────────────
 st.subheader("Today's health checks")
 display = health.copy()
