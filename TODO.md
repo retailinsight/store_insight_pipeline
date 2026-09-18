@@ -987,7 +987,7 @@ on small feature branches off the merged `main` — no more stacking on the inte
 - [x] Confirmed pipeline order already matches the PRD: workflow suppression runs before `top_n_per_store: 3`. `ALERTS_LATEST_V1` contains only the selected three cards, not a live reserve pool.
 - [x] Dan confirmed at 12:01 that store 239 had moved all three cards that morning and instructed: "Fair enough, don't change anything." Keep the existing rule: up to three fresh eligible To Do cards per daily run; do not add continuous same-day replenishment.
 - [x] No pipeline, API, UI, PRD or contract change required for this report.
-- [ ] **Source-control alignment:** deployed follow-up commits `c3b6dd2`, `fcc59c6`, `bda27c0`, and `ff56104` are on `sync/pipeline-osa-refactor` but not yet in `main`; `origin/main` has moved ahead by two commits. Merge current `origin/main` into the branch, resolve/verify, then open a new PR. Do not assume the already-merged PR #87 includes later pushes.
+- [x] **Source-control alignment:** deployed follow-up commits `c3b6dd2`, `fcc59c6`, `bda27c0`, and `ff56104` merged to `main` through PR #89 (`220d4f4`).
 - [ ] **API contract alignment:** contract commits `ddd11da`, `df2f95d`, `fb8c22f`, and `3166814` remain on `fix/dev-reclone-after-rebuild`; API `origin/main` has moved ahead by three commits. Refresh the branch and open/merge a focused documentation PR.
 
 ## 2026-09-18 — Clearer source-quality monitoring (Dan approved)

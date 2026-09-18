@@ -278,6 +278,16 @@ def main():
         help="Warehouse for the Task (overrides config; default from config or SNOWFLAKE_WAREHOUSE)",
     )
     parser.add_argument(
+        "--database",
+        default=None,
+        help="Target database (overrides client config and SNOWFLAKE_DATABASE)",
+    )
+    parser.add_argument(
+        "--schema",
+        default=None,
+        help="Target schema (overrides client config and SNOWFLAKE_SCHEMA)",
+    )
+    parser.add_argument(
         "--stage",
         default=None,
         help="Fully-qualified stage name (default: <DB>.<SCHEMA>.ALERTS_PIPELINE_STAGE)",
@@ -297,8 +307,10 @@ def main():
     conn = cfg.connection
     schedule = cfg.schedule
     warehouse = args.warehouse or conn.warehouse or os.environ["SNOWFLAKE_WAREHOUSE"]
-    db = conn.database or os.environ["SNOWFLAKE_DATABASE"]
-    schema = conn.schema_name or os.environ["SNOWFLAKE_SCHEMA"]
+    db = args.database or conn.database or os.environ["SNOWFLAKE_DATABASE"]
+    schema = args.schema or conn.schema_name or os.environ["SNOWFLAKE_SCHEMA"]
+    os.environ["SNOWFLAKE_DATABASE"] = db
+    os.environ["SNOWFLAKE_SCHEMA"] = schema
     cron = args.cron or schedule.cron or "0 6 * * *"
     tz = args.tz or schedule.timezone or "Europe/London"
     stage = args.stage or f"{db}.{schema}.ALERTS_PIPELINE_STAGE"
