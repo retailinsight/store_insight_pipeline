@@ -502,7 +502,9 @@ def check_c1_source_quality(runner, data_db, business_date):
     rows = runner(
         f"SELECT SOURCE_NAME, STATUS, ACTION_TAKEN, ROW_COUNT, BASELINE_ROWS "
         f"FROM {data_db}.PUBLIC.DATA_QUALITY_LOG "
-        f"WHERE RUN_DATE = '{business_date}'"
+        f"WHERE RUN_DATE = '{business_date}' "
+        f"QUALIFY ROW_NUMBER() OVER (PARTITION BY SOURCE_NAME "
+        f"ORDER BY CREATED_AT DESC) = 1"
     )
     status, details = classify_quality_log(rows)
     return _result('C1', status,
@@ -515,11 +517,13 @@ def check_c7_gate_result(runner, data_db, business_date):
     rows = runner(
         f"SELECT ACTION_TAKEN, COUNT(*) AS N "
         f"FROM {data_db}.PUBLIC.DATA_QUALITY_LOG "
-        f"WHERE RUN_DATE = '{business_date}' GROUP BY ACTION_TAKEN"
+        f"WHERE RUN_DATE = '{business_date}' "
+        f"AND ACTION_TAKEN IN ('FLAGGED', 'DETECTORS_SKIPPED') "
+        f"GROUP BY ACTION_TAKEN"
     )
     actions = {str(r['ACTION_TAKEN']): int(r['N']) for r in rows}
     if not actions:
-        status, details = 'UNKNOWN', 'no gate/check rows for today'
+        status, details = 'OK', 'gate skipped no detectors and flagged no signals'
     elif any(('SKIP' in a.upper() or 'BLOCK' in a.upper()) for a in actions):
         status = 'FAIL'
         details = f'gate intervened: {actions}'

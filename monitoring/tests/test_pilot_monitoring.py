@@ -126,6 +126,23 @@ def test_quality_no_rows_is_unknown():
     assert status == 'UNKNOWN'
 
 
+def test_c1_queries_only_latest_row_per_source():
+    calls = []
+
+    def runner(sql):
+        calls.append(sql)
+        return [{
+            'SOURCE_NAME': 'feedback', 'STATUS': 'OK', 'ACTION_TAKEN': 'NONE',
+            'ROW_COUNT': 1272, 'BASELINE_ROWS': 1411.5,
+        }]
+
+    result = pm.check_c1_source_quality(runner, 'DB', datetime.date(2026, 9, 18))
+    assert result['status'] == 'OK'
+    assert 'PARTITION BY SOURCE_NAME' in calls[0]
+    assert 'ORDER BY CREATED_AT DESC' in calls[0]
+    assert 'QUALIFY ROW_NUMBER()' in calls[0]
+
+
 def test_c7_flagged_without_skips_is_ok():
     result = pm.check_c7_gate_result(
         lambda _sql: [{'ACTION_TAKEN': 'NONE', 'N': 4},

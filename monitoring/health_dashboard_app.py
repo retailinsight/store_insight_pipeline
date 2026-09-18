@@ -106,6 +106,9 @@ source_health = session.sql(f"""
     SELECT SOURCE_NAME, CHECK_DATE, ROW_COUNT, BASELINE_ROWS, STATUS, ACTION_TAKEN
     FROM {DB}.PUBLIC.DATA_QUALITY_LOG
     WHERE RUN_DATE = (SELECT MAX(RUN_DATE) FROM {DB}.PUBLIC.DATA_QUALITY_LOG)
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY SOURCE_NAME ORDER BY CREATED_AT DESC
+    ) = 1
     ORDER BY SOURCE_NAME
 """).to_pandas()
 if source_health.empty:
@@ -309,6 +312,9 @@ with st.expander("Source and gate details (C1 / C7)"):
                ROW_COUNT, BASELINE_ROWS
         FROM {DB}.PUBLIC.DATA_QUALITY_LOG
         WHERE RUN_DATE = (SELECT MAX(RUN_DATE) FROM {DB}.PUBLIC.DATA_QUALITY_LOG)
+        QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY SOURCE_NAME ORDER BY CREATED_AT DESC
+        ) = 1
         ORDER BY SOURCE_NAME
     """).to_pandas()
     if dq.empty:

@@ -27,7 +27,7 @@ Each post ends with a link back to this pinned guide.
 
 | C-code | What it checks | Where the data comes from | What stores may see | Who to tell |
 |---|---|---|---|---|
-| **C1** | Source feeds (OSA, feedback, markdown, wastage) | `DATA_QUALITY_LOG` | The post names the dropped source, current/baseline volume and source-specific impact. A feedback-only warning does not mean current OSA actions are affected. | Elaheh / source owner |
+| **C1** | Current source feeds (OSA, feedback, markdown, wastage) | Latest `DATA_QUALITY_LOG` row per source for today | The post names the dropped source, current/baseline volume and source-specific impact. A recovered source is healthy even if an earlier check warned. | Elaheh / source owner |
 | **C2** | The 06:00 alerts task | `TASK_HISTORY` for `RUN_ALERTS_PIPELINE_TASK` | No new smart actions today. | Dan |
 | **C3** | Whether alerts were written | `ALERTS_PIPELINE` row count for the run date | Stores get no new smart actions. | Dan |
 | **C4** | Number and mix of enabled alerts | `ALERTS_PIPELINE` count and `TYPE` distribution | Too few, too many, or one enabled type exceeds 90%. Disabled Waste families are excluded. | Dan / Bryan |

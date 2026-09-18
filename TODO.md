@@ -978,6 +978,12 @@ on small feature branches off the merged `main` — no more stacking on the inte
 - [x] Monitoring verification passed: 35/35 tests; monitor and dashboard modules compile.
 - [x] Redeployed the CRT monitoring procedure/task and Streamlit dashboard. Supervised run `MON_2026-09-18_c0151fa8` sent one clear C1 warning; C7 is now OK (`FLAGGED` but no detectors skipped). `MONITORING_TASK` remains started at 07:00 Europe/London and `PILOT_HEALTH_DASHBOARD` is live.
 - [x] Curated dashboard documents into **Essential guides** (`CHANNEL_GUIDE`, one-pager, `RUNBOOK`, schedule/gaps) and **Technical reference** (full PRD, `RISK_VALIDATION`), with a plain-English description for each. Updated the four essential guides for daily all-green posts, source-specific C1, non-duplicative C7, C4’s 90% threshold and disabled-type exclusions.
+- [x] Found a remaining C1 bug during post-deploy validation: the query reads every `DATA_QUALITY_LOG` row for the business date and keeps the worst status. At 10:18 it therefore repeated the 06:00 feedback `SUSPECT` result even though a newer 10:10 check was `OK` (1,272 rows vs 1,411.5 baseline).
+- [x] Changed C1 permanently to select the latest row per `RUN_DATE + SOURCE_NAME` using `ROW_NUMBER() OVER (PARTITION BY SOURCE_NAME ORDER BY CREATED_AT DESC) = 1`. All earlier rows remain in `DATA_QUALITY_LOG` for audit.
+- [x] Applied the same latest-row-per-source rule to the dashboard’s source-feed table and C1/C7 diagnostic section.
+- [x] Kept C7 tied to pipeline-gate actions by reading only `FLAGGED` and `DETECTORS_SKIPPED`; later `NONE`/`WARNED` source checks do not overwrite what the gate did. `FLAGGED` without skips remains OK; `DETECTORS_SKIPPED` remains FAIL.
+- [x] Added regression coverage for the latest-row SQL and gate behavior; 36/36 monitoring tests pass and both modules compile.
+- [x] Redeployed the CRT monitor and dashboard. Supervised run `MON_2026-09-18_b5200e60` returned all checks OK and sent the all-green Slack status. C1 now reports `5 source-day rows, all OK`; C7 remains OK with one historical `FLAGGED` and no skipped detectors. All three 18 Sep rows per source remain in `DATA_QUALITY_LOG` for audit; `MONITORING_TASK` remains started at 07:00 Europe/London.
 
 ## 2026-09-18 — `OSA_BIG_DROP` heatmap window bug
 

@@ -7,7 +7,7 @@
 
 | # | What | How (today) | Named owner | Status |
 |---|---|---|---|---|
-| 1 | Source feeds (OSA, feedback, markdown log/sales, wastage) | `SOURCE_VOLUME_CHECK_TASK` daily, 28-day same-weekday median, writes `DATA_QUALITY_LOG`. C1 names the source, current/baseline rows, percentage and source-specific impact. C7 warns only when the gate actually skips detectors. | Elaheh / source owner | **LIVE in CRT**; feedback-only warnings state that current OSA actions are unaffected. |
+| 1 | Source feeds (OSA, feedback, markdown log/sales, wastage) | `SOURCE_VOLUME_CHECK_TASK` writes auditable history to `DATA_QUALITY_LOG`. C1 uses only the latest row per source for today, then shows current/baseline rows, percentage and source-specific impact. C7 separately reads actual gate interventions. | Elaheh / source owner | **LIVE in CRT**; a newer OK clears an earlier same-day source warning without deleting history. |
 | 2 | Alerts pipeline ran + wrote rows | Automated check C2+C3 in `SP_RUN_MONITORING`; manual fallback `scripts/check_task_status.py` | Dan | **AUTOMATIC in CRT** (daily 07:00 UK); DEV suspended |
 | 3 | Alert volume/mix sanity | Automated C4: 4-week same-weekday median band 0.5×–2× + mix warn >90%. Disabled `WASTE`, `WASTE_TRIM`, `MARKDOWN_SELLTHROUGH` are excluded from today and baseline. | Dan / Bryan | **AUTOMATIC in CRT**; recalibrated and verified 17 Sep. |
 | 4 | KPI batch ran + output complete | Chained `KPI_AVAILABILITY_BATCH_TASK`; automated check C5+C6 (rows + 28-col schema incl. `TIME_OF_DAY_BREAKDOWN`) | Elaheh | **LIVE** (chained) + **automated output check in PROD** |

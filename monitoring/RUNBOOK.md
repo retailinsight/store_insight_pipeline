@@ -25,9 +25,10 @@ python scripts/run_monitoring_supervised.py  # re-run all checks + see LATEST_SY
 - **Impact:** read the source-specific impact in C1 before acting. An OSA drop may affect
   Availability actions; a feedback-only drop may affect feedback analysis but does not reduce
   current OSA actions. If the gate skips detectors, affected alert types may be missing.
-- **Validate:** `SELECT * FROM STORE_INSIGHT_DB.PUBLIC.DATA_QUALITY_LOG WHERE RUN_DATE =
-  CURRENT_DATE()` — distinguish the 06:00 gate rows from the 11:30 check rows by
-  `ACTION_TAKEN` (`DETECTORS_SKIPPED`/`FLAGGED` = gate; `WARNED`/`NONE` = check). Then
+- **Validate:** read the latest row per `SOURCE_NAME` for today, ordered by `CREATED_AT`.
+  Keep older rows for audit, but do not treat an earlier warning as current after a newer OK.
+  Distinguish gate rows by `ACTION_TAKEN` (`DETECTORS_SKIPPED`/`FLAGGED`) from later source
+  checks (`WARNED`/`NONE`). Then
   probe `MAX(DATE)` on the named source view (`OSA_V1` etc.) — feeds land ~11:00, so a
   morning FAIL for an X-1 day can be genuine lag, not loss.
 - **First fix:** if the feed is genuinely short/stale, chase the feed-load owner
