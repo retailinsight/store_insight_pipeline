@@ -969,6 +969,16 @@ on small feature branches off the merged `main` — no more stacking on the inte
 - [x] Snowflake contract files `SNOWFLAKE_CONTRACT_FOR_API_UI_V0.4.md`, `SNOWFLAKE_CONSUMER_CONTRACT.md` and `REQUESTS_LOG.md` updated with CRT `ALERTS_HISTORY_V1`, `merge_key` fallback and closed two-view API status.
 - [ ] **PRD `prd-alert-suppression-and-queue.md` not fully addressed in Snowflake:** Snowflake test found `ALERTS_LATEST_V1` in both CRT and DEV still contains cards whose `merge_key` matches active In Progress or recently resolved issues. The two-view API can hide them, but the `top_n:3` cap was already applied, so the pipeline-side suppression before the cap is missing. Awaiting Dan's approval before any CRT PR #86 deployment or 06:00 run change.
 
+## 2026-09-18 — `OSA_BIG_DROP` heatmap window bug
+
+- [x] Confirmed in CRT for store 479 (`ALERT_ID=c13f91b082c7aa94`): the alert was triggered by `latest_date=2026-09-16`, but `day_period_grid` used the run-relative 12–18 Sep window and zero-filled 17/18 Sep where OSA data was not available. PPG/item facts and Wednesday’s £46.60 drop-day LSV are correct.
+- [x] Changed the compact `osa_big_drop_day_drilldown` gatherer so each signal’s heatmap uses `latest_date - 6 days` through `latest_date`.
+- [x] Added regression coverage proving a Wednesday trigger produces the prior Thursday–Wednesday window and does not include later run-date cells.
+- [x] Focused verification passed: 5/5 dedicated gatherer tests, 82/82 facts-stage tests, and 189/189 facts + investigation tests.
+- [x] Deployed safely to DEV first with `--task-off`; verified the DEV procedure points to the DEV stage and no DEV task was created or run. Canonical alert rows were not rewritten.
+- [x] Redeployed the approved pipeline stored procedure to CRT with `--task-off`; did not run it manually. Verified `RUN_ALERTS_PIPELINE_TASK` remains `started`, still calls the rule-based CRT procedure, the procedure points to the CRT stage, and current canonical rows remain at `RUN_DATE=2026-09-18`.
+- [ ] Validate the first scheduled CRT output after deployment: each `OSA_BIG_DROP.day_period_grid` must contain 21 cells from `latest_date - 6 days` through `latest_date`, with no later run-relative dates.
+
 ## 2026-09-17 — Morning validation and API read bugs
 
 - [x] 06:00 CRT `RUN_ALERTS_PIPELINE_TASK` succeeded: `RUN_DATE=2026-09-17`, 357 actions across 122 stores. DEV cloned to match. Contract validation `validate_latest_snowflake_contracts.py --require-crt-cap --require-crt-pr83` passed 20/20.
