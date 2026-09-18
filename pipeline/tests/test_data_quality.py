@@ -128,8 +128,15 @@ def test_valid_source_data_returns_empty_issues():
         'wastage': _make_df(10, ['STORE_ID', 'UPC', 'DATE', 'WASTE_QUANTITY', 'ORIGINAL_PRICE'],
                            min_date='2024-12-23', max_date='2025-01-19'),
     }
+    prompted_compliance = _make_df(
+        50,
+        ['STORE_ID', 'UPC', 'ALERT_DATE', 'COMPLIANT', 'TOTAL_UNITS',
+         'ITEM_HIERARCHY_1', 'ITEM_HIERARCHY_2', 'ITEM_HIERARCHY_3'],
+        min_date='2025-01-06', max_date='2025-01-19',
+    )
     issues = validate_source_data(
         osa=osa, feedback=feedback, wmd=wmd, windows=_windows(), cfg=None,
+        prompted_compliance=prompted_compliance,
     )
     assert issues == []
 

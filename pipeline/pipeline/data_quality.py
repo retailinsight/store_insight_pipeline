@@ -301,7 +301,8 @@ def validate_source_data(
         if not gate_enabled:
             _check_date_coverage(
                 prompted_compliance, 'ALERT_DATE',
-                windows['lookback_start'], windows['this_week_end'],
+                windows.get('lookback_start', windows['last_week_start']),
+                windows['this_week_end'],
                 'prompted_compliance', issues,
             )
 

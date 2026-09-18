@@ -20,36 +20,40 @@ grain:
 columns:
   STORE_ID:
     type: NUMBER
+    required: true
     description: Store identifier.
 
   UPC:
     type: VARCHAR
+    required: true
     description: Product identifier.
 
   ALERT_DATE:
     type: DATE
+    required: true
     description: Date of the prompted compliance alert.
 
   COMPLIANT:
     type: BOOLEAN
+    required: true
     description: Whether the prompted compliance alert was compliant.
 
   TOTAL_UNITS:
     type: NUMBER
+    required: false
     description: Total units associated with the alert.
 
   ITEM_HIERARCHY_1:
     type: VARCHAR
+    required: false
     description: Top-level item hierarchy.
 
   ITEM_HIERARCHY_2:
     type: VARCHAR
-    description: Second-level item hierarchy.
+    required: true
+    description: Second-level item hierarchy (department).
 
   ITEM_HIERARCHY_3:
     type: VARCHAR
+    required: false
     description: Third-level item hierarchy.
-
-  ITEM_DESCRIPTION:
-    type: VARCHAR
-    description: Human-readable item description.

@@ -925,7 +925,6 @@ def _generate_markdown_compliance(signal: dict) -> dict:
 
 def _generate_prompted_markdown_compliance(signal: dict) -> dict:
     """Generate narrative for a PROMPTED_MARKDOWN_COMPLIANCE alert."""
-    site_name = signal.get("site_name") or f"Store {signal['store_id']}"
     triggers = signal.get("trigger_types", [])
     this_due = signal.get("this_week_prompts_issued", 0)
     this_completed = signal.get("this_week_prompts_actioned_on_time", 0)
@@ -939,7 +938,6 @@ def _generate_prompted_markdown_compliance(signal: dict) -> dict:
     facts = signal.get("facts", {})
     driver = facts.get("driver_assessment") or {}
     volume_classification = driver.get("volume_classification", "STABLE")
-    volume_change_pct = driver.get("volume_change_pct")
 
     worst_depts = [
         row

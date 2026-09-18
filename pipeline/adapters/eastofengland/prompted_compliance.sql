@@ -1,29 +1,33 @@
 -- Adapter view: prompted_compliance_v1 for East of England
 -- ===========================================================
 -- Implements the canonical `prompted_compliance` contract for EoE by
--- aliasing SANDBOX.USRBRYANH.PROMPTED_COMPLIANCE into the canonical column
--- shape consumed by prompted-compliance detectors and gatherers.
+-- mapping INBOUND.SOURCE.SOURCE_PROMPTED_COMPLIANCE into the canonical
+-- column shape consumed by prompted-compliance detectors and gatherers.
 --
 -- Canonical columns:
---     STORE_ID     -> STORE_ID
---     ALERT_DUE    -> ALERT_DATE
---     UPC          -> UPC
---     COMPLIANT    -> COMPLIANT
---     TOTAL_UNITS  -> TOTAL_UNITS
---     DIVISON_ID   -> ITEM_HIERARCHY_1
---     SECTION      -> ITEM_HIERARCHY_2
---     SUB_SECTION  -> ITEM_HIERARCHY_3
+--     TRY_TO_NUMBER(STORECODE)  -> STORE_ID
+--     ALERTDUEDATE              -> ALERT_DATE
+--     TRY_TO_NUMBER(BARCODE)    -> UPC
+--     COMPLIANT                 -> COMPLIANT
+--     TOTALUNITS                -> TOTAL_UNITS
+--     TRADINGDEPARTMENTNAME     -> ITEM_HIERARCHY_1
+--     GROUPNAME                 -> ITEM_HIERARCHY_2
+--     SECTIONNAME               -> ITEM_HIERARCHY_3
 --
--- ITEM_DESCRIPTION is not available in the source and is emitted as NULL.
+-- The WHERE clause excludes non-trading / test stores, matching the
+-- definition of SANDBOX.USR_BRYANH.PROMPTED_COMPLIANCE.
 
 CREATE OR REPLACE VIEW STORE_INSIGHT_DB.PUBLIC.PROMPTED_COMPLIANCE_V1 AS
 SELECT
-    STORE_ID,
-    ALERT_DUE                    AS ALERT_DATE,
-    UPC,
+    TRY_TO_NUMBER(STORECODE)     AS STORE_ID,
+    ALERTDUEDATE                 AS ALERT_DATE,
+    TRY_TO_NUMBER(BARCODE)       AS UPC,
     COMPLIANT,
-    TOTAL_UNITS,
-    DIVISION_ID                   AS ITEM_HIERARCHY_1,
-    SECTION                      AS ITEM_HIERARCHY_2,
-    SUB_SECTION                  AS ITEM_HIERARCHY_3
-FROM SANDBOX.USR_BRYANH.PROMPTED_COMPLIANCE;
+    TOTALUNITS                   AS TOTAL_UNITS,
+    TRADINGDEPARTMENTNAME        AS ITEM_HIERARCHY_1,
+    GROUPNAME                    AS ITEM_HIERARCHY_2,
+    SECTIONNAME                  AS ITEM_HIERARCHY_3
+FROM INBOUND.SOURCE.SOURCE_PROMPTED_COMPLIANCE
+WHERE TRY_TO_NUMBER(STORECODE) NOT IN (
+    504, 422, 476, 465, 237, 207, 427, 270, 516, 502, 291, 439, 434, 480
+);

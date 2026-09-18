@@ -34,8 +34,6 @@ detectors:
     - markdown_override.wow
     - markdown_sku.repeat_request
     - markdown_sku.excessive_override
-    - prompted_markdown_compliance.wow
-    - prompted_markdown_compliance.vs_chain
 
 detector_config:
   thresholds:
