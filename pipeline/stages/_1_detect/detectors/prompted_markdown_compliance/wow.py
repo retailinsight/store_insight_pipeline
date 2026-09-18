@@ -6,13 +6,12 @@ least ``min_prompted_markdown_compliance_wow_drop`` percentage points
 week-on-week AND the store had at least
 ``min_prompted_markdown_compliance_volume`` prompts issued this week.
 
-Data source: a synthetic canonical DataFrame with columns:
-    DATE, STORE_ID, SITE_NAME, DEPARTMENT_NAME,
-    ACTIONED_ON_TIME, RESPONSE_MINUTES, AT_RISK_VALUE
+Data source: a canonical DataFrame with columns:
+    ALERT_DATE, STORE_ID, ITEM_HIERARCHY_2, COMPLIANT
 
 Public API
 ----------
-    detect(prompted_markdown_compliance, last_week_start, last_week_end,
+    detect(prompted_compliance, last_week_start, last_week_end,
            this_week_start, this_week_end,
            min_prompted_markdown_compliance_wow_drop,
            min_prompted_markdown_compliance_volume, store_id)
@@ -42,7 +41,7 @@ METADATA = DetectorInfo(
 
 
 def detect(
-    prompted_markdown_compliance=None,
+    prompted_compliance=None,
     last_week_start=None,
     last_week_end=None,
     this_week_start=None,
@@ -56,9 +55,8 @@ def detect(
 
     Parameters
     ----------
-    prompted_markdown_compliance    : Snowpark-like DataFrame with canonical columns:
-                                      DATE, STORE_ID, SITE_NAME, DEPARTMENT_NAME,
-                                      ACTIONED_ON_TIME, RESPONSE_MINUTES, AT_RISK_VALUE
+    prompted_compliance    : Snowpark-like DataFrame with canonical columns:
+                             ALERT_DATE, STORE_ID, ITEM_HIERARCHY_2, COMPLIANT
     last_week_start/end             : date strings (YYYY-MM-DD) for the previous week
     this_week_start/end             : date strings for the current week
     min_prompted_markdown_compliance_wow_drop : minimum ratio drop to fire (default: 0.05 = 5pp)
@@ -69,9 +67,9 @@ def detect(
     -------
     list of PROMPTED_MARKDOWN_COMPLIANCE signal dicts
     """
-    if prompted_markdown_compliance is None:
+    if prompted_compliance is None:
         return []
-    rows = list(prompted_markdown_compliance.collect())
+    rows = [r.as_dict() if hasattr(r, 'as_dict') else r for r in prompted_compliance.collect()]
 
     if store_id is not None:
         if not isinstance(store_id, list | tuple | set):

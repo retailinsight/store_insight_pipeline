@@ -7,14 +7,13 @@ from __future__ import annotations
 from store_insight.pipeline.stages._2_score.scorers import prompted_markdown_compliance
 
 
-def test_projected_cost_returns_this_week_at_risk_value():
+def test_projected_cost_returns_zero_without_at_risk_value():
     signal = {
         'signal_type': 'PROMPTED_MARKDOWN_COMPLIANCE',
         'store_id': 1,
-        'this_week_at_risk_value': 176.25,
     }
     cost = prompted_markdown_compliance.projected_cost(signal, None)
-    assert cost == 176.25
+    assert cost == 0.0
 
 
 def test_projected_cost_defaults_missing_value_to_zero():

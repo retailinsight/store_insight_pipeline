@@ -131,7 +131,6 @@ def _merge_signals(all_signals):
                 'this_week_prompts_issued', 'this_week_prompts_actioned_on_time',
                 'this_week_compliance_rate', 'last_week_compliance_rate',
                 'wow_change_pp', 'chain_compliance_rate', 'below_chain_pp',
-                'median_response_minutes', 'this_week_at_risk_value',
                 'workload',
                 # STRAIGHT_TO_BIN fields
                 'threshold_value', 'last_week_stb_value', 'last_week_stb_items',
@@ -175,6 +174,7 @@ def detect_signals(
     straight_to_bin=None,
     item_hierarchy=None,
     store_hierarchy=None,
+    prompted_compliance=None,
     config: DetectorConfig = None,
     cfg: dict = None,
     gate_plan=None,
@@ -250,6 +250,7 @@ def detect_signals(
         straight_to_bin=straight_to_bin,
         item_hierarchy=item_hierarchy,
         store_hierarchy=store_hierarchy,
+        prompted_compliance=prompted_compliance,
         last_week_start=last_week_start,
         last_week_end=last_week_end,
         this_week_start=this_week_start,

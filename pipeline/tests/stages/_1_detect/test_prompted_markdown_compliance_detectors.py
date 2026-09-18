@@ -23,15 +23,12 @@ class _FakeDF:
         return list(self.rows)
 
 
-def _add_prompt(rows, date, store_id, site_name, department, actioned, response_minutes=None, at_risk=0.0):
+def _add_prompt(rows, date, store_id, department, actioned):
     rows.append({
-        'DATE': date,
+        'ALERT_DATE': date,
         'STORE_ID': store_id,
-        'SITE_NAME': site_name,
-        'DEPARTMENT_NAME': department,
-        'ACTIONED_ON_TIME': actioned,
-        'RESPONSE_MINUTES': response_minutes,
-        'AT_RISK_VALUE': at_risk,
+        'ITEM_HIERARCHY_2': department,
+        'COMPLIANT': actioned,
     })
 
 
@@ -51,24 +48,24 @@ def canonical_rows():
     # Store 100 — deteriorating vs last week and below chain
     for d in this_dates:
         for _ in range(10):
-            _add_prompt(rows, d, 100, 'Manningtree', 'PRODUCE', False, 120.0, 1.0)
+            _add_prompt(rows, d, 100, 'PRODUCE', False)
         for _ in range(8):
-            _add_prompt(rows, d, 100, 'Manningtree', 'PRODUCE', True, 30.0, 0.0)
+            _add_prompt(rows, d, 100, 'PRODUCE', True)
         for _ in range(8):
-            _add_prompt(rows, d, 100, 'Manningtree', 'DAIRY', False, 120.0, 0.5)
+            _add_prompt(rows, d, 100, 'DAIRY', False)
         for _ in range(6):
-            _add_prompt(rows, d, 100, 'Manningtree', 'DAIRY', True, 30.0, 0.0)
+            _add_prompt(rows, d, 100, 'DAIRY', True)
 
     for d in last_dates:
         for _ in range(7):
-            _add_prompt(rows, d, 100, 'Manningtree', 'PRODUCE', True, 25.0, 0.0)
+            _add_prompt(rows, d, 100, 'PRODUCE', True)
         for _ in range(6):
-            _add_prompt(rows, d, 100, 'Manningtree', 'DAIRY', True, 25.0, 0.0)
+            _add_prompt(rows, d, 100, 'DAIRY', True)
 
     # Store 200 — stable high performer, not below chain
     for d in this_dates:
         for _ in range(10):
-            _add_prompt(rows, d, 200, 'Lavenham', 'PRODUCE', True, 20.0, 0.0)
+            _add_prompt(rows, d, 200, 'PRODUCE', True)
 
     return rows
 
@@ -101,12 +98,10 @@ def test_wow_fires_on_deterioration_and_volume_floor(canonical_rows, windows):
     assert s['signal_type'] == 'PROMPTED_MARKDOWN_COMPLIANCE'
     assert s['trigger_types'] == ['WOW']
     assert s['store_id'] == 100
-    assert s['site_name'] == 'Manningtree'
     assert s['this_week_prompts_issued'] == 224  # 7 * (18 + 14)
     assert s['this_week_prompts_actioned_on_time'] == 98  # 7 * (8 + 6)
     assert s['wow_change_pp'] == pytest.approx(-56.25, rel=1e-2)
     assert s['workload']['volume_classification'] == 'INCREASING'
-    assert s['median_response_minutes'] == 120.0
 
 
 def test_wow_does_not_fire_when_rate_improves(canonical_rows, windows):
@@ -208,7 +203,6 @@ def test_weighted_rates_and_median_response_computed(canonical_rows, windows):
     # Rate is weighted by prompt count
     expected_rate = round(98 / 224 * 100, 2)
     assert s['this_week_compliance_rate'] == expected_rate
-    assert s['median_response_minutes'] == 120.0
 
 
 # ---------------------------------------------------------------------------
@@ -239,8 +233,7 @@ def test_combined_wow_and_vs_chain_signals_have_expected_fields(canonical_rows, 
         'signal_type', 'merge_key', 'store_id', 'site_name', 'trigger_types',
         'this_week_prompts_issued', 'this_week_prompts_actioned_on_time',
         'this_week_compliance_rate', 'last_week_compliance_rate', 'wow_change_pp',
-        'chain_compliance_rate', 'below_chain_pp', 'median_response_minutes', 'workload',
-        'this_week_at_risk_value',
+        'chain_compliance_rate', 'below_chain_pp', 'workload',
     }
     for s in wow_signals + chain_signals:
         assert required.issubset(s.keys())

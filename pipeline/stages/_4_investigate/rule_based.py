@@ -76,6 +76,21 @@ def _fmt_dow_line(dow_pattern):
     return [f"Worst day for lost sales this week: {worst['day']} (\u00a3{worst['lsv']:,.2f})"]
 
 
+def _worst_days_for_prompted_markdown(daily_performance: list[dict], top_n: int = 2) -> list[str]:
+    """Return the names of the days with the lowest prompt-markdown compliance."""
+    if not daily_performance:
+        return []
+    scored = [
+        (day['day'], day['compliance_pct'], day['checks_due'] - day['actioned_on_time'])
+        for day in daily_performance
+        if day.get('checks_due', 0) > 0 and day.get('compliance_pct') is not None
+    ]
+    if not scored:
+        return []
+    scored.sort(key=lambda x: (x[1], -x[2]))
+    return [x[0] for x in scored[:top_n]]
+
+
 def _fmt_lsv_composition_lines(composition):
     """Return a one-line composition sentence for the OSA explanation."""
     if not composition:
@@ -910,7 +925,6 @@ def _generate_markdown_compliance(signal: dict) -> dict:
 
 def _generate_prompted_markdown_compliance(signal: dict) -> dict:
     """Generate narrative for a PROMPTED_MARKDOWN_COMPLIANCE alert."""
-    site_name = signal.get("site_name") or f"Store {signal['store_id']}"
     triggers = signal.get("trigger_types", [])
     this_due = signal.get("this_week_prompts_issued", 0)
     this_completed = signal.get("this_week_prompts_actioned_on_time", 0)
@@ -924,7 +938,6 @@ def _generate_prompted_markdown_compliance(signal: dict) -> dict:
     facts = signal.get("facts", {})
     driver = facts.get("driver_assessment") or {}
     volume_classification = driver.get("volume_classification", "STABLE")
-    volume_change_pct = driver.get("volume_change_pct")
 
     worst_depts = [
         row
@@ -932,12 +945,14 @@ def _generate_prompted_markdown_compliance(signal: dict) -> dict:
         if str(row.get("dept") or "").strip()
     ]
 
-    parts = [site_name, "prompted-markdown response"]
-    if "WOW" in triggers and wow_change is not None and wow_change < 0:
-        parts.append(f"down {abs(wow_change):.1f}pp to {this_rate:.1f}%")
-    if "VS_CHAIN" in triggers and below_chain is not None:
-        parts.append(f"{below_chain:.1f}pp below chain average")
-    issue = ": ".join([" ".join(parts[:-1]), parts[-1]]) if len(parts) > 2 else " ".join(parts)
+    worst_days = _worst_days_for_prompted_markdown(facts.get("daily_performance_last_7d", []))
+    alert_count_increasing = volume_classification == "INCREASING"
+
+    if alert_count_increasing:
+        issue = "Ensure the team are dedicating enough time to work the prompted alerts."
+    else:
+        focus = _join_names(worst_days) if worst_days else "the worst days"
+        issue = f"Coach the team on the prompted markdown process, focusing on {focus}."
 
     explanation_lines = [
         f"{this_completed} of {this_due} prompts were actioned on time this week ({this_rate:.1f}%).",
@@ -955,35 +970,28 @@ def _generate_prompted_markdown_compliance(signal: dict) -> dict:
             f"{row['dept']} ({row['compliance_pct']:.1f}%)" for row in worst_depts[:3]
         )
         explanation_lines.append(f"Worst departments: {dept_list}.")
+    if worst_days:
+        explanation_lines.append(
+            f"Worst days for on-time actioning: {_join_names(worst_days)}."
+        )
     if projected_cost:
         explanation_lines.append(
             f"At £{projected_cost:,.2f} per week, the four-week exposure is approximately "
             f"£{projected_cost * 4:,.2f} if not fixed."
         )
 
-    dept_names = [row["dept"] for row in worst_depts[:3]]
-    focus = ", ".join(dept_names) if dept_names else "the worst-performing departments"
-    target = f"{last_rate:.1f}%" if last_rate is not None else "the prior week's rate"
-
-    if volume_classification == "INCREASING" and volume_change_pct is not None:
-        action = (
-            f"Prompt volume is up {volume_change_pct:.0f}% while on-time response has fallen "
-            f"{abs(wow_change or 0):.0f}pp. Store manager to review staffing against prompt "
-            f"volume this week, escalating to the area manager if hours cannot cover it. "
-            f"Focus on {focus}. Review in 7 days against a target of {target}."
-        )
-    elif volume_classification == "DECREASING" and volume_change_pct is not None:
-        action = (
-            f"Prompt volume is down {abs(volume_change_pct):.0f}%, so the drop is not explained "
-            f"by workload. Store manager to review the prompt response routine with the team within 48 "
-            f"hours, focusing on {focus}. Review in 7 days against a target of {target}."
+    if last_rate is not None:
+        drop = (
+            f"Compliance has dropped from {last_rate:.1f}% to {this_rate:.1f}% "
+            f"in the last 7 days"
         )
     else:
-        action = (
-            f"Prompt volume is broadly unchanged, so the drop is not explained by workload. "
-            f"Store manager to review the prompt response routine with the team within 48 hours, "
-            f"focusing on {focus}. Review in 7 days against a target of {target}."
-        )
+        drop = f"Compliance is {this_rate:.1f}% this week"
+
+    if alert_count_increasing:
+        action = drop + " and the alert volume rose above the weekly average over the same period."
+    else:
+        action = drop + "."
 
     cost_if_not_fixed = f"£{projected_cost:,.2f} per week if not fixed."
 

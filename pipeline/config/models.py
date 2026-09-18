@@ -53,6 +53,7 @@ class TablesConfig(BaseModel):
     wastage: str
     store_hierarchy: str
     wmd_hierarchy: str
+    prompted_compliance: str = "{database}.{schema}.PROMPTED_COMPLIANCE_V1"
 
     # Interpolation context - set during PipelineConfig validation
     _database: str = ""

@@ -17,7 +17,7 @@ Facts keys   : daily_performance_last_7d, worst_departments_top3, driver_assessm
 
 Public API
 ----------
-    gather(prompted_markdown_compliance, signals, this_week_start, this_week_end, top_n=3)
+    gather(prompted_compliance, signals, this_week_start, this_week_end, top_n=3)
     -> dict keyed by store_id
 """
 
@@ -62,10 +62,10 @@ def _build_daily(rows: list[dict], store_id: int, week_start: str, week_end: str
     for r in rows:
         if int(r['STORE_ID']) != store_id:
             continue
-        d = _iso(r['DATE'])
+        d = _iso(r['ALERT_DATE'])
         if week_start <= d <= week_end:
             by_date[d]['due'] += 1
-            by_date[d]['completed'] += _actioned(r.get('ACTIONED_ON_TIME'))
+            by_date[d]['completed'] += _actioned(r.get('COMPLIANT'))
 
     start = dt.date.fromisoformat(week_start)
     end = dt.date.fromisoformat(week_end)
@@ -92,11 +92,11 @@ def _build_worst_departments(rows: list[dict], store_id: int, week_start: str, w
     for r in rows:
         if int(r['STORE_ID']) != store_id:
             continue
-        d = _iso(r['DATE'])
+        d = _iso(r['ALERT_DATE'])
         if week_start <= d <= week_end:
-            dept = str(r.get('DEPARTMENT_NAME') or 'Unknown').upper()
+            dept = str(r.get('ITEM_HIERARCHY_2') or 'Unknown').upper()
             by_dept[dept]['due'] += 1
-            by_dept[dept]['completed'] += _actioned(r.get('ACTIONED_ON_TIME'))
+            by_dept[dept]['completed'] += _actioned(r.get('COMPLIANT'))
 
     results = []
     for dept, data in by_dept.items():
@@ -149,15 +149,14 @@ def _build_driver_assessment(signal: dict) -> dict:
     }
 
 
-def gather(prompted_markdown_compliance=None, signals=None, this_week_start=None, this_week_end=None, top_n=3):
+def gather(prompted_compliance=None, signals=None, this_week_start=None, this_week_end=None, top_n=3):
     """
     Gather prompted-markdown-compliance facts for the given signals.
 
     Parameters
     ----------
-    prompted_markdown_compliance : Snowpark-like DataFrame with canonical columns:
-                                     DATE, STORE_ID, SITE_NAME, DEPARTMENT_NAME,
-                                     ACTIONED_ON_TIME, RESPONSE_MINUTES, AT_RISK_VALUE
+    prompted_compliance : Snowpark-like DataFrame with canonical columns:
+                            ALERT_DATE, STORE_ID, ITEM_HIERARCHY_2, COMPLIANT
     signals                      : list of PROMPTED_MARKDOWN_COMPLIANCE signal dicts
     this_week_start/end          : date strings (YYYY-MM-DD) for the current week
     top_n                        : number of worst departments to return (default: 3)
@@ -170,10 +169,10 @@ def gather(prompted_markdown_compliance=None, signals=None, this_week_start=None
         'driver_assessment': {...},
     }
     """
-    if not signals or prompted_markdown_compliance is None:
+    if not signals or prompted_compliance is None:
         return {}
 
-    rows = list(prompted_markdown_compliance.collect())
+    rows = [r.as_dict() if hasattr(r, 'as_dict') else r for r in prompted_compliance.collect()]
     result = {}
     for signal in signals:
         if signal.get('signal_type') not in METADATA.signal_types:
