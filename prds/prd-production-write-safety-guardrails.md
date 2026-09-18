@@ -17,6 +17,18 @@ The run was stopped before a visible destructive query reached Snowflake. Read-o
 
 The current tooling nevertheless permits an interactive run to append to, delete one run date from, or fully replace the canonical table. A scratch `--target-table` redirects alert rows only; quality-log and outcome writes can still use configured canonical targets. Interactive access also has enough Snowflake privilege to bypass code-level intent.
 
+## Incident evidence
+
+### 16 September — wrong environment
+
+A run intended for `STORE_INSIGHT_DEV` wrote `RUN_DATE=2026-09-16` to CRT because the Snowflake session database was DEV while `cfg.output.alerts` still resolved to `STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE`; no explicit `--target-table` was supplied. CRT required a transaction-based restore from the preserved same-run-date DEV copy. This proves session context is not a safety boundary and configuration can override operator intent.
+
+### 18 September — partial-store overwrite stopped
+
+A prompted-compliance test used `--store-id` for 16 stores with `--overwrite` while East of England configuration still pointed to CRT. The process was stopped before a visible destructive query reached Snowflake. The 18 September CRT output remained intact at 357 rows, 357 unique alert IDs and 121 stores. This proves an explicit store filter and a familiar rerun flag can combine into a production replacement risk even when the operator is testing development work.
+
+Together, the incidents require fail-closed target validation, partial-run protection, secondary-write isolation and database permissions that do not rely on correct human or agent behavior.
+
 ## Outcome
 
 Development and agent-driven runs must be safe by default. A mistaken command must fail before processing or writing when it targets canonical CRT data. Scheduled production execution must continue through an explicitly trusted, least-privilege path.
@@ -132,6 +144,19 @@ Code controls are defense in depth. Snowflake permissions are the permanent boun
 - Audited and removed after the operation.
 
 Systems Engineering must review ownership and task execution implications before grants are changed.
+
+### Proposed role migration
+
+1. Inventory current ownership, grants, task owner, procedure owner, API role holders and interactive users; export the results before changing anything.
+2. Create `STORE_INSIGHT_PIPELINE_TASK_ROLE` for the scheduled alerts and KPI paths. Grant warehouse usage, database/schema usage, source/view reads, and only the canonical DML required by those procedures.
+3. Transfer or recreate task/procedure ownership under the scheduled role in a controlled window. Verify the task can execute and its child tasks remain started before revoking anything.
+4. Create or reuse a developer role with CRT read access and DEV/sandbox create/write access, but no canonical CRT insert, update, delete, truncate, drop or ownership rights.
+5. Move the API to a dedicated role that reads documented views and writes only the approved workflow tables. It must not own the database or schema.
+6. Create a normally inactive break-glass role for approved recovery. Record grantor, operator, reason, start/end time and affected object for every activation.
+7. Revoke canonical write access from interactive roles only after scheduled and API smoke tests pass. Keep a prepared rollback script restoring the previous grants and ownership.
+8. Validate with role-specific positive and negative tests: scheduled write succeeds; API view read/workflow write succeeds; developer sandbox write succeeds; developer canonical write fails.
+
+No role or ownership change is part of the code PR. Systems Engineering approval is required before executing the migration.
 
 ## Agent and developer rules
 

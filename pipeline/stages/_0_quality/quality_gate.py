@@ -157,7 +157,8 @@ def _gate_settings(cfg):
 
 
 def run_quality_gate(session, cfg, analysis_date: datetime.date | str | None = None,
-                     detectors=None) -> GatePlan:
+                     detectors=None, write_log: bool = True,
+                     trusted_scheduled_write: bool = False) -> GatePlan:
     """Run the gate for one pipeline run. Read-only apart from DATA_QUALITY_LOG.
 
     session       : Snowpark session (runner for the volume queries)
@@ -206,7 +207,13 @@ def run_quality_gate(session, cfg, analysis_date: datetime.date | str | None = N
     plan = plan_gate(results, detectors)
     print(f'[0_quality] {plan.summary()}')
 
-    if settings['log_table']:
+    if write_log and settings['log_table']:
+        from store_insight.pipeline.pipeline.pipeline import validate_alert_write_target
+
+        validate_alert_write_target(
+            settings['log_table'],
+            trusted_scheduled_write=trusted_scheduled_write,
+        )
         _write_gate_log(runner, plan, settings['log_table'], run_date=datetime.date.today())
 
     return plan

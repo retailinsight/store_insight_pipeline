@@ -975,11 +975,11 @@ on small feature branches off the merged `main` — no more stacking on the inte
 - [x] Reviewed `0007-production-write-safety-guardrails.md` against downstream `main` (`309c3ee`) and identified additional requirements: protect append as well as destructive modes; enforce at the shared write boundary; reject partial-store canonical writes; include quality/outcome/workflow side effects; make run-date replacement atomic; prohibit canonical full replacement except break-glass; keep environment config explicit; use `.devin/rules`.
 - [x] Dan approved the strengthened approach at 12:28 on 18 Sep.
 - [x] Created the canonical PRD at `prds/prd-production-write-safety-guardrails.md`; no short version is required. Treat the downloaded issue as source material, not a second maintained specification.
-- [ ] Implement Phase 1 test-first on a clean branch from current `origin/main`: centralized protected-target policy, all-mode canonical guard, partial-store rejection, safe secondary-write behavior, explicit target/mode logging, and atomic run-date replacement.
-- [ ] Add regression tests reproducing the exact 16-store CRT overwrite attempt and direct `write_alerts` bypass attempts. Prove approved sandbox writes still work without touching CRT.
-- [ ] Add `.devin/rules/production-write-safety.md` and align operational documentation.
-- [ ] Prepare Phase 2 least-privilege role split for Systems Engineering: interactive/dev writes only to DEV/sandbox; scheduled service role writes canonical CRT; API role limited to views plus narrow workflow writes; audited break-glass role.
-- [ ] Do not test by attempting a real CRT write. Validate code guards locally and exercise successful writes only against approved DEV/sandbox objects.
+- [x] Implemented Phase 1 test-first on clean branch `fix/production-write-guardrails` from `origin/main`: centralized protected-target policy, all-mode canonical guard, partial-store rejection, secondary writes disabled by default, explicit target/mode logging, fully-qualified target enforcement, and transactional run-date replacement.
+- [x] Added regression tests reproducing the exact 16-store CRT overwrite attempt, direct `write_alerts` bypass attempts, protected auxiliary targets, unqualified/case-normalized targets, partial-store writes, rollback, and trusted scheduled execution. Mocked sandbox writes remain allowed.
+- [x] Added `.devin/rules/production-write-safety.md` and aligned `pipeline/README.md`.
+- [x] Prepared the Phase 2 least-privilege role migration in the PRD for Systems Engineering: interactive/dev writes only to DEV/sandbox; scheduled service role writes canonical CRT; API role limited to views plus narrow workflow writes; audited break-glass role. No grants or ownership were changed.
+- [x] Verification was local and read-only with respect to Snowflake: 825 pipeline tests passed, 2 skipped; Ruff and Python compilation passed. No DEV or CRT connection/write was used to test the guardrails.
 
 ## 2026-09-18 — Store 239 empty To Do explained; no behavior change
 
