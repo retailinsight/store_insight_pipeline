@@ -56,6 +56,34 @@ def _prepare_runtime() -> None:
             module.__path__.insert(0, str(package_path))
 
 
+def _normalise_identifier(value: str) -> str:
+    return (value or "").strip().strip('"').upper()
+
+
+def _assert_output_in_session_database(session, output_table: str) -> None:
+    """Fail closed when the config routes output outside the procedure's database.
+
+    The trusted scheduled path proves *who* is writing (the stored procedure),
+    not *where* it runs.  A procedure deployed to STORE_INSIGHT_DEV that loads
+    a client config pointing at STORE_INSIGHT_DB would otherwise write CRT with
+    the trusted flag set (the 16 Sep 2026 incident routing).
+    """
+    parts = output_table.split(".")
+    if len(parts) != 3:
+        raise ValueError(
+            f"[handler] Refusing run: output table {output_table!r} is not fully qualified."
+        )
+    output_db = _normalise_identifier(parts[0])
+    session_db = _normalise_identifier(session.get_current_database())
+    if output_db != session_db:
+        raise PermissionError(
+            f"[handler] Refusing run: procedure is executing in {session_db} but the "
+            f"config resolves output to {output_db} ({output_table}). Deploy with a "
+            "matching --database or fix the client connection config."
+        )
+    print(f"[handler] Environment guard OK: session={session_db} output={output_table}")
+
+
 # ---------------------------------------------------------------------------
 # Snowflake SP entrypoint
 # ---------------------------------------------------------------------------
@@ -93,16 +121,19 @@ def run(
     cfg = load_config(client)
     print(f"[handler] Config loaded: client={cfg.client_name}")
 
-    # ── resolve analysis_date ────────────────────────────────────────────
-    if analysis_date is None:
-        analysis_date = str(datetime.date.today())
-
     # ── import pipeline (available via the uploaded zip) ─────────────────────
     from store_insight.pipeline.pipeline.pipeline import (
         _output_table,
         derive_windows,
         run_pipeline,
     )
+
+    # ── environment guard: the procedure may only write to its own database
+    _assert_output_in_session_database(session, _output_table(cfg))
+
+    # ── resolve analysis_date ────────────────────────────────────────────
+    if analysis_date is None:
+        analysis_date = str(datetime.date.today())
 
     # ── skip if this analysis_date was already processed (idempotent daily task)
     if not overwrite:
