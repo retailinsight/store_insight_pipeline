@@ -100,6 +100,43 @@ else:
             f"Escalate to Dave if not fixed today."
         )
 
+st.markdown("---")
+st.subheader("Source feed detail")
+source_health = session.sql(f"""
+    SELECT SOURCE_NAME, CHECK_DATE, ROW_COUNT, BASELINE_ROWS, STATUS, ACTION_TAKEN
+    FROM {DB}.PUBLIC.DATA_QUALITY_LOG
+    WHERE RUN_DATE = (SELECT MAX(RUN_DATE) FROM {DB}.PUBLIC.DATA_QUALITY_LOG)
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY SOURCE_NAME ORDER BY CREATED_AT DESC
+    ) = 1
+    ORDER BY SOURCE_NAME
+""").to_pandas()
+if source_health.empty:
+    st.info("No source-quality rows for the latest run date.")
+else:
+    source_health["Current vs baseline"] = source_health.apply(
+        lambda r: (
+            f"{int(r['ROW_COUNT']):,} vs {float(r['BASELINE_ROWS']):,.0f} "
+            f"({float(r['ROW_COUNT']) / float(r['BASELINE_ROWS']):.1%})"
+            if pd.notna(r["ROW_COUNT"]) and pd.notna(r["BASELINE_ROWS"])
+            and float(r["BASELINE_ROWS"]) > 0
+            else f"{int(r['ROW_COUNT']):,}" if pd.notna(r["ROW_COUNT"]) else "No count"
+        ), axis=1)
+    source_health["Impact"] = source_health["SOURCE_NAME"].map({
+        "osa": "Availability actions may be missing or incomplete.",
+        "feedback": "Feedback analysis may be incomplete; current OSA actions are unaffected.",
+        "markdown_log": "Markdown compliance output may be incomplete.",
+        "markdown_sales": "Markdown sales output may be incomplete.",
+        "wastage": "Waste-related output may be incomplete.",
+    }).fillna("Output depending on this source may be incomplete.")
+    source_health = source_health.rename(columns={
+        "SOURCE_NAME": "Source", "CHECK_DATE": "Source data date",
+        "STATUS": "Status", "ACTION_TAKEN": "Gate action",
+    })
+    st.dataframe(source_health[["Source", "Source data date", "Status",
+                                "Current vs baseline", "Gate action", "Impact"]],
+                 use_container_width=True)
+
 # ── Health check table (plain English) ───────────────────────────────────────
 st.subheader("Today's health checks")
 display = health.copy()
@@ -213,30 +250,43 @@ else:
     st.dataframe(incidents.reset_index(drop=True), use_container_width=True)
 
 # ── Reference documents ──────────────────────────────────────────────────────
-with st.expander("Reference documents"):
-    st.write("Click a file to open it in a new tab; right-click → Save as to download.")
+with st.expander("Essential guides and reference documents"):
+    st.write("Start with the essential guides. Technical documents are included for deeper investigation.")
     try:
         rows = session.sql(f"LIST @{STAGE}").collect()
     except Exception as e:
         st.error(f"Could not list documents: {e}")
         rows = []
+    available = {Path(str(row[0])).name for row in rows}
+    documents = {
+        "Essential guides": [
+            ("CHANNEL_GUIDE.md", "How to read alerts, status words, ownership and urgency."),
+            ("PILOT_MONITORING_ONE_PAGER.md", "The current monitoring and support model at a glance."),
+            ("RUNBOOK.md", "Safe validation and response steps for each C-code."),
+            ("SCHEDULE_AND_GAPS.md", "Daily task schedule, rerun process and unresolved ownership gaps."),
+        ],
+        "Technical reference": [
+            ("prd-pilot-monitoring-and-stability.md", "Full monitoring design, decisions and acceptance criteria."),
+            ("RISK_VALIDATION.md", "Detailed validation evidence and incident history."),
+        ],
+    }
     if not rows:
         st.info("No documents in the stage yet.")
     else:
-        for row in rows:
-            # First column of LIST is the file path (name, size, md5, last_modified)
-            path = str(row[0])
-            name = Path(path).name
-            if not name.endswith(".md") or name == "health_dashboard_app.md":
-                continue
-            try:
-                url_row = session.sql(
-                    f"SELECT GET_PRESIGNED_URL('@{STAGE}', '{name}')"
-                ).collect()
-                url = url_row[0][0]
-                st.markdown(f"- [{name}]({url})")
-            except Exception as e:
-                st.write(f"{name} — link unavailable ({e})")
+        for heading, items in documents.items():
+            st.markdown(f"**{heading}**")
+            for name, description in items:
+                if name not in available:
+                    st.write(f"{name} — not currently available")
+                    continue
+                try:
+                    url_row = session.sql(
+                        f"SELECT GET_PRESIGNED_URL('@{STAGE}', '{name}')"
+                    ).collect()
+                    url = url_row[0][0]
+                    st.markdown(f"- [{name}]({url}) — {description}")
+                except Exception as e:
+                    st.write(f"{name} — link unavailable ({e})")
 
 st.markdown("---")
 
@@ -262,6 +312,9 @@ with st.expander("Source and gate details (C1 / C7)"):
                ROW_COUNT, BASELINE_ROWS
         FROM {DB}.PUBLIC.DATA_QUALITY_LOG
         WHERE RUN_DATE = (SELECT MAX(RUN_DATE) FROM {DB}.PUBLIC.DATA_QUALITY_LOG)
+        QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY SOURCE_NAME ORDER BY CREATED_AT DESC
+        ) = 1
         ORDER BY SOURCE_NAME
     """).to_pandas()
     if dq.empty:

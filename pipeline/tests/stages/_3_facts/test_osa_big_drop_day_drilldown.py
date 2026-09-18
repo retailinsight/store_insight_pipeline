@@ -85,6 +85,48 @@ def test_drop_day_facts_are_sorted_capped_and_compact(monkeypatch):
     ]
 
 
+def test_period_facts_uses_seven_days_ending_on_signal_latest_date(monkeypatch):
+    class _Expression:
+        pass
+
+    class _InputFrame:
+        def filter(self, _expression):
+            return self
+
+        def with_column(self, _name, _expression):
+            return self
+
+    class _ResultFrame:
+        def collect(self):
+            return []
+
+    calls = []
+
+    def _metrics(_data, start, end, _groups, prefix):
+        calls.append((start, end, prefix))
+        return _ResultFrame()
+
+    monkeypatch.setattr(day_g, 'build_store_dept_filter', lambda *_args: _Expression())
+    monkeypatch.setattr(day_g.F, 'col', lambda *_args: _Expression())
+    monkeypatch.setattr(day_g, 'sunday_first_dow', lambda *_args: _Expression())
+    monkeypatch.setattr(day_g, 'window_metrics', _metrics)
+
+    result = day_g._period_facts(
+        _InputFrame(),
+        [{'store_id': 479, 'department': 'SOFT DRINKS', 'latest_date': '2026-09-16'}],
+        '2026-09-12', '2026-09-18', 'ITEM_HIERARCHY_2',
+    )
+
+    grid = result[(479, 'SOFT DRINKS')]
+    assert calls == [('2026-09-10', '2026-09-16', 'PERIOD')]
+    assert len(grid) == 21
+    assert grid[0]['date'] == '2026-09-10'
+    assert grid[0]['day'] == 'Thursday'
+    assert grid[-1]['date'] == '2026-09-16'
+    assert grid[-1]['day'] == 'Wednesday'
+    assert {cell['date'] for cell in grid}.isdisjoint({'2026-09-17', '2026-09-18'})
+
+
 def test_gather_no_signals_returns_empty():
     assert day_g.gather(None, [], '', '') == {
         'day_period_grid': {}, 'ppg_lsv': {}, 'item_lsv': {},

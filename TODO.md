@@ -967,7 +967,34 @@ on small feature branches off the merged `main` — no more stacking on the inte
 - [x] Investigate orphaned `ALERT_ACTION_STATUS` rows. Closed 40 CRT rows and 7 DEV rows as `completed/couldnt_complete` with reason "Orphan — no matching alert" on 17 Sep 2026. Backups: `STORE_INSIGHT_DB.PUBLIC.ALERT_ACTION_STATUS_BACKUP_20260917_PRE_ORPHAN_CLOSE` and `STORE_INSIGHT_DEV.PUBLIC.ALERT_ACTION_STATUS_BACKUP_20260917_PRE_ORPHAN_CLOSE`. Cornelious also deployed server-side validation to prevent new orphans.
 - [x] Scheduled task state checked and normalised: all CRT tasks `started`; DEV `CLONE_PROD_TO_DEV_TASK` `started`; DEV `KPI_AVAILABILITY_BATCH_TASK`, `MONITORING_TASK`, `SOURCE_VOLUME_CHECK_TASK` `suspended`.
 - [x] Snowflake contract files `SNOWFLAKE_CONTRACT_FOR_API_UI_V0.4.md`, `SNOWFLAKE_CONSUMER_CONTRACT.md` and `REQUESTS_LOG.md` updated with CRT `ALERTS_HISTORY_V1`, `merge_key` fallback and closed two-view API status.
-- [ ] **PRD `prd-alert-suppression-and-queue.md` not fully addressed in Snowflake:** Snowflake test found `ALERTS_LATEST_V1` in both CRT and DEV still contains cards whose `merge_key` matches active In Progress or recently resolved issues. The two-view API can hide them, but the `top_n:3` cap was already applied, so the pipeline-side suppression before the cap is missing. Awaiting Dan's approval before any CRT PR #86 deployment or 06:00 run change.
+- [x] **PRD `prd-alert-suppression-and-queue.md` pipeline suppression deployed:** PR #86 suppresses active In Progress and recently resolved issues before the `top_n:3` cap. First scheduled output is `RUN_DATE=2026-09-18`; all 357 rows have `issue_key` and `merge_key`. Continue store-level API/UI acceptance checks.
+
+## 2026-09-18 — Clearer source-quality monitoring (Dan approved)
+
+- [x] Confirmed the 18 Sep warning was a feedback-only volume drop: 1,210 rows versus a 1,724 baseline (70.2%); OSA was healthy and current OSA actions were unaffected.
+- [x] Changed C1 details to name the affected source, current and baseline row counts, percentage of baseline, gate action, and source-specific impact. Assigned C1 to `Elaheh / source owner`.
+- [x] Changed C7 so `FLAGGED` without detector skips is OK and no longer duplicates C1 in Slack. `DETECTORS_SKIPPED` / blocking actions remain FAIL.
+- [x] Added a dashboard source-feed table showing source data date, status, current-versus-baseline volume, gate action, and source-specific impact.
+- [x] Monitoring verification passed: 35/35 tests; monitor and dashboard modules compile.
+- [x] Redeployed the CRT monitoring procedure/task and Streamlit dashboard. Supervised run `MON_2026-09-18_c0151fa8` sent one clear C1 warning; C7 is now OK (`FLAGGED` but no detectors skipped). `MONITORING_TASK` remains started at 07:00 Europe/London and `PILOT_HEALTH_DASHBOARD` is live.
+- [x] Curated dashboard documents into **Essential guides** (`CHANNEL_GUIDE`, one-pager, `RUNBOOK`, schedule/gaps) and **Technical reference** (full PRD, `RISK_VALIDATION`), with a plain-English description for each. Updated the four essential guides for daily all-green posts, source-specific C1, non-duplicative C7, C4’s 90% threshold and disabled-type exclusions.
+- [x] Found a remaining C1 bug during post-deploy validation: the query reads every `DATA_QUALITY_LOG` row for the business date and keeps the worst status. At 10:18 it therefore repeated the 06:00 feedback `SUSPECT` result even though a newer 10:10 check was `OK` (1,272 rows vs 1,411.5 baseline).
+- [x] Changed C1 permanently to select the latest row per `RUN_DATE + SOURCE_NAME` using `ROW_NUMBER() OVER (PARTITION BY SOURCE_NAME ORDER BY CREATED_AT DESC) = 1`. All earlier rows remain in `DATA_QUALITY_LOG` for audit.
+- [x] Applied the same latest-row-per-source rule to the dashboard’s source-feed table and C1/C7 diagnostic section.
+- [x] Kept C7 tied to pipeline-gate actions by reading only `FLAGGED` and `DETECTORS_SKIPPED`; later `NONE`/`WARNED` source checks do not overwrite what the gate did. `FLAGGED` without skips remains OK; `DETECTORS_SKIPPED` remains FAIL.
+- [x] Added regression coverage for the latest-row SQL and gate behavior; 36/36 monitoring tests pass and both modules compile.
+- [x] Redeployed the CRT monitor and dashboard. Supervised run `MON_2026-09-18_b5200e60` returned all checks OK and sent the all-green Slack status. C1 now reports `5 source-day rows, all OK`; C7 remains OK with one historical `FLAGGED` and no skipped detectors. All three 18 Sep rows per source remain in `DATA_QUALITY_LOG` for audit; `MONITORING_TASK` remains started at 07:00 Europe/London.
+
+## 2026-09-18 — `OSA_BIG_DROP` heatmap window bug
+
+- [x] Confirmed in CRT for store 479 (`ALERT_ID=c13f91b082c7aa94`): the alert was triggered by `latest_date=2026-09-16`, but `day_period_grid` used the run-relative 12–18 Sep window and zero-filled 17/18 Sep where OSA data was not available. PPG/item facts and Wednesday’s £46.60 drop-day LSV are correct.
+- [x] Changed the compact `osa_big_drop_day_drilldown` gatherer so each signal’s heatmap uses `latest_date - 6 days` through `latest_date`.
+- [x] Added regression coverage proving a Wednesday trigger produces the prior Thursday–Wednesday window and does not include later run-date cells.
+- [x] Focused verification passed: 5/5 dedicated gatherer tests, 82/82 facts-stage tests, and 189/189 facts + investigation tests.
+- [x] Deployed safely to DEV first with `--task-off`; verified the DEV procedure points to the DEV stage and no DEV task was created or run. Canonical alert rows were not rewritten.
+- [x] Redeployed the approved pipeline stored procedure to CRT with `--task-off`; did not run it manually. Verified `RUN_ALERTS_PIPELINE_TASK` remains `started`, still calls the rule-based CRT procedure, the procedure points to the CRT stage, and current canonical rows remain at `RUN_DATE=2026-09-18`.
+- [x] Post-deployment read-only checks confirmed current CRT output was not rewritten or damaged: `RUN_DATE=2026-09-18`, 357 rows / 357 unique IDs / 121 stores / max 3 per store; all rows have `issue_key`, `merge_key`, and non-null facts; all six enabled signal types remain present. CRT task remains `started`; DEV has no pipeline task.
+- [ ] Validate the first scheduled CRT output after deployment: each `OSA_BIG_DROP.day_period_grid` must contain 21 cells from `latest_date - 6 days` through `latest_date`, with no later run-relative dates. Ask Cornelious to confirm the API/UI still renders the top tile, heatmap, PPGs, items, and historical pre-fix cards.
 
 ## 2026-09-17 — Morning validation and API read bugs
 

@@ -33,41 +33,48 @@ def _date_string(value):
 
 
 def _period_facts(osa, signals, this_week_start, this_week_end, dept_col):
-    filt = build_store_dept_filter(signals, dept_col)
-    data = osa.filter(filt).with_column('DOW', sunday_first_dow(F.col('DATE')))
-    rows = window_metrics(
-        data, this_week_start, this_week_end,
-        ['STORE_ID', dept_col, 'DATE', 'DOW', 'REPORTING_PERIOD_ID'], 'PERIOD',
-    ).collect()
-    grouped = defaultdict(dict)
-    for row in rows:
-        date = _date_string(row['DATE'])
-        period = int(row['REPORTING_PERIOD_ID'])
-        grouped[(int(row['STORE_ID']), row[dept_col])][(date, period)] = (
-            attributed_values(row, 'PERIOD')['store_controlled']
-        )
-
     result = {}
-    start = datetime.date.fromisoformat(this_week_start)
-    end = datetime.date.fromisoformat(this_week_end)
+    by_window = defaultdict(list)
     for signal in signals:
-        key = (signal['store_id'], signal.get('department', ''))
-        observed = grouped.get(key, {})
-        grid = []
-        current = start
-        while current <= end:
-            date = current.isoformat()
-            dow = ((current.weekday() + 1) % 7) + 1
-            for period in range(1, 4):
-                grid.append({
-                    'date': date,
-                    'day': _DAYS[dow],
-                    'period_id': period,
-                    'period_label': _PERIODS[period],
-                    'store_controlled_lsv': observed.get((date, period), 0.0),
-                })
-            current += datetime.timedelta(days=1)
-        result[key] = grid
+        end = datetime.date.fromisoformat(signal.get('latest_date') or this_week_end)
+        start = end - datetime.timedelta(days=6)
+        by_window[(start.isoformat(), end.isoformat())].append(signal)
+
+    for (window_start, window_end), group in by_window.items():
+        filt = build_store_dept_filter(group, dept_col)
+        data = osa.filter(filt).with_column('DOW', sunday_first_dow(F.col('DATE')))
+        rows = window_metrics(
+            data, window_start, window_end,
+            ['STORE_ID', dept_col, 'DATE', 'DOW', 'REPORTING_PERIOD_ID'], 'PERIOD',
+        ).collect()
+        grouped = defaultdict(dict)
+        for row in rows:
+            date = _date_string(row['DATE'])
+            period = int(row['REPORTING_PERIOD_ID'])
+            grouped[(int(row['STORE_ID']), row[dept_col])][(date, period)] = (
+                attributed_values(row, 'PERIOD')['store_controlled']
+            )
+
+        start = datetime.date.fromisoformat(window_start)
+        end = datetime.date.fromisoformat(window_end)
+        for signal in group:
+            key = (signal['store_id'], signal.get('department', ''))
+            observed = grouped.get(key, {})
+            grid = []
+            current = start
+            while current <= end:
+                date = current.isoformat()
+                dow = ((current.weekday() + 1) % 7) + 1
+                for period in range(1, 4):
+                    grid.append({
+                        'date': date,
+                        'day': _DAYS[dow],
+                        'period_id': period,
+                        'period_label': _PERIODS[period],
+                        'store_controlled_lsv': observed.get((date, period), 0.0),
+                    })
+                current += datetime.timedelta(days=1)
+            result[key] = grid
     return result
 
 
