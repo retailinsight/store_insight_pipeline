@@ -156,7 +156,12 @@ def run(
     from store_insight.pipeline.stages._0_quality.quality_gate import run_quality_gate
 
     print("[handler] Stage 0: source data-quality gate...")
-    gate_plan = run_quality_gate(session, cfg, analysis_date=analysis_date)
+    gate_plan = run_quality_gate(
+        session,
+        cfg,
+        analysis_date=analysis_date,
+        trusted_scheduled_write=True,
+    )
 
     # ── load data ──────────────────────────────────────────────────────
     print("[handler] Loading OSA data...")
@@ -198,7 +203,14 @@ def run(
         gate_plan=gate_plan,
     )
 
-    write_alerts_with_queue(session, cards, run_date=run_date, overwrite=overwrite, cfg=cfg)
+    write_alerts_with_queue(
+        session,
+        cards,
+        run_date=run_date,
+        overwrite=overwrite,
+        cfg=cfg,
+        trusted_scheduled_write=True,
+    )
 
     summary = f"[handler] Done — {len(cards)} candidate alert cards processed for {analysis_date}"
     print(summary)

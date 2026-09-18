@@ -211,6 +211,33 @@ def test_run_quality_gate_healthy_source_is_no_op():
     assert plan.actions == {'osa': 'NONE'}
 
 
+def test_run_quality_gate_rejects_interactive_canonical_log_write():
+    with pytest.raises(PermissionError, match='Refusing interactive write'):
+        run_quality_gate(
+            _FakeSession(100),
+            _FakeCfg(log_table='STORE_INSIGHT_DB.PUBLIC.DATA_QUALITY_LOG'),
+            analysis_date=datetime.date(2026, 8, 28),
+        )
+
+
+def test_run_quality_gate_can_disable_log_writes():
+    captured = []
+
+    class _SpySession(_FakeSession):
+        def sql(self, query):
+            captured.append(query)
+            return super().sql(query)
+
+    run_quality_gate(
+        _SpySession(100),
+        _FakeCfg(log_table='STORE_INSIGHT_DB.PUBLIC.DATA_QUALITY_LOG'),
+        analysis_date=datetime.date(2026, 8, 28),
+        write_log=False,
+    )
+
+    assert not any(query.startswith('INSERT INTO') for query in captured)
+
+
 def test_run_quality_gate_disabled_runs_everything():
     plan = run_quality_gate(_FakeSession(0), _FakeCfg(gate_enabled=False),
                             analysis_date=datetime.date(2026, 8, 28))

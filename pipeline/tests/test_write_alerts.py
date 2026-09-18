@@ -96,38 +96,38 @@ def test_overwrite_run_date_deletes_only_this_run_then_appends(monkeypatch):
         overwrite=True, cfg=cfg,
     )
 
-    # Exactly one SQL statement, scoped to this RUN_DATE only.
-    session.sql.assert_called_once()
-    sql_text = session.sql.call_args.args[0]
-    assert sql_text.startswith('DELETE FROM DB.SCHEMA.ALERTS')
-    assert "RUN_DATE = '2026-04-21'" in sql_text
-
-    # And then we append, not overwrite.
+    sql_calls = [call.args[0] for call in session.sql.call_args_list]
+    assert sql_calls[0] == 'BEGIN'
+    assert sql_calls[1].startswith('DELETE FROM DB.SCHEMA.ALERTS')
+    assert "RUN_DATE = '2026-04-21'" in sql_calls[1]
+    assert sql_calls[2] == 'COMMIT'
     assert record['write_mode'] == 'append'
     assert record['saved_to']   == 'DB.SCHEMA.ALERTS'
 
 
-def test_overwrite_run_date_tolerates_missing_table(monkeypatch, capsys):
-    """
-    First-write case: the table doesn't exist yet so DELETE fails.  We must
-    swallow that and proceed with the append, otherwise --overwrite is
-    unusable on the very first run for a new client.
-    """
+def test_overwrite_run_date_rolls_back_when_delete_fails(monkeypatch):
     _patch_card_serialisers(monkeypatch)
     session, record = _make_session()
-    session.sql.side_effect = RuntimeError("Table 'DB.SCHEMA.ALERTS' does not exist")
+
+    def _sql(statement):
+        result = MagicMock()
+        if statement.startswith('DELETE'):
+            result.collect.side_effect = RuntimeError('delete failed')
+        return result
+
+    session.sql.side_effect = _sql
     cfg = {'output': {'alerts': 'DB.SCHEMA.ALERTS'}}
 
-    pipeline_module.write_alerts(
-        session, [{'alert_type': 'OSA'}], run_date='2026-04-21',
-        overwrite=True, cfg=cfg,
-    )
+    with pytest.raises(RuntimeError, match='delete failed'):
+        pipeline_module.write_alerts(
+            session, [{'alert_type': 'OSA'}], run_date='2026-04-21',
+            overwrite=True, cfg=cfg,
+        )
 
-    # Append still happened.
-    assert record['write_mode'] == 'append'
-    # And we logged the suppressed error so the user isn't surprised.
-    captured = capsys.readouterr().out
-    assert 'no pre-existing rows to delete' in captured
+    assert [call.args[0] for call in session.sql.call_args_list] == [
+        'BEGIN', "DELETE FROM DB.SCHEMA.ALERTS WHERE RUN_DATE = '2026-04-21'", 'ROLLBACK',
+    ]
+    assert record == {}
 
 
 def test_full_replace_mode_calls_overwrite_save_as_table(monkeypatch):
@@ -197,8 +197,10 @@ def test_target_table_overrides_cfg_output(monkeypatch):
         cfg=cfg,
     )
 
-    # DELETE must scope to the override, not the cfg target.
-    sql_text = session.sql.call_args.args[0]
+    sql_text = next(
+        call.args[0] for call in session.sql.call_args_list
+        if call.args[0].startswith('DELETE')
+    )
     assert 'DB.SCHEMA.SCRATCH_ALERTS' in sql_text
     assert 'PROD_ALERTS' not in sql_text
 
@@ -220,6 +222,74 @@ def test_target_table_works_in_append_mode_too(monkeypatch):
     session.sql.assert_not_called()
     assert record['saved_to']   == 'DB.SCHEMA.SCRATCH_ALERTS'
     assert record['write_mode'] == 'append'
+
+
+@pytest.mark.parametrize('kwargs', [{}, {'overwrite': True}, {'full_replace': True}])
+def test_interactive_write_to_canonical_crt_is_rejected_before_session_use(monkeypatch, kwargs):
+    _patch_card_serialisers(monkeypatch)
+    session, _ = _make_session()
+    cfg = {'output': {'alerts': 'STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE'}}
+
+    with pytest.raises(PermissionError, match='Refusing'):
+        pipeline_module.write_alerts(
+            session, [{'alert_type': 'OSA'}], run_date='2026-09-18', cfg=cfg, **kwargs,
+        )
+
+    session.create_dataframe.assert_not_called()
+    session.sql.assert_not_called()
+
+
+@pytest.mark.parametrize('table', sorted(pipeline_module.PROTECTED_CANONICAL_TABLES))
+def test_all_canonical_targets_are_protected(table):
+    with pytest.raises(PermissionError, match='Refusing interactive write'):
+        pipeline_module.validate_alert_write_target(table)
+
+
+def test_unqualified_target_is_rejected(monkeypatch):
+    _patch_card_serialisers(monkeypatch)
+    session, _ = _make_session()
+
+    with pytest.raises(ValueError, match='fully-qualified'):
+        pipeline_module.write_alerts(
+            session, [{'alert_type': 'OSA'}], run_date='2026-09-18',
+            target_table='ALERTS_PIPELINE',
+        )
+
+
+def test_canonical_target_normalization_cannot_bypass_guard(monkeypatch):
+    _patch_card_serialisers(monkeypatch)
+    session, _ = _make_session()
+
+    with pytest.raises(PermissionError, match='Refusing interactive write'):
+        pipeline_module.write_alerts(
+            session, [{'alert_type': 'OSA'}], run_date='2026-09-18',
+            target_table='"store_insight_db"."public"."alerts_pipeline"',
+        )
+
+
+def test_partial_store_write_to_canonical_crt_is_rejected_even_if_trusted(monkeypatch):
+    _patch_card_serialisers(monkeypatch)
+    session, _ = _make_session()
+    cfg = {'output': {'alerts': 'STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE'}}
+
+    with pytest.raises(PermissionError, match='partial-store'):
+        pipeline_module.write_alerts(
+            session, [{'alert_type': 'OSA'}], run_date='2026-09-18', cfg=cfg,
+            trusted_scheduled_write=True, partial_store_run=True,
+        )
+
+
+def test_trusted_scheduled_write_to_canonical_crt_is_allowed(monkeypatch):
+    _patch_card_serialisers(monkeypatch)
+    session, record = _make_session()
+    cfg = {'output': {'alerts': 'STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE'}}
+
+    pipeline_module.write_alerts(
+        session, [{'alert_type': 'OSA'}], run_date='2026-09-18', cfg=cfg,
+        trusted_scheduled_write=True,
+    )
+
+    assert record['saved_to'] == 'STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE'
 
 
 # ---------------------------------------------------------------------------

@@ -162,6 +162,14 @@ run_batch(client='eastofengland', analysis_date='2025-06-14')
 `analysis_date` should be the last day (Saturday) of the week to analyse.  
 Omit it to default to the most recent Saturday.
 
+### Write safety
+
+Interactive `run_batch.py` runs cannot write to protected canonical CRT tables. Always pass a fully qualified DEV or sandbox `--target-table`; a session database change does not override the client output config. Partial `--store-id` runs and `--full-replace` are prohibited against canonical CRT.
+
+Ad-hoc runs disable quality-log and outcome writes by default. `--write-secondary-results` is allowed only when every configured secondary destination is non-production. The scheduled Snowflake handler uses the separately trusted production path.
+
+Rejection tests use mocks. Successful write tests use DEV/sandbox only; never test a guard by attempting a real CRT write. See `prds/prd-production-write-safety-guardrails.md` and `.devin/rules/production-write-safety.md`.
+
 ---
 
 ## Running in Snowflake

@@ -969,6 +969,27 @@ on small feature branches off the merged `main` — no more stacking on the inte
 - [x] Snowflake contract files `SNOWFLAKE_CONTRACT_FOR_API_UI_V0.4.md`, `SNOWFLAKE_CONSUMER_CONTRACT.md` and `REQUESTS_LOG.md` updated with CRT `ALERTS_HISTORY_V1`, `merge_key` fallback and closed two-view API status.
 - [x] **PRD `prd-alert-suppression-and-queue.md` pipeline suppression deployed:** PR #86 suppresses active In Progress and recently resolved issues before the `top_n:3` cap. First scheduled output is `RUN_DATE=2026-09-18`; all 357 rows have `issue_key` and `merge_key`. Continue store-level API/UI acceptance checks.
 
+## 2026-09-18 — Production write safety guardrails (Dan approved)
+
+- [x] Audited the interrupted 16-store `run_batch.py --overwrite` attempt: CRT `RUN_DATE=2026-09-18` remains intact at 357 rows / 357 unique IDs / 121 stores; no recent role-visible `DELETE`, `DROP` or table-replace query against `ALERTS_PIPELINE` was found.
+- [x] Reviewed `0007-production-write-safety-guardrails.md` against downstream `main` (`309c3ee`) and identified additional requirements: protect append as well as destructive modes; enforce at the shared write boundary; reject partial-store canonical writes; include quality/outcome/workflow side effects; make run-date replacement atomic; prohibit canonical full replacement except break-glass; keep environment config explicit; use `.devin/rules`.
+- [x] Dan approved the strengthened approach at 12:28 on 18 Sep.
+- [x] Created the canonical PRD at `prds/prd-production-write-safety-guardrails.md`; no short version is required. Treat the downloaded issue as source material, not a second maintained specification.
+- [x] Implemented Phase 1 test-first on clean branch `fix/production-write-guardrails` from `origin/main`: centralized protected-target policy, all-mode canonical guard, partial-store rejection, secondary writes disabled by default, explicit target/mode logging, fully-qualified target enforcement, and transactional run-date replacement.
+- [x] Added regression tests reproducing the exact 16-store CRT overwrite attempt, direct `write_alerts` bypass attempts, protected auxiliary targets, unqualified/case-normalized targets, partial-store writes, rollback, and trusted scheduled execution. Mocked sandbox writes remain allowed.
+- [x] Added `.devin/rules/production-write-safety.md` and aligned `pipeline/README.md`.
+- [x] Prepared the Phase 2 least-privilege role migration in the PRD for Systems Engineering: interactive/dev writes only to DEV/sandbox; scheduled service role writes canonical CRT; API role limited to views plus narrow workflow writes; audited break-glass role. No grants or ownership were changed.
+- [x] Verification was local and read-only with respect to Snowflake: 825 pipeline tests passed, 2 skipped; Ruff and Python compilation passed. No DEV or CRT connection/write was used to test the guardrails.
+
+## 2026-09-18 — Store 239 empty To Do explained; no behavior change
+
+- [x] Confirmed store 239 received three fresh `RUN_DATE=2026-09-18` alerts. The scheduled pipeline completed around 06:03 BST; the store moved the new CONFECTIONERY and CRISPS/SNACKS/NUTS cards to In Progress shortly afterwards, and the HOT FOOD issue matched a recently completed workflow row.
+- [x] Confirmed pipeline order already matches the PRD: workflow suppression runs before `top_n_per_store: 3`. `ALERTS_LATEST_V1` contains only the selected three cards, not a live reserve pool.
+- [x] Dan confirmed at 12:01 that store 239 had moved all three cards that morning and instructed: "Fair enough, don't change anything." Keep the existing rule: up to three fresh eligible To Do cards per daily run; do not add continuous same-day replenishment.
+- [x] No pipeline, API, UI, PRD or contract change required for this report.
+- [x] **Source-control alignment:** deployed follow-up commits `c3b6dd2`, `fcc59c6`, `bda27c0`, and `ff56104` merged to `main` through PR #89 (`220d4f4`).
+- [ ] **API contract alignment:** contract commits `ddd11da`, `df2f95d`, `fb8c22f`, and `3166814` remain on `fix/dev-reclone-after-rebuild`; API `origin/main` has moved ahead by three commits. Refresh the branch and open/merge a focused documentation PR.
+
 ## 2026-09-18 — Clearer source-quality monitoring (Dan approved)
 
 - [x] Confirmed the 18 Sep warning was a feedback-only volume drop: 1,210 rows versus a 1,724 baseline (70.2%); OSA was healthy and current OSA actions were unaffected.

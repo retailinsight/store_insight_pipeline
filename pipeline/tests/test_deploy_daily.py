@@ -50,13 +50,15 @@ def test_daily_handler_runs_quality_gate_and_passes_plan():
     # stage-0 gate and hand its plan to run_pipeline (missed in PR #57 —
     # the gate only ran via run_batch.py, so scheduled runs were unprotected).
     source = inspect.getsource(run)
-    assert "run_quality_gate(session, cfg, analysis_date=analysis_date)" in source
+    assert "run_quality_gate(" in source
+    assert "trusted_scheduled_write=True" in source
     assert "gate_plan=gate_plan" in source
 
 
 def test_daily_handler_routes_writes_through_queue_wrapper():
     source = inspect.getsource(run)
-    assert "write_alerts_with_queue(session, cards" in source
+    assert "write_alerts_with_queue(" in source
+    assert "trusted_scheduled_write=True" in source
     assert "write_alerts(session, cards" not in source
     assert "for _, type_config in cfg.investigation" in source
     assert 'getattr(cfg.investigation, signal_type)' not in source
@@ -75,6 +77,8 @@ def test_queue_wrapper_uses_standard_writer_when_disabled(monkeypatch):
         "full_replace": False,
         "target_table": None,
         "cfg": cfg,
+        "trusted_scheduled_write": False,
+        "partial_store_run": False,
     })]
 
 

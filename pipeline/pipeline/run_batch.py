@@ -81,8 +81,10 @@ from store_insight.pipeline.config.loader import load_config
 from store_insight.pipeline.pipeline.capabilities import discover_capabilities
 from store_insight.pipeline.pipeline.capabilities import validate as validate_capabilities
 from store_insight.pipeline.pipeline.pipeline import (
+    _output_table,
     derive_windows,
     run_pipeline,
+    validate_alert_write_target,
     write_alerts,
 )
 from store_insight.pipeline.pipeline.regression import (
@@ -259,6 +261,8 @@ def write_alerts_with_queue(
     full_replace: bool = False,
     target_table: str | None = None,
     cfg=None,
+    trusted_scheduled_write: bool = False,
+    partial_store_run: bool = False,
 ):
     """Write the current selected cards; historical workflow stays in its view."""
     return write_alerts(
@@ -269,6 +273,8 @@ def write_alerts_with_queue(
         full_replace=full_replace,
         target_table=target_table,
         cfg=cfg,
+        trusted_scheduled_write=trusted_scheduled_write,
+        partial_store_run=partial_store_run,
     )
 
 
@@ -284,6 +290,7 @@ def run_single_date(
     deterministic: bool = False,
     golden_path: str | None = None,
     regression_tolerance: float = 0.0,
+    write_secondary_results: bool = False,
 ):
     """
     Run the full pipeline for one analysis_date and write results.
@@ -309,7 +316,12 @@ def run_single_date(
         print(f"[run_batch] store filter  : {store_label}")
 
     print("[run_batch] Stage 0: source data-quality gate...")
-    gate_plan = run_quality_gate(session, cfg, analysis_date=analysis_date)
+    gate_plan = run_quality_gate(
+        session,
+        cfg,
+        analysis_date=analysis_date,
+        write_log=write_secondary_results,
+    )
 
     capabilities = discover_capabilities(client) if cfg else None
 
@@ -376,6 +388,7 @@ def run_single_date(
         full_replace=full_replace,
         target_table=target_table,
         cfg=cfg,
+        partial_store_run=bool(store_id),
     )
 
     if deterministic:
@@ -392,10 +405,13 @@ def run_single_date(
             save_golden(stats, golden_path)
             print(f"[run_batch] --deterministic: golden snapshot created at {golden_path}")
 
-    print('[run_batch] Measuring outcomes for eligible Commitments...')
-    outcomes = measure_outcomes(session, current_run_date=run_date, cfg=cfg)
-    if outcomes:
-        _write_outcomes(session, outcomes, cfg=cfg)
+    if write_secondary_results:
+        print('[run_batch] Measuring outcomes for eligible Commitments...')
+        outcomes = measure_outcomes(session, current_run_date=run_date, cfg=cfg)
+        if outcomes:
+            _write_outcomes(session, outcomes, cfg=cfg)
+    else:
+        print('[run_batch] Secondary quality-log and outcome writes disabled.')
 
 
 def _outcomes_table(cfg) -> str:
@@ -441,6 +457,7 @@ def _write_outcomes(session, outcomes: list[dict], cfg=None) -> None:
     ]
 
     table = _outcomes_table(cfg)
+    validate_alert_write_target(table)
     session.create_dataframe(rows, schema=schema).write.mode('append').save_as_table(table)
     print(f'[outcomes] → {table} ({len(rows)} rows appended)')
 
@@ -485,7 +502,7 @@ def main():
         action="store_true",
         help="Replace this run_date's rows in the output table "
         "(DELETE WHERE RUN_DATE = <run_date>, then INSERT).  Other "
-        "dates are untouched.  Safe against the production table.",
+        "dates are untouched. Interactive writes to canonical CRT are refused.",
     )
     write_mode.add_argument(
         "--full-replace",
@@ -500,6 +517,11 @@ def main():
         help="Override the output table for this run (does not change the "
         "config file).  Use for ad-hoc test runs without mutating "
         "cfg['output']['alerts'].",
+    )
+    parser.add_argument(
+        "--write-secondary-results",
+        action="store_true",
+        help="Write quality-gate and outcome results. Disabled by default for ad-hoc safety.",
     )
     parser.add_argument(
         "--deterministic",
@@ -540,6 +562,27 @@ def main():
     # ── Load config (merges base + client YAML, loads .env) ───────────────
     cfg = load_config(args.client)
     print(f"[run_batch] Config loaded: client={cfg.client_name}")
+    effective_target = args.target_table or _output_table(cfg)
+    mode = 'full_replace' if args.full_replace else 'overwrite_run_date' if args.overwrite else 'append'
+    scope = f'{len(args.store_id)} store(s)' if args.store_id else 'all stores'
+    print(
+        f'[run_batch] write preflight: target={effective_target} mode={mode} '
+        f'run_date={run_date} analysis_date={analysis_date} scope={scope}'
+    )
+    validate_alert_write_target(
+        effective_target,
+        full_replace=args.full_replace,
+        partial_store_run=bool(args.store_id),
+    )
+    if args.write_secondary_results:
+        secondary_targets = [_outcomes_table(cfg)]
+        log_table = getattr(getattr(cfg, 'data_quality', None), 'log_table', None)
+        if log_table:
+            secondary_targets.append(log_table)
+        for secondary_target in secondary_targets:
+            validate_alert_write_target(secondary_target)
+    else:
+        print('[run_batch] write preflight: secondary writes disabled')
 
     # ── Capability validation: every enabled detector/gatherer must have
     #    its required contracts deployed for this client.  Fail fast here
@@ -614,6 +657,7 @@ def main():
                 deterministic=args.deterministic,
                 golden_path=args.golden_path,
                 regression_tolerance=args.regression_tolerance,
+                write_secondary_results=args.write_secondary_results,
             )
 
         print(
@@ -634,6 +678,7 @@ def main():
             deterministic=args.deterministic,
             golden_path=args.golden_path,
             regression_tolerance=args.regression_tolerance,
+            write_secondary_results=args.write_secondary_results,
         )
 
     print("[run_batch] Done.")

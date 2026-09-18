@@ -1048,6 +1048,50 @@ def run_pipeline_from_signals(
     return cards
 
 
+PROTECTED_CANONICAL_TABLES = {
+    'STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE',
+    'STORE_INSIGHT_DB.PUBLIC.STORE_INSIGHT_OUTCOMES',
+    'STORE_INSIGHT_DB.PUBLIC.DATA_QUALITY_LOG',
+    'STORE_INSIGHT_DB.PUBLIC.ALERT_ACTION_STATUS',
+    'STORE_INSIGHT_DB.PUBLIC.NOTES',
+}
+
+
+def _normalize_table_name(table: str) -> str:
+    return '.'.join(part.strip().strip('"').upper() for part in table.split('.'))
+
+
+def validate_alert_write_target(
+    table: str,
+    *,
+    trusted_scheduled_write: bool = False,
+    full_replace: bool = False,
+    partial_store_run: bool = False,
+) -> None:
+    normalized = _normalize_table_name(table)
+    if len(normalized.split('.')) != 3:
+        raise ValueError(
+            f'Refusing write to non-fully-qualified table {table}. '
+            'Specify DATABASE.SCHEMA.TABLE explicitly.'
+        )
+    if normalized not in PROTECTED_CANONICAL_TABLES:
+        return
+    if full_replace:
+        raise PermissionError(
+            f'Refusing full replacement of protected canonical table {normalized}. '
+            'Use the approved break-glass recovery process.'
+        )
+    if partial_store_run:
+        raise PermissionError(
+            f'Refusing partial-store write to protected canonical table {normalized}.'
+        )
+    if not trusted_scheduled_write:
+        raise PermissionError(
+            f'Refusing interactive write to protected canonical table {normalized}. '
+            'Use an approved DEV or sandbox target.'
+        )
+
+
 def write_alerts(
     session,
     cards,
@@ -1056,6 +1100,8 @@ def write_alerts(
     full_replace: bool = False,
     target_table: str | None = None,
     cfg=None,
+    trusted_scheduled_write: bool = False,
+    partial_store_run: bool = False,
 ):
     """
     Write alert cards to Snowflake.
@@ -1070,8 +1116,8 @@ def write_alerts(
     OVERWRITE_RUN_DATE (``overwrite=True``)
         ``DELETE FROM <table> WHERE RUN_DATE = <run_date>`` then APPEND.
         Replaces only this run's rows; every other RUN_DATE is untouched.
-        This is the right mode for re-running a single date after a code
-        change, and it is safe to use against the production output table.
+        This mode is permitted for approved non-production targets and the
+        trusted scheduled production path only.
 
     FULL_REPLACE (``full_replace=True``)
         Drops and recreates the entire output table with just this run's
@@ -1097,6 +1143,14 @@ def write_alerts(
             "write_alerts: overwrite=True and full_replace=True are mutually exclusive.  Pick one."
         )
 
+    table = target_table or _output_table(cfg)
+    validate_alert_write_target(
+        table,
+        trusted_scheduled_write=trusted_scheduled_write,
+        full_replace=full_replace,
+        partial_store_run=partial_store_run,
+    )
+
     if not cards:
         print("[pipeline] No alert cards to write.")
         return
@@ -1106,7 +1160,6 @@ def write_alerts(
         _card_to_row(c, run_date, emit_affected_products=emit_affected_products)
         for c in cards
     ]
-    table = target_table or _output_table(cfg)
     df = session.create_dataframe(
         rows,
         schema=_card_schema(emit_affected_products=emit_affected_products),
@@ -1116,13 +1169,14 @@ def write_alerts(
         df.write.mode("overwrite").save_as_table(table)
         mode_label = "full_replace"
     elif overwrite:
-        # Delete only this run_date's rows, then append.  Tolerates the
-        # table not yet existing on the very first write.
+        session.sql('BEGIN').collect()
         try:
             session.sql(f"DELETE FROM {table} WHERE RUN_DATE = '{run_date}'").collect()
-        except Exception as exc:  # noqa: BLE001 — table-missing is an expected first-run case
-            print(f"[pipeline] (no pre-existing rows to delete for RUN_DATE={run_date}: {exc})")
-        df.write.mode("append").save_as_table(table)
+            df.write.mode("append").save_as_table(table)
+            session.sql('COMMIT').collect()
+        except Exception:
+            session.sql('ROLLBACK').collect()
+            raise
         mode_label = "overwrite_run_date"
     else:
         df.write.mode("append").save_as_table(table)
