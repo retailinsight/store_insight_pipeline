@@ -1,0 +1,87 @@
+# East of England Co-op — dev environment overrides
+# ====================================================
+# Copy of the eastofengland production config with connection parameters
+# redirected to the dev database/warehouse.
+#
+# TODO: replace the connection placeholder values below with the actual
+# dev environment names. Keep everything else in sync with
+# config/clients/eastofengland/client.yaml.
+
+client_name: eastofengland_dev
+
+connection:
+  database:  STORE_INSIGHT_DEV_DB
+  schema:    PUBLIC
+  role:      STORE_INSIGHT_DEV_ROLE
+  warehouse: STORE_INSIGHT_DEV_WH
+
+output:
+  emit_affected_products: true
+  top_n_per_store: 3
+  max_per_type_per_store: 2
+
+detectors:
+  enabled:
+    - osa_store_actionable.wow
+    - osa_store_actionable.vs_chain
+    - osa_big_drop.big_drop
+    - osa_recurring_slot.recurring_slot
+    - compliance.tick_and_flick_wow
+    - compliance.tick_and_flick_vs_chain
+    - markdown_override.vs_chain
+    - markdown_override.wow
+    - markdown_sku.repeat_request
+    - markdown_sku.excessive_override
+
+detector_config:
+  thresholds:
+    OSA_STORE_ACTIONABLE:
+      min_actionable_wow_drop:        0.01
+      min_actionable_chain_gap:       0.01
+      min_actionable_lsv:             50.0
+      min_actionable_positive_rows:   3
+      max_actionable_unknown_row_pct: 10.0
+
+    OSA_BIG_DROP:
+      min_actionable_big_drop:        0.02
+      min_osa_big_drop_lsv:           10.0
+      min_big_drop_positive_rows:     2
+      max_actionable_unknown_row_pct: 10.0
+
+    OSA_RECURRING_SLOT:
+      min_item_repeat_weeks: 4
+      min_item_pattern_lsv:  25.0
+      min_items:             2
+
+    COMPLIANCE:
+      min_compliance_wow_drop:   0.03
+      min_compliance_chain_gap:  0.02
+      min_alerts_worked:         3
+
+    MARKDOWN_OVERRIDE:
+      min_override_chain_gap:    0.01
+      min_override_wow_increase: 0.01
+      min_total_markdowns:       2
+
+    MARKDOWN_SKU:
+      min_markdown_weeks:      4
+      min_markdown_requests:   12
+      min_sku_override_rate:   0.75
+      min_sku_requests:        4
+
+investigation:
+  COMPLIANCE:
+    engine: rule_based
+    skill_file: skills/compliance_investigation_skill.md
+  MARKDOWN_OVERRIDE:
+    engine: rule_based
+    skill_file: skills/markdown_override_investigation_skill.md
+  WASTE:
+    engine: rule_based
+    skill_file: skills/waste_investigation_skill.md
+  MARKDOWN_SELLTHROUGH:
+    engine: rule_based
+    skill_file: skills/markdown_sellthrough_investigation_skill.md
+  MARKDOWN_SKU:
+    engine: rule_based
+    skill_file: skills/markdown_sku_investigation_skill.md
