@@ -24,6 +24,9 @@ EXPECTED_ENABLED_DETECTORS = [
     'markdown_override.wow',
     'markdown_sku.repeat_request',
     'markdown_sku.excessive_override',
+    'prompted_markdown_compliance.wow',
+    'prompted_markdown_compliance.vs_chain',
+    'big_drop_prompted_markdown_compliance.big_drop',
 ]
 
 
