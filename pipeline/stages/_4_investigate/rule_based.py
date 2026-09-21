@@ -871,9 +871,15 @@ def _generate_markdown_compliance(signal: dict) -> dict:
         f"{this_completed} of {this_due} markdowns were completed on time this week ({this_rate:.1f}%).",
     ]
     if "WOW" in triggers and last_rate is not None and wow_change is not None:
-        explanation_lines.append(
-            f"Last week the on-time rate was {last_rate:.1f}% — down {abs(wow_change):.1f}pp."
-        )
+        direction = "up" if wow_change > 0 else "down" if wow_change < 0 else "unchanged"
+        if wow_change == 0:
+            explanation_lines.append(
+                f"Last week the on-time rate was {last_rate:.1f}% — unchanged."
+            )
+        else:
+            explanation_lines.append(
+                f"Last week the on-time rate was {last_rate:.1f}% — {direction} {abs(wow_change):.1f}pp."
+            )
     if "VS_CHAIN" in triggers and chain_rate is not None:
         explanation_lines.append(
             f"Chain average is {chain_rate:.1f}% — this store is {below_chain:.1f}pp below."
@@ -894,8 +900,9 @@ def _generate_markdown_compliance(signal: dict) -> dict:
     target = f"{last_rate:.1f}%" if last_rate is not None else "the prior week's rate"
 
     if volume_classification == "INCREASING" and volume_change_pct is not None:
+        wow_word = "fallen" if (wow_change or 0) < 0 else "risen"
         action = (
-            f"Markdowns due are up {volume_change_pct:.0f}% while on-time completion has fallen "
+            f"Markdowns due are up {volume_change_pct:.0f}% while on-time completion has {wow_word} "
             f"{abs(wow_change or 0):.0f}pp. Store manager to review staffing against markdown "
             f"workload this week, escalating to the area manager if hours cannot cover it. "
             f"Focus on {focus}. Review in 7 days against a target of {target}."
@@ -958,9 +965,15 @@ def _generate_prompted_markdown_compliance(signal: dict) -> dict:
         f"{this_completed} of {this_due} prompts were actioned on time this week ({this_rate:.1f}%).",
     ]
     if "WOW" in triggers and last_rate is not None and wow_change is not None:
-        explanation_lines.append(
-            f"Last week the on-time rate was {last_rate:.1f}% — down {abs(wow_change):.1f}pp."
-        )
+        direction = "up" if wow_change > 0 else "down" if wow_change < 0 else "unchanged"
+        if wow_change == 0:
+            explanation_lines.append(
+                f"Last week the on-time rate was {last_rate:.1f}% — unchanged."
+            )
+        else:
+            explanation_lines.append(
+                f"Last week the on-time rate was {last_rate:.1f}% — {direction} {abs(wow_change):.1f}pp."
+            )
     if "VS_CHAIN" in triggers and chain_rate is not None:
         explanation_lines.append(
             f"Chain average is {chain_rate:.1f}% — this store is {below_chain:.1f}pp below."
@@ -980,18 +993,26 @@ def _generate_prompted_markdown_compliance(signal: dict) -> dict:
             f"£{projected_cost * 4:,.2f} if not fixed."
         )
 
-    if last_rate is not None:
-        drop = (
-            f"Compliance has dropped from {last_rate:.1f}% to {this_rate:.1f}% "
-            f"in the last 7 days"
-        )
+    if "WOW" in triggers and last_rate is not None:
+        if this_rate > last_rate:
+            trend = (
+                f"Compliance has increased from {last_rate:.1f}% to {this_rate:.1f}% "
+                f"in the last 7 days"
+            )
+        elif this_rate < last_rate:
+            trend = (
+                f"Compliance has dropped from {last_rate:.1f}% to {this_rate:.1f}% "
+                f"in the last 7 days"
+            )
+        else:
+            trend = f"Compliance is unchanged at {this_rate:.1f}% compared with last week"
     else:
-        drop = f"Compliance is {this_rate:.1f}% this week"
+        trend = f"Compliance is {this_rate:.1f}% this week"
 
     if alert_count_increasing:
-        action = drop + " and the alert volume rose above the weekly average over the same period."
+        action = trend + " and the alert volume rose above the weekly average over the same period."
     else:
-        action = drop + "."
+        action = trend + "."
 
     cost_if_not_fixed = f"£{projected_cost:,.2f} per week if not fixed."
 
