@@ -1037,6 +1037,90 @@ def test_prompted_markdown_compliance_coaching_narrative():
     assert 'alert volume rose' not in out['recommended_action']
 
 
+def test_prompted_markdown_compliance_increased_rate_uses_correct_direction():
+    """When compliance improved week-on-week, the narrative must say 'increased', not 'dropped'."""
+    signal = _prompted_markdown_compliance(
+        trigger_types=['WOW', 'VS_CHAIN'],
+        this_week_prompts_issued=100,
+        this_week_prompts_actioned_on_time=90,
+        this_week_compliance_rate=90.0,
+        last_week_compliance_rate=80.0,
+        wow_change_pp=10.0,
+        chain_rate=85.0,
+        below_chain=5.0,
+        projected_cost=0.0,
+        workload={
+            'this_period_volume': 100,
+            'prev_period_volume': 100,
+            'volume_change_pct': 0.0,
+            'chain_avg_volume_per_store': 95,
+            'volume_classification': 'STABLE',
+        },
+        facts={
+            'driver_assessment': {
+                'volume_classification': 'STABLE',
+                'volume_change_pct': 0.0,
+                'compliance_direction': 'IMPROVING',
+                'compliance_change_pp': 10.0,
+                'likely_driver': 'COACHING',
+                'suggested_check': 'REVIEW_PROCESS_WITH_TEAM',
+            },
+            'worst_departments_top3': [
+                {'dept': 'PRODUCE', 'prompts': 20, 'actioned_on_time': 18, 'compliance_pct': 90.0},
+            ],
+            'daily_performance_last_7d': [
+                {'day': 'Monday', 'checks_due': 15, 'actioned_on_time': 14, 'compliance_pct': 93.3},
+            ],
+        },
+    )
+    out = generate(signal)
+    _assert_card_keys(out)
+    assert 'Compliance has increased from 80.0% to 90.0% in the last 7 days' in out['recommended_action']
+    assert 'up 10.0pp' in out['explanation']
+
+
+def test_prompted_markdown_compliance_vs_chain_only_does_not_claim_week_on_week_drop():
+    """VS_CHAIN-only alerts should not compare to last week's rate in the recommended action."""
+    signal = _prompted_markdown_compliance(
+        trigger_types=['VS_CHAIN'],
+        this_week_prompts_issued=100,
+        this_week_prompts_actioned_on_time=80,
+        this_week_compliance_rate=80.0,
+        last_week_compliance_rate=90.0,
+        wow_change_pp=None,
+        chain_rate=88.0,
+        below_chain=8.0,
+        projected_cost=0.0,
+        workload={
+            'this_period_volume': 100,
+            'prev_period_volume': 100,
+            'volume_change_pct': 0.0,
+            'chain_avg_volume_per_store': 95,
+            'volume_classification': 'STABLE',
+        },
+        facts={
+            'driver_assessment': {
+                'volume_classification': 'STABLE',
+                'volume_change_pct': 0.0,
+                'compliance_direction': 'DETERIORATING',
+                'compliance_change_pp': None,
+                'likely_driver': 'COACHING',
+                'suggested_check': 'REVIEW_PROCESS_WITH_TEAM',
+            },
+            'worst_departments_top3': [
+                {'dept': 'PRODUCE', 'prompts': 20, 'actioned_on_time': 16, 'compliance_pct': 80.0},
+            ],
+            'daily_performance_last_7d': [
+                {'day': 'Monday', 'checks_due': 15, 'actioned_on_time': 12, 'compliance_pct': 80.0},
+            ],
+        },
+    )
+    out = generate(signal)
+    _assert_card_keys(out)
+    assert 'Compliance is 80.0% this week' in out['recommended_action']
+    assert 'dropped from' not in out['recommended_action']
+
+
 # ---------------------------------------------------------------------------
 # Graceful handling of missing optional data
 # ---------------------------------------------------------------------------
