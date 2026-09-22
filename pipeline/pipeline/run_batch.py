@@ -260,6 +260,82 @@ def load_wmd(session, wmd_lookback, analysis_date, cfg=None, capabilities=None):
 
 
 # ---------------------------------------------------------------------------
+# Shared source loader — used by both handler.run and run_single_date
+# ---------------------------------------------------------------------------
+
+
+def load_sources(session, windows, cfg, capabilities=None, log_prefix="[load_sources]"):
+    """Load every source DataFrame that ``run_pipeline`` accepts.
+
+    Both the Snowflake SP handler (``handler.run``) and the CLI entry point
+    (``run_single_date``) call this single function, so a new source can
+    never be wired into one path but not the other.
+
+    Parameters
+    ----------
+    session       : Snowpark Session
+    windows       : dict returned by ``derive_windows``
+    cfg           : PipelineConfig
+    capabilities  : set of contract names the client supports (from
+                    ``discover_capabilities``).  When ``None``, every source
+                    is loaded unconditionally — this is the SP handler path
+                    where all adapters are assumed present.
+    log_prefix    : tag for print statements (e.g. ``"[handler]"``)
+
+    Returns
+    -------
+    dict whose keys match the source kwargs of ``run_pipeline``:
+        osa, feedback, markdown_log, markdown_sales, wastage,
+        item_hierarchy, store_hierarchy, prompted_compliance
+    """
+
+    def _count_or_skip(label: str, df) -> None:
+        if df is None:
+            print(f"{log_prefix} {label:<26}: (no adapter — skipped)")
+        else:
+            print(f"{log_prefix} {label:<26}: {df.count():,}")
+
+    w = windows
+
+    print(f"{log_prefix} Loading OSA data...")
+    osa = load_osa(session, w["lookback_start"], w["this_week_end"], cfg=cfg)
+    _count_or_skip("OSA rows", osa)
+
+    print(f"{log_prefix} Loading feedback data...")
+    feedback = load_feedback(
+        session, w["last_week_start"], w["this_week_end"], cfg=cfg, capabilities=capabilities
+    )
+    _count_or_skip("Feedback rows", feedback)
+
+    print(f"{log_prefix} Loading WMD data (markdown log/sales, wastage, hierarchies)...")
+    wmd = load_wmd(
+        session, w["wmd_lookback"], w["this_week_end"], cfg=cfg, capabilities=capabilities
+    )
+    _count_or_skip("Markdown log    rows", wmd["markdown_log"])
+    _count_or_skip("Markdown sales  rows", wmd["markdown_sales"])
+    _count_or_skip("Wastage         rows", wmd["wastage"])
+    _count_or_skip("Item hierarchy  rows", wmd["item_hierarchy"])
+    _count_or_skip("Store hierarchy rows", wmd["store_hierarchy"])
+
+    print(f"{log_prefix} Loading prompted compliance data...")
+    prompted_compliance = load_prompted_compliance(
+        session, w["lookback_start"], w["this_week_end"], cfg=cfg, capabilities=capabilities
+    )
+    _count_or_skip("Prompted compliance rows", prompted_compliance)
+
+    return {
+        "osa": osa,
+        "feedback": feedback,
+        "markdown_log": wmd["markdown_log"],
+        "markdown_sales": wmd["markdown_sales"],
+        "wastage": wmd["wastage"],
+        "item_hierarchy": wmd["item_hierarchy"],
+        "store_hierarchy": wmd["store_hierarchy"],
+        "prompted_compliance": prompted_compliance,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -374,40 +450,12 @@ def run_single_date(
 
     capabilities = discover_capabilities(client) if cfg else None
 
-    print("[run_batch] Loading OSA data...")
-    osa = load_osa(session, w["lookback_start"], w["this_week_end"], cfg=cfg)
-    print(f"[run_batch] OSA rows loaded & cached : {osa.count():,}")
-
-    def _count_or_skip(label: str, df) -> None:
-        if df is None:
-            print(f"[run_batch] {label:<19}: (no adapter for this client — skipped)")
-        else:
-            print(f"[run_batch] {label:<19}: {df.count():,}")
-
-    print("[run_batch] Loading feedback data...")
-    feedback = load_feedback(
-        session, w["last_week_start"], w["this_week_end"], cfg=cfg, capabilities=capabilities
+    sources = load_sources(
+        session, w, cfg, capabilities=capabilities, log_prefix="[run_batch]"
     )
-    _count_or_skip("Feedback rows loaded & cached", feedback)
-
-    print("[run_batch] Loading WMD data (markdown log/sales, wastage, hierarchies)...")
-    wmd = load_wmd(
-        session, w["wmd_lookback"], w["this_week_end"], cfg=cfg, capabilities=capabilities
-    )
-    _count_or_skip("Markdown log    rows", wmd["markdown_log"])
-    _count_or_skip("Markdown sales  rows", wmd["markdown_sales"])
-    _count_or_skip("Wastage         rows", wmd["wastage"])
-    _count_or_skip("Item hierarchy  rows", wmd["item_hierarchy"])
-    _count_or_skip("Store hierarchy rows", wmd["store_hierarchy"])
-
-    print("[run_batch] Loading prompted compliance data...")
-    prompted_compliance = load_prompted_compliance(
-        session, w["lookback_start"], w["this_week_end"], cfg=cfg, capabilities=capabilities
-    )
-    _count_or_skip("Prompted compliance rows", prompted_compliance)
 
     pipeline_result = run_pipeline(
-        osa,
+        sources["osa"],
         last_week_start=w["last_week_start"],
         last_week_end=w["last_week_end"],
         this_week_start=w["this_week_start"],
@@ -416,13 +464,13 @@ def run_single_date(
         store_id=store_id,
         session=session,
         run_date=run_date,
-        feedback=feedback,
-        markdown_log=wmd["markdown_log"],
-        markdown_sales=wmd["markdown_sales"],
-        wastage=wmd["wastage"],
-        item_hierarchy=wmd["item_hierarchy"],
-        store_hierarchy=wmd["store_hierarchy"],
-        prompted_compliance=prompted_compliance,
+        feedback=sources["feedback"],
+        markdown_log=sources["markdown_log"],
+        markdown_sales=sources["markdown_sales"],
+        wastage=sources["wastage"],
+        item_hierarchy=sources["item_hierarchy"],
+        store_hierarchy=sources["store_hierarchy"],
+        prompted_compliance=sources["prompted_compliance"],
         cfg=cfg,
         return_intermediates=deterministic,
         run_id=run_id,

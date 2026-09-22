@@ -152,10 +152,7 @@ def run(
             print(f"[handler] Existing-run check skipped: {exc}")
 
     from store_insight.pipeline.pipeline.run_batch import (
-        load_feedback,
-        load_osa,
-        load_prompted_compliance,
-        load_wmd,
+        load_sources,
         write_alerts_with_queue,
     )
 
@@ -195,47 +192,27 @@ def run(
         trusted_scheduled_write=True,
     )
 
-    # ── load data ──────────────────────────────────────────────────────
-    print("[handler] Loading OSA data...")
-    osa = load_osa(session, w["lookback_start"], w["this_week_end"], cfg=cfg)
-    print(f"[handler] OSA rows : {osa.count():,}")
-
-    print("[handler] Loading feedback data...")
-    feedback = load_feedback(session, w["last_week_start"], w["this_week_end"], cfg=cfg)
-    print(f"[handler] Feedback rows : {feedback.count():,}")
-
-    print("[handler] Loading WMD data (markdown log/sales, wastage, hierarchies)...")
-    wmd = load_wmd(session, w["wmd_lookback"], w["this_week_end"], cfg=cfg)
-    print(f"[handler] Markdown log    rows : {wmd['markdown_log'].count():,}")
-    print(f"[handler] Markdown sales  rows : {wmd['markdown_sales'].count():,}")
-    print(f"[handler] Wastage         rows : {wmd['wastage'].count():,}")
-    print(f"[handler] Item hierarchy  rows : {wmd['item_hierarchy'].count():,}")
-    print(f"[handler] Store hierarchy rows : {wmd['store_hierarchy'].count():,}")
-
-    print("[handler] Loading prompted compliance data...")
-    prompted_compliance = load_prompted_compliance(
-        session, w["lookback_start"], w["this_week_end"], cfg=cfg
-    )
-    print(f"[handler] Prompted compliance rows : {prompted_compliance.count():,}")
+    # ── load data (shared loader — same function used by run_batch.py)
+    sources = load_sources(session, w, cfg, log_prefix="[handler]")
 
     # ── run pipeline ───────────────────────────────────────────────────
     run_id = str(uuid.uuid4())
     pipeline_version = os.environ.get("PIPELINE_VERSION")
     cards = run_pipeline(
-        osa,
+        sources["osa"],
         last_week_start=w["last_week_start"],
         last_week_end=w["last_week_end"],
         this_week_start=w["this_week_start"],
         this_week_end=w["this_week_end"],
         lookback_start=w["lookback_start"],
         session=session,
-        feedback=feedback,
-        markdown_log=wmd["markdown_log"],
-        markdown_sales=wmd["markdown_sales"],
-        wastage=wmd["wastage"],
-        item_hierarchy=wmd["item_hierarchy"],
-        store_hierarchy=wmd["store_hierarchy"],
-        prompted_compliance=prompted_compliance,
+        feedback=sources["feedback"],
+        markdown_log=sources["markdown_log"],
+        markdown_sales=sources["markdown_sales"],
+        wastage=sources["wastage"],
+        item_hierarchy=sources["item_hierarchy"],
+        store_hierarchy=sources["store_hierarchy"],
+        prompted_compliance=sources["prompted_compliance"],
         cfg=cfg,
         run_id=run_id,
         pipeline_version=pipeline_version,
