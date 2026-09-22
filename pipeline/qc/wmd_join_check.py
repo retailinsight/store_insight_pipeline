@@ -24,7 +24,6 @@ from typing import Any
 
 from store_insight.pipeline.contracts import load_contract
 
-
 _WMD_CONTRACT_NAME = "wmd_item_hierarchy"
 _WMD_ADAPTER_FILE = Path(__file__).parents[1] / "adapters" / "eastofengland" / "wmd_hierarchy.sql"
 _OSA_CONTRACT_NAME = "hierarchy"
@@ -35,7 +34,7 @@ def _parse_adapter_aliases(sql: str) -> dict[str, str]:
     """Return a mapping of output column -> source expression from a SELECT."""
     aliases: dict[str, str] = {}
     # Find the SELECT body (everything between SELECT and FROM).
-    match = re.search(r"SELECT\s+DISTINCT?\s+(.*?)\s+FROM\s", sql, re.DOTALL | re.IGNORECASE)
+    match = re.search(r"SELECT\s+(?:DISTINCT\s+)?(.*?)\s+FROM\s", sql, re.DOTALL | re.IGNORECASE)
     if not match:
         return aliases
 

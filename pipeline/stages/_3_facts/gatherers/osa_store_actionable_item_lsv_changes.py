@@ -50,28 +50,39 @@ def gather(
     identifiers = {}
     if item_hierarchy is not None and {'OSA_ITEM_CODE', 'UPC'}.issubset(set(item_hierarchy.columns)):
         hierarchy_cols = set(item_hierarchy.columns)
-        identifier_df = (
+        identifier_rows = (
             item_hierarchy
             .filter(F.col('OSA_ITEM_CODE').is_not_null())
             .select(
                 F.to_varchar(F.col('OSA_ITEM_CODE')).alias('ITEM_CODE'),
-                F.col('UPC'),
-                F.col('EAN') if 'EAN' in hierarchy_cols else F.lit(None).alias('EAN'),
+                F.to_varchar(F.col('UPC')).alias('UPC'),
+                F.to_varchar(F.col('EAN')).alias('EAN')
+                if 'EAN' in hierarchy_cols
+                else F.lit(None).alias('EAN'),
             )
-            .group_by('ITEM_CODE')
-            .agg(
-                F.array_agg(F.col('UPC')).alias('UPCS'),
-                F.array_agg(F.col('EAN')).alias('EANS'),
-            )
+            .distinct()
+            .collect()
         )
-        for row in identifier_df.collect():
-            upcs = sorted({str(value) for value in (row['UPCS'] or []) if value is not None})
-            eans = sorted({str(value) for value in (row['EANS'] or []) if value is not None})
-            pair_count = max(len(upcs), len(eans))
+
+        grouped_identifiers: dict[str, tuple[set[str], set[str]]] = defaultdict(lambda: (set(), set()))
+        for row in identifier_rows:
+            code = str(row['ITEM_CODE'])
+            upc = str(row['UPC']) if row['UPC'] is not None else None
+            ean = str(row['EAN']) if row['EAN'] is not None else None
+            upcs, eans = grouped_identifiers[code]
+            if upc:
+                upcs.add(upc)
+            if ean:
+                eans.add(ean)
+
+        for code, (upcs, eans) in grouped_identifiers.items():
+            upcs_list = sorted(upcs)
+            eans_list = sorted(eans)
+            pair_count = max(len(upcs_list), len(eans_list))
             status = 'unmapped' if pair_count == 0 else ('multiple' if pair_count > 1 else 'unique')
-            identifiers[str(row['ITEM_CODE'])] = {
-                'upcs': upcs,
-                'eans': eans,
+            identifiers[code] = {
+                'upcs': upcs_list,
+                'eans': eans_list,
                 'identifier_mapping_status': status,
             }
 
