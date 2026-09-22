@@ -154,6 +154,7 @@ def run(
     from store_insight.pipeline.pipeline.run_batch import (
         load_feedback,
         load_osa,
+        load_prompted_compliance,
         load_wmd,
         write_alerts_with_queue,
     )
@@ -211,6 +212,12 @@ def run(
     print(f"[handler] Item hierarchy  rows : {wmd['item_hierarchy'].count():,}")
     print(f"[handler] Store hierarchy rows : {wmd['store_hierarchy'].count():,}")
 
+    print("[handler] Loading prompted compliance data...")
+    prompted_compliance = load_prompted_compliance(
+        session, w["lookback_start"], w["this_week_end"], cfg=cfg
+    )
+    print(f"[handler] Prompted compliance rows : {prompted_compliance.count():,}")
+
     # ── run pipeline ───────────────────────────────────────────────────
     run_id = str(uuid.uuid4())
     pipeline_version = os.environ.get("PIPELINE_VERSION")
@@ -228,6 +235,7 @@ def run(
         wastage=wmd["wastage"],
         item_hierarchy=wmd["item_hierarchy"],
         store_hierarchy=wmd["store_hierarchy"],
+        prompted_compliance=prompted_compliance,
         cfg=cfg,
         run_id=run_id,
         pipeline_version=pipeline_version,

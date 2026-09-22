@@ -111,6 +111,78 @@ def test_daily_handler_runs_quality_gate_and_passes_plan():
     assert source.index("_assert_output_in_session_database(") < source.index("session.sql(")
 
 
+_SOURCE_KWARGS_RE = r"^\s*(\w+)=.*,\s*$"
+
+
+def _run_pipeline_source_kwargs(fn) -> set[str]:
+    """Names of source-DataFrame kwargs passed to run_pipeline in ``fn``'s source."""
+    import re
+
+    source = inspect.getsource(fn)
+    call = source[source.index("run_pipeline(") :]
+    call = call[: call.index("\n    )")]
+    names = set(re.findall(_SOURCE_KWARGS_RE, call, flags=re.MULTILINE))
+    source_params = {
+        "feedback", "markdown_log", "markdown_sales", "wastage", "straight_to_bin",
+        "item_hierarchy", "store_hierarchy", "prompted_compliance",
+    }
+    return names & source_params
+
+
+def test_daily_handler_passes_every_source_run_batch_passes():
+    # Regression for the 22 Sep 2026 CRT run: run_batch.py loaded
+    # PROMPTED_COMPLIANCE_V1 and produced prompted cards in DEV, but the
+    # scheduled SP handler never loaded it, so every prompted detector saw
+    # None and returned [] silently. The two entry points must feed
+    # run_pipeline the same sources.
+    handler_sources = _run_pipeline_source_kwargs(run)
+    batch_sources = _run_pipeline_source_kwargs(run_batch.run_single_date)
+    assert handler_sources == batch_sources
+    assert "prompted_compliance" in handler_sources
+
+
+def test_daily_handler_loads_prompted_compliance_and_passes_it(monkeypatch):
+    cfg = load_config("eastofengland")
+    received = {}
+
+    class Frame:
+        def count(self):
+            return 0
+
+    sentinel = Frame()
+
+    monkeypatch.setattr(handler, "_prepare_runtime", lambda: None)
+    monkeypatch.setattr("store_insight.pipeline.config.loader.load_config", lambda client: cfg)
+    monkeypatch.setattr(
+        "store_insight.pipeline.stages._0_quality.quality_gate.run_quality_gate",
+        lambda *a, **k: None,
+    )
+    monkeypatch.setattr(run_batch, "load_osa", lambda *a, **k: Frame())
+    monkeypatch.setattr(run_batch, "load_feedback", lambda *a, **k: Frame())
+    monkeypatch.setattr(
+        run_batch,
+        "load_wmd",
+        lambda *a, **k: {
+            k_: Frame()
+            for k_ in ("markdown_log", "markdown_sales", "wastage", "item_hierarchy", "store_hierarchy")
+        },
+    )
+    monkeypatch.setattr(run_batch, "load_prompted_compliance", lambda *a, **k: sentinel)
+    monkeypatch.setattr(run_batch, "write_alerts_with_queue", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "store_insight.pipeline.pipeline.pipeline.run_pipeline",
+        lambda *a, **k: received.update(k) or [],
+    )
+
+    class Session(FakeSession):
+        def collect(self):
+            return [(0,)]  # no existing cards for this analysis_date
+
+    run(Session("STORE_INSIGHT_DB"), client="eastofengland", analysis_date="2026-09-22")
+
+    assert received["prompted_compliance"] is sentinel
+
+
 def test_daily_handler_routes_writes_through_queue_wrapper():
     source = inspect.getsource(run)
     assert "write_alerts_with_queue(" in source
