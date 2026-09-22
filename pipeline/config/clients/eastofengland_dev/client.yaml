@@ -3,17 +3,13 @@
 # Copy of the eastofengland production config with connection parameters
 # redirected to the dev database/warehouse.
 #
-# TODO: replace the connection placeholder values below with the actual
-# dev environment names. Keep everything else in sync with
-# config/clients/eastofengland/client.yaml.
-
 client_name: eastofengland_dev
 
 connection:
-  database:  STORE_INSIGHT_DEV_DB
+  database:  STORE_INSIGHT_DEV
   schema:    PUBLIC
-  role:      STORE_INSIGHT_DEV_ROLE
-  warehouse: STORE_INSIGHT_DEV_WH
+  role:      STOREINSIGHT
+  warehouse: STORE_INSIGHT_WH
 
 output:
   emit_affected_products: true
