@@ -281,3 +281,154 @@ def test_daily_task_explicitly_disables_cortex(monkeypatch):
         session.statements[1]
         == "ALTER TASK STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE_TASK RESUME"
     )
+
+
+# ---------------------------------------------------------------------------
+# Safe-by-default CLI tests
+# ---------------------------------------------------------------------------
+
+
+def test_cli_overwrite_requires_write_flag(monkeypatch):
+    """--overwrite without --write must be rejected."""
+    monkeypatch.setattr(
+        "sys.argv",
+        ["run_batch", "--client", "eastofengland", "--analysis-date", "2026-01-01", "--overwrite"],
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        run_batch.main()
+    assert exc_info.value.code == 2
+
+
+def test_cli_write_secondary_requires_write_flag(monkeypatch):
+    """--write-secondary-results without --write must be rejected."""
+    monkeypatch.setattr(
+        "sys.argv",
+        ["run_batch", "--client", "eastofengland", "--analysis-date", "2026-01-01", "--write-secondary-results"],
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        run_batch.main()
+    assert exc_info.value.code == 2
+
+
+def test_run_single_date_dry_run_skips_write_and_dumps_json(monkeypatch, tmp_path):
+    """dry_run=True must skip write_alerts_with_queue and write JSON."""
+    import datetime as dt
+
+    cfg = load_config("eastofengland")
+    write_calls = []
+    fake_cards = [
+        {"signal_type": "OSA_STORE_ACTIONABLE", "store_id": 242, "alert_id": "a1"},
+        {"signal_type": "COMPLIANCE", "store_id": 301, "alert_id": "a2"},
+    ]
+
+    class Frame:
+        def count(self):
+            return 0
+
+    monkeypatch.setattr(run_batch, "load_osa", lambda *a, **k: Frame())
+    monkeypatch.setattr(run_batch, "load_feedback", lambda *a, **k: Frame())
+    monkeypatch.setattr(
+        run_batch, "load_wmd",
+        lambda *a, **k: {
+            k_: Frame()
+            for k_ in ("markdown_log", "markdown_sales", "wastage", "item_hierarchy", "store_hierarchy")
+        },
+    )
+    monkeypatch.setattr(run_batch, "load_prompted_compliance", lambda *a, **k: Frame())
+    monkeypatch.setattr(
+        run_batch, "write_alerts_with_queue",
+        lambda *a, **k: write_calls.append(("write", a, k)),
+    )
+    monkeypatch.setattr(run_batch, "run_pipeline", lambda *a, **k: fake_cards)
+    monkeypatch.setattr(
+        "store_insight.pipeline.stages._0_quality.quality_gate.run_quality_gate",
+        lambda *a, **k: None,
+    )
+
+    json_path = str(tmp_path / "out.json")
+    run_batch.run_single_date(
+        FakeSession(),
+        dt.date(2026, 9, 22),
+        run_date="2026-09-22",
+        cfg=cfg,
+        dry_run=True,
+        output_json=json_path,
+    )
+
+    # write_alerts_with_queue must NOT have been called
+    assert write_calls == []
+
+    # JSON file must exist with the cards
+    import json
+    with open(json_path) as f:
+        data = json.load(f)
+    assert len(data["cards"]) == 2
+    assert data["cards"][0]["alert_id"] == "a1"
+
+
+def test_run_single_date_write_mode_calls_write(monkeypatch, tmp_path):
+    """dry_run=False must call write_alerts_with_queue."""
+    import datetime as dt
+
+    cfg = load_config("eastofengland")
+    write_calls = []
+    fake_cards = [{"signal_type": "OSA_STORE_ACTIONABLE", "store_id": 242, "alert_id": "a1"}]
+
+    class Frame:
+        def count(self):
+            return 0
+
+    monkeypatch.setattr(run_batch, "load_osa", lambda *a, **k: Frame())
+    monkeypatch.setattr(run_batch, "load_feedback", lambda *a, **k: Frame())
+    monkeypatch.setattr(
+        run_batch, "load_wmd",
+        lambda *a, **k: {
+            k_: Frame()
+            for k_ in ("markdown_log", "markdown_sales", "wastage", "item_hierarchy", "store_hierarchy")
+        },
+    )
+    monkeypatch.setattr(run_batch, "load_prompted_compliance", lambda *a, **k: Frame())
+    monkeypatch.setattr(
+        run_batch, "write_alerts_with_queue",
+        lambda *a, **k: write_calls.append(True),
+    )
+    monkeypatch.setattr(run_batch, "run_pipeline", lambda *a, **k: fake_cards)
+    monkeypatch.setattr(
+        "store_insight.pipeline.stages._0_quality.quality_gate.run_quality_gate",
+        lambda *a, **k: None,
+    )
+
+    json_path = str(tmp_path / "out.json")
+    run_batch.run_single_date(
+        FakeSession(),
+        dt.date(2026, 9, 22),
+        run_date="2026-09-22",
+        cfg=cfg,
+        dry_run=False,
+        output_json=json_path,
+    )
+
+    # write_alerts_with_queue MUST have been called
+    assert len(write_calls) == 1
+
+    # JSON file should also be written
+    import json
+    with open(json_path) as f:
+        data = json.load(f)
+    assert len(data["cards"]) == 1
+
+
+def test_run_single_date_defaults_to_dry_run():
+    """run_single_date must default to dry_run=True."""
+    import inspect
+    sig = inspect.signature(run_batch.run_single_date)
+    assert sig.parameters["dry_run"].default is True
+
+
+def test_handler_does_not_use_dry_run():
+    """The scheduled SP handler must never reference dry_run — it always writes."""
+    import inspect
+    source = inspect.getsource(run)
+    assert "dry_run" not in source
+    # Handler writes via trusted_scheduled_write, not run_single_date
+    assert "trusted_scheduled_write=True" in source

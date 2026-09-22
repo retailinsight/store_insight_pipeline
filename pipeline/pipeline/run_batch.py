@@ -1,24 +1,38 @@
 """
 Alerts Batch — CLI Entry Point
 ================================
-Loads OSA and hierarchy data from Snowflake, runs the full alerts pipeline,
-and writes the results to the output table.
+Loads source data from Snowflake, runs the full alerts pipeline, and saves
+the results as a local JSON file.  By default **no Snowflake write occurs**
+(safe-by-default / dry-run mode).
+
+To write results to a Snowflake table, pass ``--write`` explicitly.  CRT
+canonical tables are always refused from the CLI; production writes happen
+only through the scheduled stored-procedure handler.
 
 Usage
 -----
-    # Single date (base defaults)
-    python store_insight/pipeline/pipeline/run_batch.py --analysis-date 2025-06-14
-
-    # With client config
+    # Dry run — pipeline runs, JSON saved locally, no Snowflake write
     python store_insight/pipeline/pipeline/run_batch.py --client eastofengland --analysis-date 2025-06-14
 
-    # Historical backfill — runs every day from start-date to analysis-date,
-    # skipping dates that already have rows in the output table.
-    python store_insight/pipeline/pipeline/run_batch.py \
-        --client eastofengland --start-date 2025-01-01 --analysis-date 2025-06-14
+    # Explicit JSON output path
+    python store_insight/pipeline/pipeline/run_batch.py --client eastofengland --analysis-date 2025-06-14 \
+        --output-json results/cards.json
 
-    python store_insight/pipeline/pipeline/run_batch.py --analysis-date 2025-06-14 --overwrite
-    python store_insight/pipeline/pipeline/run_batch.py --analysis-date 2025-06-14 --store-id 242
+    # Write to a DEV / sandbox table
+    python store_insight/pipeline/pipeline/run_batch.py --client eastofengland --analysis-date 2025-06-14 \
+        --write --target-table STORE_INSIGHT_DEV.PUBLIC.ALERTS_PIPELINE
+
+    # Overwrite today's rows in DEV
+    python store_insight/pipeline/pipeline/run_batch.py --client eastofengland --analysis-date 2025-06-14 \
+        --write --overwrite --target-table STORE_INSIGHT_DEV.PUBLIC.ALERTS_PIPELINE
+
+    # Historical backfill — every day from start-date to analysis-date,
+    # skipping dates that already have rows in the output table.
+    python store_insight/pipeline/pipeline/run_batch.py --client eastofengland \
+        --start-date 2025-01-01 --analysis-date 2025-06-14 --write \
+        --target-table STORE_INSIGHT_DEV.PUBLIC.ALERTS_PIPELINE
+
+    # Restrict to specific stores (dry-run)
     python store_insight/pipeline/pipeline/run_batch.py --analysis-date 2025-06-14 --store-id 242 301 402
 
 Arguments
@@ -31,21 +45,26 @@ Arguments
                   to analysis-date (inclusive), skipping dates that already
                   have rows in the output table.
 --run-date        Date to stamp on output rows. Defaults to today.
---store-id        Optional: restrict to one or more stores (space-separated). Useful for testing.
---overwrite       Replace this run_date's rows in the output table (DELETE WHERE
-                  RUN_DATE = <run_date>, then INSERT).  Other dates are untouched.
-                  Safe to use against the production output table.
---full-replace    DESTRUCTIVE.  Drop and recreate the entire output table with
-                  only this run's rows.  All historical RUN_DATEs are lost.  Use
-                  only for genuine fresh-start scenarios.  Mutually exclusive
-                  with --overwrite.
+--store-id        Optional: restrict to one or more stores (space-separated).
+--write           Enable Snowflake table writes.  Without this flag the CLI
+                  runs in dry-run mode: full pipeline, local JSON output, no
+                  Snowflake write.  CRT canonical tables are always refused
+                  from the CLI regardless of this flag.
+--overwrite       Requires --write.  Replace this run_date's rows in the target
+                  table (DELETE WHERE RUN_DATE = <run_date>, then INSERT).
+                  Blocked for CRT canonical tables; use with DEV or
+                  --target-table.
 --target-table    Override the output table for this run (does not change the
                   config file).  Use for ad-hoc test/comparison runs:
                       --target-table STORE_INSIGHT_DB.PUBLIC.ALERTS_TEST
+--output-json     Path for the local JSON output file.  Defaults to
+                  alerts_<client>_<analysis_date>.json in the current directory.
+                  Always written in dry-run mode; also written when --write is
+                  set (so you get both the table write and a local copy).
 --deterministic   Force rule_based narratives for every signal type, ignoring any
-                  cortex overrides in the client config.  In this mode the pipeline
-                  also captures a regression snapshot and compares it to the golden file
-                  at --golden-path, or creates that golden file if it does not yet exist.
+                  cortex overrides in the client config.  Also captures a regression
+                  snapshot and compares it to the golden file at --golden-path,
+                  or creates that golden file if it does not yet exist.
 --golden-path     Path to the golden regression snapshot JSON.  Defaults to
                   regression_golden_<client>_<analysis_date>.json in the current directory.
 --regression-tolerance  Allowed absolute difference for float fields in the regression
@@ -66,6 +85,7 @@ Date Windows Derived Automatically (per analysis_date)
 
 import argparse
 import datetime
+import json
 import os
 import sys
 import uuid
@@ -270,6 +290,14 @@ def _date_range(start: datetime.date, end: datetime.date):
         current += datetime.timedelta(days=1)
 
 
+def _write_json_output(cards, output_path: str) -> None:
+    """Dump alert cards to a local JSON file."""
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(cards, f, indent=2, default=str)
+    print(f"[run_batch] JSON output: {output_path} ({len(cards)} cards)")
+
+
 def write_alerts_with_queue(
     session,
     cards,
@@ -301,17 +329,21 @@ def run_single_date(
     run_date: str,
     store_id=None,
     overwrite=False,
-    full_replace=False,
     target_table: str | None = None,
     cfg=None,
     deterministic: bool = False,
     golden_path: str | None = None,
     regression_tolerance: float = 0.0,
     write_secondary_results: bool = False,
+    dry_run: bool = True,
+    output_json: str | None = None,
 ):
     """
-    Run the full pipeline for one analysis_date and write results.
-    OSA and feedback data are loaded fresh for each call.
+    Run the full pipeline for one analysis_date.
+
+    By default (``dry_run=True``) no Snowflake write occurs; cards are saved
+    to a local JSON file at ``output_json``.  Pass ``dry_run=False`` to write
+    to Snowflake (requires the caller to have validated the target table).
 
     When deterministic=True, rule_based narratives are forced and the run is
     compared against the golden regression snapshot at golden_path.
@@ -404,16 +436,36 @@ def run_single_date(
         cards = pipeline_result
         raw_signals = enriched_signals = None
 
-    write_alerts_with_queue(
-        session,
-        cards,
-        run_date=run_date,
-        overwrite=overwrite,
-        full_replace=full_replace,
-        target_table=target_table,
-        cfg=cfg,
-        partial_store_run=bool(store_id),
+    # ── Summary ───────────────────────────────────────────────────────────
+    signal_types = sorted({c.get("signal_type", "UNKNOWN") for c in cards}) if cards else []
+    stores = sorted({c.get("store_id") for c in cards if c.get("store_id") is not None}) if cards else []
+    print(
+        f"[run_batch] Pipeline produced {len(cards)} cards, "
+        f"{len(stores)} stores, signal types: {signal_types}"
     )
+
+    # ── Local JSON output (always written) ────────────────────────────────
+    if output_json:
+        json_payload = {"cards": cards}
+        if deterministic and raw_signals is not None:
+            json_payload["raw_signals"] = raw_signals
+        if deterministic and enriched_signals is not None:
+            json_payload["enriched_signals"] = enriched_signals
+        _write_json_output(json_payload, output_json)
+
+    # ── Snowflake write (only when dry_run=False) ─────────────────────────
+    if dry_run:
+        print("[run_batch] Dry run -- Snowflake write skipped.")
+    else:
+        write_alerts_with_queue(
+            session,
+            cards,
+            run_date=run_date,
+            overwrite=overwrite,
+            target_table=target_table,
+            cfg=cfg,
+            partial_store_run=bool(store_id),
+        )
 
     if deterministic:
         stats = capture_run_stats(cards, raw_signals, enriched_signals)
@@ -429,12 +481,12 @@ def run_single_date(
             save_golden(stats, golden_path)
             print(f"[run_batch] --deterministic: golden snapshot created at {golden_path}")
 
-    if write_secondary_results:
+    if not dry_run and write_secondary_results:
         print('[run_batch] Measuring outcomes for eligible Commitments...')
         outcomes = measure_outcomes(session, current_run_date=run_date, cfg=cfg)
         if outcomes:
             _write_outcomes(session, outcomes, cfg=cfg)
-    else:
+    elif not dry_run:
         print('[run_batch] Secondary quality-log and outcome writes disabled.')
 
 
@@ -520,21 +572,23 @@ def main():
         default=None,
         help="Restrict to one or more stores (space-separated, optional)",
     )
+    parser.add_argument(
+        "--write",
+        action="store_true",
+        help="Enable Snowflake table writes.  Without this flag the CLI "
+        "runs in dry-run mode: full pipeline, local JSON output, no "
+        "Snowflake write.  CRT canonical tables are always refused "
+        "from the CLI regardless of this flag.",
+    )
     write_mode = parser.add_mutually_exclusive_group()
     write_mode.add_argument(
         "--overwrite",
         action="store_true",
-        help="Replace this run_date's rows in the output table "
-        "(DELETE WHERE RUN_DATE = <run_date>, then INSERT).  Other "
-        "dates are untouched. Interactive writes to canonical CRT are refused.",
+        help="Requires --write.  Replace this run_date's rows in the "
+        "target table (DELETE WHERE RUN_DATE = <run_date>, then INSERT).  "
+        "Blocked for CRT canonical tables; use with DEV or --target-table.",
     )
-    write_mode.add_argument(
-        "--full-replace",
-        action="store_true",
-        help="DESTRUCTIVE.  Drop and recreate the entire output table.  "
-        "All historical RUN_DATEs are lost.  Mutually exclusive with "
-        "--overwrite.",
-    )
+
     parser.add_argument(
         "--target-table",
         default=None,
@@ -543,9 +597,18 @@ def main():
         "cfg['output']['alerts'].",
     )
     parser.add_argument(
+        "--output-json",
+        default=None,
+        help="Path for the local JSON output file.  Defaults to "
+        "alerts_<client>_<analysis_date>.json in the current directory.  "
+        "Always written in dry-run mode; also written when --write is "
+        "set (so you get both the table write and a local copy).",
+    )
+    parser.add_argument(
         "--write-secondary-results",
         action="store_true",
-        help="Write quality-gate and outcome results. Disabled by default for ad-hoc safety.",
+        help="Write quality-gate and outcome results to Snowflake.  "
+        "Requires --write.  Disabled by default for ad-hoc safety.",
     )
     parser.add_argument(
         "--deterministic",
@@ -579,34 +642,52 @@ def main():
     )
     args = parser.parse_args()
 
+    # ── Validate flag dependencies ────────────────────────────────────────
+    dry_run = not args.write
+    if args.overwrite and dry_run:
+        parser.error("--overwrite requires --write.")
+    if args.write_secondary_results and dry_run:
+        parser.error("--write-secondary-results requires --write.")
+
     analysis_date = datetime.date.fromisoformat(args.analysis_date)
     start_date = datetime.date.fromisoformat(args.start_date) if args.start_date else None
     run_date = args.run_date or str(datetime.date.today())
 
     # ── Load config (merges base + client YAML, loads .env) ───────────────
     cfg = load_config(args.client)
-    print(f"[run_batch] Config loaded: client={cfg.client_name}")
-    effective_target = args.target_table or _output_table(cfg)
-    mode = 'full_replace' if args.full_replace else 'overwrite_run_date' if args.overwrite else 'append'
-    scope = f'{len(args.store_id)} store(s)' if args.store_id else 'all stores'
-    print(
-        f'[run_batch] write preflight: target={effective_target} mode={mode} '
-        f'run_date={run_date} analysis_date={analysis_date} scope={scope}'
-    )
-    validate_alert_write_target(
-        effective_target,
-        full_replace=args.full_replace,
-        partial_store_run=bool(args.store_id),
-    )
-    if args.write_secondary_results:
-        secondary_targets = [_outcomes_table(cfg)]
-        log_table = getattr(getattr(cfg, 'data_quality', None), 'log_table', None)
-        if log_table:
-            secondary_targets.append(log_table)
-        for secondary_target in secondary_targets:
-            validate_alert_write_target(secondary_target)
+    client = cfg.client_name if cfg else "default"
+    print(f"[run_batch] Config loaded: client={client}")
+
+    # ── Resolve output JSON path ──────────────────────────────────────────
+    output_json = args.output_json or f"alerts_{client}_{analysis_date}.json"
+
+    if dry_run:
+        print(
+            f"[run_batch] DRY RUN -- no Snowflake writes.  "
+            f"Results will be saved to {output_json}"
+        )
     else:
-        print('[run_batch] write preflight: secondary writes disabled')
+        # ── Write-mode preflight ──────────────────────────────────────────
+        effective_target = args.target_table or _output_table(cfg)
+        mode = 'overwrite_run_date' if args.overwrite else 'append'
+        scope = f'{len(args.store_id)} store(s)' if args.store_id else 'all stores'
+        print(
+            f'[run_batch] write preflight: target={effective_target} mode={mode} '
+            f'run_date={run_date} analysis_date={analysis_date} scope={scope}'
+        )
+        validate_alert_write_target(
+            effective_target,
+            partial_store_run=bool(args.store_id),
+        )
+        if args.write_secondary_results:
+            secondary_targets = [_outcomes_table(cfg)]
+            log_table = getattr(getattr(cfg, 'data_quality', None), 'log_table', None)
+            if log_table:
+                secondary_targets.append(log_table)
+            for secondary_target in secondary_targets:
+                validate_alert_write_target(secondary_target)
+        else:
+            print('[run_batch] write preflight: secondary writes disabled')
 
     # ── Capability validation: every enabled detector/gatherer must have
     #    its required contracts deployed for this client.  Fail fast here
@@ -642,7 +723,6 @@ def main():
         )
         print("[run_batch] --deterministic: forcing rule_based narratives for all signal types.")
         if args.golden_path is None:
-            client = cfg.client_name if cfg else "default"
             args.golden_path = f"regression_golden_{client}_{str(analysis_date)}.json"
 
     load_env()
@@ -655,9 +735,12 @@ def main():
             print("[run_batch] ERROR: --start-date must be <= --analysis-date")
             sys.exit(1)
 
-        print(f"[run_batch] Backfill mode: {start_date} – {analysis_date}")
-        existing = _get_existing_run_dates(session, cfg=cfg)
-        print(f"[run_batch] Dates already in output table: {len(existing)}")
+        print(f"[run_batch] Backfill mode: {start_date} - {analysis_date}")
+        if not dry_run:
+            existing = _get_existing_run_dates(session, cfg=cfg)
+            print(f"[run_batch] Dates already in output table: {len(existing)}")
+        else:
+            existing = set()
 
         dates = list(_date_range(start_date, analysis_date))
         skipped = [d for d in dates if str(d) in existing]
@@ -668,24 +751,26 @@ def main():
         print(f"[run_batch] To process           : {len(pending)}")
 
         for i, ad in enumerate(pending, 1):
-            print(f"\n[run_batch] ── Date {i}/{len(pending)}: {ad} ──")
+            print(f"\n[run_batch] -- Date {i}/{len(pending)}: {ad} --")
+            date_json = args.output_json or f"alerts_{client}_{ad}.json"
             run_single_date(
                 session,
                 ad,
                 run_date=str(ad),
                 store_id=args.store_id,
                 overwrite=False,
-                full_replace=False,
                 target_table=args.target_table,
                 cfg=cfg,
                 deterministic=args.deterministic,
                 golden_path=args.golden_path,
                 regression_tolerance=args.regression_tolerance,
                 write_secondary_results=args.write_secondary_results,
+                dry_run=dry_run,
+                output_json=date_json,
             )
 
         print(
-            f"\n[run_batch] Backfill complete — {len(pending)} dates processed, "
+            f"\n[run_batch] Backfill complete -- {len(pending)} dates processed, "
             f"{len(skipped)} skipped."
         )
     else:
@@ -696,13 +781,14 @@ def main():
             run_date=run_date,
             store_id=args.store_id,
             overwrite=args.overwrite,
-            full_replace=args.full_replace,
             target_table=args.target_table,
             cfg=cfg,
             deterministic=args.deterministic,
             golden_path=args.golden_path,
             regression_tolerance=args.regression_tolerance,
             write_secondary_results=args.write_secondary_results,
+            dry_run=dry_run,
+            output_json=output_json,
         )
 
     print("[run_batch] Done.")
