@@ -26,7 +26,7 @@ def test_exact_partial_store_overwrite_is_rejected_before_session_creation(monke
         '--analysis-date', '2026-09-16',
         '--store-id', '517', '535', '211', '508', '641', '516', '239', '440',
         '426', '634', '479', '463', '464', '445', '497', '501',
-        '--overwrite',
+        '--write', '--overwrite',
     ])
 
     with pytest.raises(PermissionError, match='partial-store'):
