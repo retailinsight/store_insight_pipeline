@@ -1,7 +1,7 @@
 """
-Detector: WOW (Compliance — tick-and-flick week-on-week rise)
-===========================================================
-Fires when a store's rate of rapidly dismissing alerts (tick-and-flick) has
+Detector: WOW (Compliance — alerts completed in less than 10 seconds, week-on-week rise)
+========================================================================================
+Fires when a store's rate of alerts completed in less than 10 seconds has
 risen week-on-week by at least ``min_compliance_wow_drop`` percentage points
 and the store worked at least ``min_alerts_worked`` alerts this week.
 
@@ -25,10 +25,10 @@ from store_insight.pipeline.stages._1_detect.detectors.compliance._core import (
 
 METADATA = DetectorInfo(
     name        = 'WOW',
-    problem     = "A store's tick-and-flick rate has risen sharply week-on-week, indicating deteriorating compliance with the alerting process.",
-    action      = 'Review the store\'s alert-working behaviour with the store manager and ensure alerts are being genuinely investigated rather than dismissed.',
+    problem     = "A store's rate of alerts completed in less than 10 seconds has risen sharply week-on-week, indicating deteriorating compliance with the alerting process.",
+    action      = "Review the store's alert-working behaviour with the store manager and ensure alerts are being genuinely investigated rather than closed too quickly.",
     baseline    = 'The same store during the preceding week.',
-    logic       = 'Tick-and-flick rate = rapid dismissals / alerts worked.\n'
+    logic       = 'Rate of alerts completed in less than 10 seconds = alerts completed in <10s / alerts worked.\n'
                   'WOW: this-week rate - last-week rate >= min_compliance_wow_drop,\n'
                   'and this-week alerts worked >= min_alerts_worked.',
     config_keys = ['min_compliance_wow_drop', 'min_alerts_worked'],
@@ -46,7 +46,7 @@ def detect(
     store_id=None,
 ):
     """
-    Detect stores whose tick-and-flick rate rose week-on-week.
+    Detect stores whose rate of alerts completed in less than 10 seconds rose week-on-week.
 
     Parameters
     ----------
@@ -55,7 +55,7 @@ def detect(
                                   INTERVENTION_ID, TICK_AND_FLICK_FLAG, ALERT_TYPE_NAME
     last_week_start/end       : date strings (YYYY-MM-DD) for the previous week
     this_week_start/end       : date strings for the current week
-    min_compliance_wow_drop   : minimum pp rise in tick-and-flick rate to fire (default: 0.10 = 10pp)
+    min_compliance_wow_drop   : minimum pp rise in rate of alerts completed in less than 10 seconds to fire (default: 0.10 = 10pp)
     min_alerts_worked         : minimum alerts worked this week to be included (default: 5)
     store_id                  : optional int or list[int] — restrict to selected stores
 
@@ -80,5 +80,5 @@ def detect(
         _build_signal(row, chain_rate, chain_avg_volume_per_store, 'WOW')
         for row in rows
     ]
-    print(f'[1_detect] TICK_AND_FLICK WOW={len(signals)} (chain avg {chain_rate * 100:.1f}%)')
+    print(f'[1_detect] LESS_THAN_10S_ALERTS WOW={len(signals)} (chain avg {chain_rate * 100:.1f}%)')
     return signals

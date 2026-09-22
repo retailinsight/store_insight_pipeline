@@ -20,8 +20,8 @@ file that exposes a ``detect`` callable is loaded automatically by the registry.
     repeat.py       REPEAT         Items in store-dept have persistent weekly failures
 
   detectors/compliance/
-    tick_and_flick_wow.py       WOW       Store tick-and-flick rate rose week-on-week
-    tick_and_flick_vs_chain.py  VS_CHAIN  Store tick-and-flick rate above chain average
+    tick_and_flick_wow.py       WOW       Store rate of alerts completed in less than 10 seconds rose week-on-week
+    tick_and_flick_vs_chain.py  VS_CHAIN  Store rate of alerts completed in less than 10 seconds above chain average
 
 Adding a New Detector
 ---------------------
@@ -203,7 +203,7 @@ def detect_signals(
                      defaults to 10 weeks before this_week_end
     store_id       : optional int or list[int] — restrict to one or more stores
     feedback       : optional Snowpark DataFrame from LSM_ALERT_FEEDBACK;
-                     required to run the TICK_AND_FLICK detector
+                     required to run the less-than-10-seconds alert detector
     config         : optional DetectorConfig — threshold overrides;
                      defaults to DetectorConfig() (all defaults)
     cfg            : optional dict — merged config from config.loader;
