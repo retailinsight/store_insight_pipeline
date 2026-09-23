@@ -169,7 +169,7 @@ def _ensure_outcomes_table(session, db: str, schema: str) -> None:
 def _upload_zip(session, zip_path: str, stage: str) -> None:
     file_uri = Path(zip_path).resolve().as_uri()
     session.sql(f"PUT '{file_uri}' @{stage} OVERWRITE = TRUE AUTO_COMPRESS = FALSE").collect()
-    print(f"[deploy] Uploaded {_ZIP_NAME} → @{stage}")
+    print(f"[deploy] Uploaded {_ZIP_NAME} -> @{stage}")
 
 
 def _register_sp(session, stage: str, warehouse: str) -> None:
@@ -190,7 +190,7 @@ RUNTIME_VERSION = '3.11'
 PACKAGES = ('snowflake-snowpark-python', 'snowflake-ml-python', 'pyyaml', 'pydantic')
 IMPORTS   = ('@{stage}/{_ZIP_NAME}')
 HANDLER   = 'store_insight.pipeline.deploy.handler.run'
-COMMENT = 'Runs the full Alerts Pipeline (detect → facts → investigate → score → write).'
+COMMENT = 'Runs the full Alerts Pipeline (detect -> facts -> investigate -> score -> write).'
 EXECUTE AS CALLER
 """
     session.sql(ddl).collect()
