@@ -62,8 +62,8 @@ def test_handler_environment_guard_runs_before_any_read_or_write(monkeypatch):
         "store_insight.pipeline.stages._0_quality.quality_gate.run_quality_gate",
         lambda *a, **k: calls.append("run_quality_gate"),
     )
-    for name in ("load_osa", "load_feedback", "load_wmd", "write_alerts_with_queue"):
-        monkeypatch.setattr(run_batch, name, lambda *a, _n=name, **k: calls.append(_n))
+    monkeypatch.setattr(run_batch, "load_sources", lambda *a, **k: calls.append("load_sources"))
+    monkeypatch.setattr(run_batch, "write_alerts_with_queue", lambda *a, **k: calls.append("write"))
 
     session = FakeSession("STORE_INSIGHT_DEV")
     with pytest.raises(PermissionError, match="Refusing run"):
@@ -111,45 +111,53 @@ def test_daily_handler_runs_quality_gate_and_passes_plan():
     assert source.index("_assert_output_in_session_database(") < source.index("session.sql(")
 
 
-_SOURCE_KWARGS_RE = r"^\s*(\w+)=.*,\s*$"
+def test_handler_and_run_batch_both_use_load_sources():
+    # Structural parity: both entry points call load_sources (the shared
+    # loader) instead of wiring individual load_* calls by hand.  This
+    # prevents the class of bug where a new source is added to one path
+    # but not the other (22 Sep 2026 CRT: prompted compliance missing
+    # from handler; previously PR #57: quality gate missing).
+    handler_source = inspect.getsource(run)
+    batch_source = inspect.getsource(run_batch.run_single_date)
+    assert "load_sources(" in handler_source
+    assert "load_sources(" in batch_source
+    # Neither path should call individual loaders directly.
+    for source in (handler_source, batch_source):
+        assert "load_osa(" not in source
+        assert "load_feedback(" not in source
+        assert "load_wmd(" not in source
+        assert "load_prompted_compliance(" not in source
 
 
-def _run_pipeline_source_kwargs(fn) -> set[str]:
-    """Names of source-DataFrame kwargs passed to run_pipeline in ``fn``'s source."""
-    import re
-
-    source = inspect.getsource(fn)
-    call = source[source.index("run_pipeline(") :]
-    call = call[: call.index("\n    )")]
-    names = set(re.findall(_SOURCE_KWARGS_RE, call, flags=re.MULTILINE))
-    source_params = {
-        "feedback", "markdown_log", "markdown_sales", "wastage", "straight_to_bin",
+def test_load_sources_returns_all_expected_keys():
+    # load_sources must return every source key that run_pipeline accepts.
+    expected = {
+        "osa", "feedback", "markdown_log", "markdown_sales", "wastage",
         "item_hierarchy", "store_hierarchy", "prompted_compliance",
     }
-    return names & source_params
+    # Verify the function's return dict lists all keys.
+    source = inspect.getsource(run_batch.load_sources)
+    # Check the docstring/return dict lists all keys.
+    for key in expected:
+        assert f'"{key}"' in source, f"load_sources missing key: {key}"
 
 
-def test_daily_handler_passes_every_source_run_batch_passes():
-    # Regression for the 22 Sep 2026 CRT run: run_batch.py loaded
-    # PROMPTED_COMPLIANCE_V1 and produced prompted cards in DEV, but the
-    # scheduled SP handler never loaded it, so every prompted detector saw
-    # None and returned [] silently. The two entry points must feed
-    # run_pipeline the same sources.
-    handler_sources = _run_pipeline_source_kwargs(run)
-    batch_sources = _run_pipeline_source_kwargs(run_batch.run_single_date)
-    assert handler_sources == batch_sources
-    assert "prompted_compliance" in handler_sources
-
-
-def test_daily_handler_loads_prompted_compliance_and_passes_it(monkeypatch):
+def test_handler_spreads_all_load_sources_keys_into_run_pipeline(monkeypatch):
+    # Functional: handler.run passes every key from load_sources into
+    # run_pipeline via sources["..."].
     cfg = load_config("eastofengland")
     received = {}
 
-    class Frame:
-        def count(self):
-            return 0
-
-    sentinel = Frame()
+    fake_sources = {
+        "osa": "osa_sentinel",
+        "feedback": "feedback_sentinel",
+        "markdown_log": "markdown_log_sentinel",
+        "markdown_sales": "markdown_sales_sentinel",
+        "wastage": "wastage_sentinel",
+        "item_hierarchy": "item_hierarchy_sentinel",
+        "store_hierarchy": "store_hierarchy_sentinel",
+        "prompted_compliance": "prompted_compliance_sentinel",
+    }
 
     monkeypatch.setattr(handler, "_prepare_runtime", lambda: None)
     monkeypatch.setattr("store_insight.pipeline.config.loader.load_config", lambda client: cfg)
@@ -157,21 +165,17 @@ def test_daily_handler_loads_prompted_compliance_and_passes_it(monkeypatch):
         "store_insight.pipeline.stages._0_quality.quality_gate.run_quality_gate",
         lambda *a, **k: None,
     )
-    monkeypatch.setattr(run_batch, "load_osa", lambda *a, **k: Frame())
-    monkeypatch.setattr(run_batch, "load_feedback", lambda *a, **k: Frame())
-    monkeypatch.setattr(
-        run_batch,
-        "load_wmd",
-        lambda *a, **k: {
-            k_: Frame()
-            for k_ in ("markdown_log", "markdown_sales", "wastage", "item_hierarchy", "store_hierarchy")
-        },
-    )
-    monkeypatch.setattr(run_batch, "load_prompted_compliance", lambda *a, **k: sentinel)
+    monkeypatch.setattr(run_batch, "load_sources", lambda *a, **k: fake_sources)
     monkeypatch.setattr(run_batch, "write_alerts_with_queue", lambda *a, **k: None)
+    def capture_run_pipeline(*args, **kwargs):
+        if args:
+            received["osa"] = args[0]
+        received.update(kwargs)
+        return []
+
     monkeypatch.setattr(
         "store_insight.pipeline.pipeline.pipeline.run_pipeline",
-        lambda *a, **k: received.update(k) or [],
+        capture_run_pipeline,
     )
 
     class Session(FakeSession):
@@ -180,7 +184,8 @@ def test_daily_handler_loads_prompted_compliance_and_passes_it(monkeypatch):
 
     run(Session("STORE_INSIGHT_DB"), client="eastofengland", analysis_date="2026-09-22")
 
-    assert received["prompted_compliance"] is sentinel
+    for key, sentinel in fake_sources.items():
+        assert received.get(key) is sentinel, f"run_pipeline did not receive {key}"
 
 
 def test_daily_handler_routes_writes_through_queue_wrapper():
