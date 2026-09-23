@@ -188,6 +188,47 @@ def _osca_series_performance_breakdown(
     )
 
 
+def _division_breakdown(dept_rows):
+    """Group department OSA rows into divisions for the KPI pop-up.
+
+    Division OSCA / Store Controllable OSCA are computed from summed
+    sales and lost-sales volume, not averaged across departments.
+    """
+    divisions: dict = {}
+    for r in dept_rows:
+        div_name = r["DIVISION_NAME"] or "Unknown"
+        div = divisions.setdefault(
+            div_name, {"sales": 0.0, "lsv": 0.0, "sc_lsv": 0.0, "departments": []}
+        )
+        div["sales"] += float(r["DEPT_SALES"] or 0)
+        div["lsv"] += float(r["DEPT_LSV"] or 0)
+        div["sc_lsv"] += float(r["DEPT_STORE_CONTROLLED_LSV"] or 0)
+        div["departments"].append({
+            "department":               r["DEPARTMENT_NAME"],
+            "osca":                     float(r["DEPT_OSA"] or 0) * 100,
+            "store_controllable_osca":  float(r["DEPT_STORE_CONTROLLABLE_OSCA"] or 0) * 100,
+        })
+    result = []
+    for div_name in sorted(divisions):
+        div = divisions[div_name]
+        denom = div["sales"] + div["lsv"]
+        sc_denom = div["sales"] + div["sc_lsv"]
+        result.append({
+            "division":                 div_name,
+            "osca":                     f"{div['sales'] / denom * 100:.1f}%" if denom > 0 else "0.0%",
+            "store_controllable_osca":  f"{div['sales'] / sc_denom * 100:.1f}%" if sc_denom > 0 else "0.0%",
+            "departments": [
+                {
+                    "department":              d["department"],
+                    "osca":                    f"{d['osca']:.1f}%",
+                    "store_controllable_osca": f"{d['store_controllable_osca']:.1f}%",
+                }
+                for d in sorted(div["departments"], key=lambda x: x["osca"])
+            ],
+        })
+    return result
+
+
 def _date_range(end_date: date, days: int):
     start = end_date - timedelta(days=days - 1)
     return str(start), str(end_date)
@@ -198,6 +239,7 @@ def _load_osa(session: Session, lookback_start: str, week_end: str):
         session.table(HIERARCHY_TABLE)
         .select(
             F.col("MASTER_ITEM_ID").alias("ITEM_CODE"),
+            F.col("DIVISION_NAME"),
             F.col("DEPARTMENT_NAME"),
             F.col("PRODUCT_PROFILE_GROUP_NAME"),
         )
@@ -311,7 +353,7 @@ def _dept_osa(osa, start: str, end: str):
     return (
         osa.filter((F.col("ANALYSIS_DATE") >= start) & (F.col("ANALYSIS_DATE") <= end))
         .filter(F.col("DEPARTMENT_NAME").is_not_null())
-        .group_by("STORE_ID", "DEPARTMENT_NAME")
+        .group_by("STORE_ID", "DIVISION_NAME", "DEPARTMENT_NAME")
         .agg(
             F.sum("ACTUAL_SALES_VOLUME").alias("DEPT_SALES"),
             F.sum("LOST_SALES_VOLUME").alias("DEPT_LSV"),
@@ -717,6 +759,8 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
         dept_tw = {r["DEPARTMENT_NAME"]: r for r in dept_tw_by_store.get(sid, [])}
         dept_lw = {r["DEPARTMENT_NAME"]: r for r in dept_lw_by_store.get(sid, [])}
 
+        division_perf = _division_breakdown(dept_tw_by_store.get(sid, []))
+
         category_perf = []
         store_category_perf = []
         for dname, dr in sorted(dept_tw.items()):
@@ -914,26 +958,32 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
             "time_of_day_analysis": time_of_day,
         }
         osca_details = {
-            "performance_breakdown": _osca_series_performance_breakdown(
-                tw_osa * 100,
-                tw_store_osca * 100,
-                actionability,
-                alert_compliance,
-                tick_flick,
-            ),
+            "performance_breakdown": {
+                **_osca_series_performance_breakdown(
+                    tw_osa * 100,
+                    tw_store_osca * 100,
+                    actionability,
+                    alert_compliance,
+                    tick_flick,
+                ),
+                "by_division": division_perf,
+            },
             "summary": summary,
             "top_drivers": top_drivers,
             "category_performance": category_perf,
             "time_of_day_analysis": time_of_day,
         }
         store_osca_details = {
-            "performance_breakdown": _osca_series_performance_breakdown(
-                tw_osa * 100,
-                tw_store_osca * 100,
-                actionability,
-                alert_compliance,
-                tick_flick,
-            ),
+            "performance_breakdown": {
+                **_osca_series_performance_breakdown(
+                    tw_osa * 100,
+                    tw_store_osca * 100,
+                    actionability,
+                    alert_compliance,
+                    tick_flick,
+                ),
+                "by_division": division_perf,
+            },
             "summary": summary,
             "category_performance": store_category_perf,
             "time_of_day_analysis": store_time_of_day,
