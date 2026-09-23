@@ -193,7 +193,7 @@ def test_osa_narrative_with_lsv_composition():
 
 
 # ---------------------------------------------------------------------------
-# COMPLIANCE (TICK_AND_FLICK)
+# COMPLIANCE (alerts completed in less than 10 seconds)
 # ---------------------------------------------------------------------------
 
 
@@ -222,7 +222,7 @@ def test_compliance_tick_and_flick_narrative():
     out = generate(_compliance())
     _assert_card_keys(out)
     assert "Anytown" in out["issue"]
-    assert "tick-and-flick" in out["issue"].lower()
+    assert "alerts completed in less than 10 seconds" in out["issue"].lower()
     assert "16 of 40" in out["explanation"]
     assert "+20.0pp" in out["explanation"]
     assert "30.0pp above the chain average" in out["explanation"]

@@ -1,9 +1,9 @@
 """
-Fact Gatherer: Tick-and-Flick Alert-Type and Driver Assessment
-================================================================
-For each store flagged by the TICK_AND_FLICK detector, produces:
-- tf_by_alert_type: worked / tick-and-flick breakdown by ALERT_TYPE_NAME
-- alert_volume_by_day: daily generated, worked and tick-and-flick counts
+Fact Gatherer: Alerts Completed in Less Than 10 Seconds — Alert-Type and Driver Assessment
+=========================================================================================
+For each store flagged by the compliance detector, produces:
+- tf_by_alert_type: worked / <10s completion breakdown by ALERT_TYPE_NAME
+- alert_volume_by_day: daily generated, worked and <10s completion counts
 - driver_assessment: volume/coaching driver derived from the signal workload
 
 Signal types : COMPLIANCE
@@ -22,7 +22,7 @@ METADATA = GathererInfo(
     name         = 'tick_and_flick_breakdown',
     signal_types = ['COMPLIANCE'],
     facts_keys   = ['tf_by_alert_type', 'alert_volume_by_day', 'trailing_7d_tf', 'driver_assessment'],
-    description  = 'Alert type is the unchanged source ALERT_TYPE_NAME label: the kind of alert intervention the store actioned. It is not a department, severity, SKU grouping, or a category derived by this pipeline. For each alert type, this adds current-week interventions worked, tick-and-flicked dismissals, and tick-and-flick rate = dismissals / interventions worked. Also builds a daily volume breakdown, a seven-day trailing tick-and-flick count series, and a workload/coaching driver assessment.',
+    description  = 'Alert type is the unchanged source ALERT_TYPE_NAME label: the kind of alert intervention the store actioned. It is not a department, severity, SKU grouping, or a category derived by this pipeline. For each alert type, this adds current-week interventions worked, alerts completed in less than 10 seconds, and <10s completion rate = <10s completions / interventions worked. Also builds a daily volume breakdown, a trailing <10s completion count series for dates that have data, and a workload/coaching driver assessment.',
 )
 
 
@@ -42,7 +42,7 @@ def _tf_count_col():
 
 def gather(feedback, signals, this_week_start, this_week_end):
     """
-    Return tick-and-flick facts for each flagged store.
+    Return facts about alerts completed in less than 10 seconds for each flagged store.
 
     Parameters
     ----------
@@ -108,14 +108,17 @@ def gather(feedback, signals, this_week_start, this_week_end):
         )
     )
 
-    trailing_end = datetime.date.fromisoformat(this_week_end)
-    trailing_start = trailing_end - datetime.timedelta(days=6)
-    trailing_start_str = trailing_start.isoformat()
+    # Query a wide enough window so that, even when the current week is
+    # incomplete, we can build a 7-day trailing series ending at the latest
+    # day that actually has data for the store.
+    this_week_end_date = datetime.date.fromisoformat(this_week_end)
+    trailing_query_start = this_week_end_date - datetime.timedelta(days=13)
+    trailing_query_start_str = trailing_query_start.isoformat()
 
     trailing_7d = (
         feedback
         .filter(
-            (F.col('DATE') >= trailing_start_str) &
+            (F.col('DATE') >= trailing_query_start_str) &
             (F.col('DATE') <= this_week_end)
         )
         .filter(cond)
@@ -159,15 +162,18 @@ def gather(feedback, signals, this_week_start, this_week_end):
         }
 
     for sid in tf_store_ids:
-        daily = []
-        for i in range(7):
-            d = trailing_start + datetime.timedelta(days=i)
-            daily.append(trailing_found[sid].get(d, {
-                'date':     str(d),
-                'day':      _DAY_NAME[d.weekday()],
-                'worked':   0,
-                'tf_count': 0,
-            }))
+        found = trailing_found[sid]
+        if not found:
+            continue
+        # Build a 7-day window that ends at the most recent day with data,
+        # dropping any missing days rather than padding them with zeros.
+        max_d = max(found)
+        window_start = max_d - datetime.timedelta(days=6)
+        daily = [
+            found[d]
+            for d in sorted(found)
+            if window_start <= d <= max_d
+        ]
         grouped[sid]['trailing_7d_tf'] = daily
 
     for _sid, items in grouped.items():

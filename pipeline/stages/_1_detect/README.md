@@ -94,13 +94,13 @@ sub-detectors merge into a single signal when both fire.
 |---|---|---|
 | `site_name` | `str` | Human-readable store name |
 | `this_week_worked` | `int` | Alerts worked this week |
-| `this_week_tf` | `int` | Tick-and-flick count this week |
-| `this_week_tf_rate` | `float` | Tick-and-flick rate % this week |
+| `this_week_tf` | `int` | Count of alerts completed in less than 10 seconds this week |
+| `this_week_tf_rate` | `float` | Rate of alerts completed in less than 10 seconds % this week |
 | `last_week_worked` | `int` | Alerts worked last week |
-| `last_week_tf` | `int` | Tick-and-flick count last week |
-| `last_week_tf_rate` | `float` | Tick-and-flick rate % last week |
-| `tf_rate_change` | `float` | pp change in TF rate WoW |
-| `chain_tf_rate` | `float` | Chain-wide TF rate % this week |
+| `last_week_tf` | `int` | Count of alerts completed in less than 10 seconds last week |
+| `last_week_tf_rate` | `float` | Rate of alerts completed in less than 10 seconds % last week |
+| `tf_rate_change` | `float` | pp change in <10s alert rate WoW |
+| `chain_tf_rate` | `float` | Chain-wide <10s alert rate % this week |
 | `above_chain_by` | `float` | pp above chain average |
 
 ### Markdown-override signal — `make_markdown_override_signal()`
@@ -242,9 +242,9 @@ The function automatically detects the input type and handles detector filtering
 | `min_alert_weeks` | `4` | OSA REPEAT |
 | `min_osa_drop` | `0.05` | OSA REPEAT |
 | `min_weekly_lsv` | `50.0` | OSA REPEAT |
-| `min_compliance_wow_drop` | `0.10` | TICK_AND_FLICK WOW |
-| `min_compliance_chain_gap` | `0.05` | TICK_AND_FLICK VS_CHAIN |
-| `min_alerts_worked` | `5` | TICK_AND_FLICK (both) |
+| `min_compliance_wow_drop` | `0.10` | LESS_THAN_10S ALERT WOW |
+| `min_compliance_chain_gap` | `0.05` | LESS_THAN_10S ALERT VS_CHAIN |
+| `min_alerts_worked` | `5` | LESS_THAN_10S ALERT (both) |
 | `min_override_chain_gap` | `0.05` | MARKDOWN_OVERRIDE VS_CHAIN |
 | `min_override_wow_increase` | `0.05` | MARKDOWN_OVERRIDE WOW |
 | `min_total_markdowns` | `10` | MARKDOWN_OVERRIDE (both) |

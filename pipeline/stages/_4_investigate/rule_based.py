@@ -116,7 +116,7 @@ def _fmt_lsv_composition_lines(composition):
 
 
 def _generate_tick_and_flick(signal: dict) -> dict:
-    """Generate narrative for a TICK_AND_FLICK compliance alert."""
+    """Generate narrative for a compliance alert about alerts completed in less than 10 seconds."""
     site_name = signal.get("site_name") or f"Store {signal['store_id']}"
     triggers = signal.get("trigger_types", [])
     this_worked = signal.get("this_week_worked", 0)
@@ -141,49 +141,49 @@ def _generate_tick_and_flick(signal: dict) -> dict:
 
     if "WOW" in triggers and "VS_CHAIN" in triggers:
         issue = (
-            f"{site_name}: tick-and-flick rate {this_rate:.1f}% — "
+            f"{site_name}: {this_rate:.1f}% of alerts were completed in less than 10 seconds — "
             f"{above_chain:.1f}pp above chain average and up {rate_change:.1f}pp week-on-week"
         )
     elif "VS_CHAIN" in triggers:
         issue = (
-            f"{site_name}: tick-and-flick rate {this_rate:.1f}% — "
+            f"{site_name}: {this_rate:.1f}% of alerts were completed in less than 10 seconds — "
             f"{above_chain:.1f}pp above chain average"
         )
     elif "WOW" in triggers:
-        issue = f"{site_name}: tick-and-flick rate up {rate_change:.1f}pp this week to {this_rate:.1f}%"
+        issue = f"{site_name}: alerts completed in less than 10 seconds up {rate_change:.1f}pp this week to {this_rate:.1f}%"
     else:
-        issue = f"{site_name}: tick-and-flick compliance declining"
+        issue = f"{site_name}: alerts completed in less than 10 seconds are increasing"
 
     explanation_lines = [
-        f"{this_tf} of {this_worked} alerts worked this week were tick-and-flick ({this_rate:.1f}%).",
+        f"{this_tf} of {this_worked} alerts worked this week were completed in less than 10 seconds ({this_rate:.1f}%).",
         f"Alert volume is {volume_classification.lower()} ({volume_change_pct:+.1f}% week-on-week).",
     ]
     if include_wow:
         explanation_lines.insert(
             1,
-            f"Tick-and-flick rate rose {rate_change:+.1f}pp week-on-week "
+            f"The rate of alerts completed in less than 10 seconds rose {rate_change:+.1f}pp week-on-week "
             f"(last week: {last_rate:.1f}%, {last_tf} of {last_worked} alerts).",
         )
     if include_vs_chain:
         explanation_lines.insert(
             len(explanation_lines) - 1,
-            f"Store tick-and-flick rate is {above_chain:.1f}pp above the chain average of {chain_rate:.1f}%.",
+            f"The store rate of alerts completed in less than 10 seconds is {above_chain:.1f}pp above the chain average of {chain_rate:.1f}%.",
         )
 
     cost_if_not_fixed = f"\u00a3{projected_cost:,.2f} per week if not fixed."
 
     if likely_driver == "WORKLOAD":
         recommended_action = (
-            f"Alert volume is up {volume_change_pct:.0f}% and alerts are being ticked without being worked. "
+            f"Alert volume is up {volume_change_pct:.0f}% and alerts are being completed too quickly. "
             f"Area manager to review staffing and alert workload with the store manager at {site_name} "
             f"this week before treating this as a compliance issue. "
-            f"Review in 7 days against a tick-and-flick rate of {last_rate:.2f}%."
+            f"Review in 7 days against a <10s alert rate of {last_rate:.2f}%."
         )
     else:
         recommended_action = (
-            f"Alert volume is broadly unchanged, so the rise in tick and flick is not explained by workload. "
+            f"Alert volume is broadly unchanged, so the rise in alerts completed in less than 10 seconds is not explained by workload. "
             f"Area manager to discuss alert working with the store manager at {site_name} this week. "
-            f"Review in 7 days against a tick-and-flick rate of {last_rate:.2f}%."
+            f"Review in 7 days against a <10s alert rate of {last_rate:.2f}%."
         )
 
     return {

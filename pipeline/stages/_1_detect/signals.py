@@ -739,16 +739,16 @@ def make_compliance_signal(
     Parameters
     ----------
     store_id           : int
-    trigger_types      : list[str] — e.g. ['TICK_AND_FLICK']
+    trigger_types      : list[str] — e.g. ['WOW'] or ['VS_CHAIN']
     site_name          : str | None — human-readable store name
     this_week_worked   : int — alerts worked this week
-    this_week_tf       : int — tick-and-flick count this week
-    this_week_tf_rate  : float — tick-and-flick rate % this week
+    this_week_tf       : int — count of alerts completed in less than 10 seconds this week
+    this_week_tf_rate  : float — rate of alerts completed in less than 10 seconds % this week
     last_week_worked   : int — alerts worked last week
-    last_week_tf       : int — tick-and-flick count last week
-    last_week_tf_rate  : float — tick-and-flick rate % last week
-    tf_rate_change     : float — pp change in TF rate WoW
-    chain_tf_rate      : float — chain-wide TF rate % this week
+    last_week_tf       : int — count of alerts completed in less than 10 seconds last week
+    last_week_tf_rate  : float — rate of alerts completed in less than 10 seconds % last week
+    tf_rate_change     : float — pp change in <10s alert rate WoW
+    chain_tf_rate      : float — chain-wide <10s alert rate % this week
     above_chain_by     : float — pp above chain average
     workload           : dict — volume and change classification
     """

@@ -1,5 +1,5 @@
 """
-Shared helpers for the tick-and-flick compliance detectors.
+Shared helpers for the 'alerts completed in less than 10 seconds' compliance detectors.
 
 Used by:
     - tick_and_flick_wow.py   (WOW trigger)

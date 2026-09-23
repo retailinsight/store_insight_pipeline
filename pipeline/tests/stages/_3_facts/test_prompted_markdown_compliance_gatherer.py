@@ -86,6 +86,50 @@ def test_daily_performance_is_seven_days_and_reconciles():
     assert all('actioned_on_time' in row for row in daily)
 
 
+def test_daily_performance_ends_at_latest_day_with_data():
+    # Last two days of the week have no rows — the series must end at the
+    # latest day that has data, not pad trailing zeros.
+    rows = _fixture_rows()  # data for 2026-08-25 .. 2026-08-31 only
+    df = _FakeDF(rows)
+    signals = [
+        make_prompted_markdown_compliance_signal(store_id=1, trigger_types=['WOW']),
+    ]
+    result = prompted_markdown_compliance_facts.gather(
+        df, signals, '2026-08-25', '2026-09-02', top_n=3,
+    )
+    daily = result[1]['daily_performance_last_7d']
+    assert len(daily) == 7
+    assert daily[0]['date'] == '2026-08-25'
+    assert daily[-1]['date'] == '2026-08-31'
+    assert all(day['checks_due'] > 0 for day in daily)
+
+
+def test_daily_performance_drops_mid_week_gaps():
+    # No rows on 2026-08-28 — that day is omitted rather than zero-padded.
+    rows = [r for r in _fixture_rows() if r['ALERT_DATE'] != '2026-08-28']
+    df = _FakeDF(rows)
+    signals = [
+        make_prompted_markdown_compliance_signal(store_id=1, trigger_types=['WOW']),
+    ]
+    result = prompted_markdown_compliance_facts.gather(
+        df, signals, '2026-08-25', '2026-08-31', top_n=3,
+    )
+    daily = result[1]['daily_performance_last_7d']
+    assert len(daily) == 6
+    assert '2026-08-28' not in [day['date'] for day in daily]
+
+
+def test_daily_performance_empty_when_no_data():
+    df = _FakeDF([])
+    signals = [
+        make_prompted_markdown_compliance_signal(store_id=1, trigger_types=['WOW']),
+    ]
+    result = prompted_markdown_compliance_facts.gather(
+        df, signals, '2026-08-25', '2026-08-31', top_n=3,
+    )
+    assert result[1]['daily_performance_last_7d'] == []
+
+
 def test_worst_departments_are_sorted_and_limited():
     rows = _fixture_rows()
     df = _FakeDF(rows)

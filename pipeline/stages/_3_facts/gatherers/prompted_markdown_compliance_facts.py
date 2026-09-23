@@ -4,9 +4,9 @@ Fact Gatherer: Prompted Markdown Compliance Evidence
 For each PROMPTED_MARKDOWN_COMPLIANCE signal, gathers three pieces of supporting
 evidence:
 
-- ``daily_performance_last_7d`` — chronologically complete 7 rows, one per day
-  in the current calendar week, with numerator/denominator so the daily rates
-  reconcile to the signal totals.
+- ``daily_performance_last_7d`` — up to 7 rows, one per day in the 7-day
+  window ending at the latest day with data. Days with no prompts are
+  omitted rather than zero-padded.
 - ``worst_departments_top3`` — the three departments with the lowest on-time
   compliance rate this week.
 - ``driver_assessment`` — volume classification plus compliance direction used
@@ -58,24 +58,32 @@ def _actioned(value: object) -> int:
 
 
 def _build_daily(rows: list[dict], store_id: int, week_start: str, week_end: str) -> list[dict]:
+    end = dt.date.fromisoformat(week_end)
+    # Look back far enough that, even when the current week is incomplete,
+    # we can build a 7-day series ending at the latest day that has data.
+    query_start = (end - dt.timedelta(days=13)).isoformat()
     by_date: dict[str, dict] = defaultdict(lambda: {'due': 0, 'completed': 0})
     for r in rows:
         if int(r['STORE_ID']) != store_id:
             continue
         d = _iso(r['ALERT_DATE'])
-        if week_start <= d <= week_end:
+        if query_start <= d <= week_end:
             by_date[d]['due'] += 1
             by_date[d]['completed'] += _actioned(r.get('COMPLIANT'))
 
-    start = dt.date.fromisoformat(week_start)
-    end = dt.date.fromisoformat(week_end)
-    current = start
+    if not by_date:
+        return []
+    # End the 7-day window at the most recent day with data, dropping
+    # days with no prompts rather than padding them with zeros.
+    max_d = dt.date.fromisoformat(max(by_date))
+    window_start = max_d - dt.timedelta(days=6)
     ordered = []
-    while current <= end:
-        d = current.isoformat()
-        data = by_date.get(d, {'due': 0, 'completed': 0})
-        due = data['due']
-        completed = data['completed']
+    for d in sorted(by_date):
+        day = dt.date.fromisoformat(d)
+        if not (window_start <= day <= max_d):
+            continue
+        due = by_date[d]['due']
+        completed = by_date[d]['completed']
         ordered.append({
             'date': d,
             'day': _day_name(d),
@@ -83,7 +91,6 @@ def _build_daily(rows: list[dict], store_id: int, week_start: str, week_end: str
             'checks_due': due,
             'actioned_on_time': completed,
         })
-        current += dt.timedelta(days=1)
     return ordered
 
 
