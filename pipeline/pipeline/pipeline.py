@@ -394,7 +394,6 @@ def _card_schema(emit_affected_products: bool = False):
             StructField("LLM_PROMPT", StringType()),
             StructField("SIGNAL_JSON", StringType()),
             StructField("FACTS_JSON", StringType()),
-            StructField("PRESENTATION_JSON", StringType()),
             StructField("RUN_ID", StringType()),
             StructField("PIPELINE_VERSION", StringType()),
             StructField("CONFIG_HASH", StringType()),
@@ -403,6 +402,7 @@ def _card_schema(emit_affected_products: bool = False):
             StructField("QUALITY_REASON", StringType()),
             StructField("SKILL_FILE_USED", StringType()),
             StructField("FALLBACK_USED", StringType()),
+            StructField("PRESENTATION_JSON", StringType()),
     ]
     if emit_affected_products:
         fields.append(StructField("AFFECTED_PRODUCTS", VariantType()))
@@ -608,7 +608,6 @@ def _card_to_row(
         card.get("llm_prompt"),
         _json_dump(card.get("signal_json")),
         _json_dump(card.get("facts_json")),
-        card.get("presentation_json"),
         card.get("run_id"),
         card.get("pipeline_version"),
         card.get("config_hash"),
@@ -617,6 +616,7 @@ def _card_to_row(
         card.get("quality_reason", ""),
         card.get("skill_file_used", ""),
         "TRUE" if card.get("fallback_used") else "FALSE",
+        card.get("presentation_json"),
     )
     if emit_affected_products:
         row = row + (_affected_products(card),)
