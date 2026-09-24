@@ -317,11 +317,12 @@ def test_flag_off_schema_has_no_affected_products_column():
     assert 'AFFECTED_PRODUCTS' not in names
 
 
-def test_flag_on_schema_appends_affected_products_last():
+def test_flag_on_schema_appends_affected_products_before_presentation_json():
     off = pipeline_module._card_schema()
     on = pipeline_module._card_schema(emit_affected_products=True)
     assert len(on.fields) == len(off.fields) + 1
-    assert on.fields[-1].name == 'AFFECTED_PRODUCTS'
+    assert on.fields[-2].name == 'AFFECTED_PRODUCTS'
+    assert on.fields[-1].name == 'PRESENTATION_JSON'
 
 
 def test_flag_off_row_length_unchanged():
