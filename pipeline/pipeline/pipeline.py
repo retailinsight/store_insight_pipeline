@@ -16,6 +16,11 @@ Also provides ``write_alerts()`` to persist the resulting alert cards to
 Snowflake, and ``save_signals`` / ``load_signals`` / ``run_pipeline_from_signals``
 to checkpoint after Stage 1 and resume from Stage 2 without re-running detection.
 
+Phase 1 of the alert-presentation contract adds a ``PRESENTATION_JSON`` column to
+``ALERTS_PIPELINE``. It contains a typed widget list describing exactly what the
+card displays; the API passes it through and the UI renders by widget type. See
+``prds/prd-alert-presentation-contract.md``.
+
 Usage
 -----
     from store_insight.pipeline.pipeline.pipeline import run_pipeline, write_alerts
@@ -50,7 +55,7 @@ Schema: RUN_DATE, SIGNAL_ID, ALERT_ID, ANALYSIS_DATE, ENGINE_USED,
         ALERT_TYPE, STORE_ID, SECTION, TYPE, TRIGGER_TYPES,
         SHORT_LONG_TERM_LABEL, ISSUE, EXPLANATION, COST_IF_NOT_FIXED,
         RECOMMENDED_ACTION, SORT_VALUE, LLM_PROMPT, SIGNAL_JSON, FACTS_JSON,
-        RUN_ID, PIPELINE_VERSION, CONFIG_HASH, PROMPT_HASH,
+        PRESENTATION_JSON, RUN_ID, PIPELINE_VERSION, CONFIG_HASH, PROMPT_HASH,
         SOURCE_DATA_WATERMARK, QUALITY_REASON
 """
 
@@ -65,6 +70,7 @@ from pathlib import Path
 
 from store_insight.pipeline.pipeline.config import DetectorConfig
 from store_insight.pipeline.pipeline.data_quality import validate_source_data
+from store_insight.pipeline.presentation import build_presentation
 from store_insight.pipeline.stages._1_detect.detect import detect_signals
 from store_insight.pipeline.stages._2_score.score import (
     apply_top_n_filter,
@@ -318,6 +324,7 @@ def _build_card(
         "llm_prompt": narrative.get("_prompt"),
         "signal_json": signal_wo_facts,
         "facts_json": sig.get("facts", {}),
+        "presentation_json": _build_presentation_json(sig, narrative),
         "run_id": lineage.get("run_id"),
         "pipeline_version": lineage.get("pipeline_version"),
         "config_hash": lineage.get("config_hash"),
@@ -327,6 +334,28 @@ def _build_card(
         "skill_file_used": narrative.get("_skill_file", ""),
         "fallback_used": bool(narrative.get("_fallback_reason")),
     }
+
+
+def _build_presentation_json(sig: dict, narrative: dict) -> str | None:
+    """Generate the display contract for a card, or None if it cannot be built.
+
+    Fail-soft: a display-validation error must never stop a real alert from
+    being written. The card is still persisted; the UI falls back to its
+    existing renderer when ``presentation_json`` is absent or null.
+    """
+    signal_type = sig.get("signal_type")
+    if not signal_type:
+        return None
+    try:
+        presentation = build_presentation(signal_type, sig, narrative)
+    except Exception:
+        return None
+    if presentation is None:
+        return None
+    try:
+        return presentation.model_dump_json(by_alias=True)
+    except Exception:
+        return None
 
 
 def _card_schema(emit_affected_products: bool = False):
@@ -365,6 +394,7 @@ def _card_schema(emit_affected_products: bool = False):
             StructField("LLM_PROMPT", StringType()),
             StructField("SIGNAL_JSON", StringType()),
             StructField("FACTS_JSON", StringType()),
+            StructField("PRESENTATION_JSON", StringType()),
             StructField("RUN_ID", StringType()),
             StructField("PIPELINE_VERSION", StringType()),
             StructField("CONFIG_HASH", StringType()),
@@ -578,6 +608,7 @@ def _card_to_row(
         card.get("llm_prompt"),
         _json_dump(card.get("signal_json")),
         _json_dump(card.get("facts_json")),
+        card.get("presentation_json"),
         card.get("run_id"),
         card.get("pipeline_version"),
         card.get("config_hash"),

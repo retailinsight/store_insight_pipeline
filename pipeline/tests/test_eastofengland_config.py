@@ -154,10 +154,10 @@ class TestEastOfEnglandOutputContract:
         )
 
         assert cfg.output.emit_affected_products is True
-        assert len(schema.fields) == 28
+        assert len(schema.fields) == 29
         assert schema.fields[-1].name == 'AFFECTED_PRODUCTS'
         assert schema.fields[-1].nullable is True
-        assert len(row) == 28
+        assert len(row) == 29
         assert row[-1] is None
 
 
