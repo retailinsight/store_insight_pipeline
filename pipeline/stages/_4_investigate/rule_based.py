@@ -155,10 +155,17 @@ def _generate_tick_and_flick(signal: dict) -> dict:
 
     cost_if_not_fixed = f"\u00a3{projected_cost:,.2f} per week if not fixed."
 
-    recommended_action = (
-        f"Alerts completed in less than 10 seconds increased from {last_rate:.1f}% to {this_rate:.1f}% "
-        f"compared with the previous 7 days."
-    )
+    if "WOW" in triggers or "TICK_AND_FLICK" in triggers:
+        recommended_action = (
+            f"Alerts completed in less than 10 seconds increased from {last_rate:.1f}% to {this_rate:.1f}% "
+            f"compared with the previous 7 days."
+        )
+    else:
+        # VS_CHAIN only — the rate is above the chain average but may have fallen week-on-week.
+        recommended_action = (
+            f"{this_rate:.1f}% of alerts were completed in less than 10 seconds, "
+            f"compared with a chain average of {chain_rate:.1f}%."
+        )
 
     return {
         "issue": issue,

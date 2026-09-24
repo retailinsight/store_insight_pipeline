@@ -251,10 +251,31 @@ def test_compliance_vs_chain_narrative():
         out["issue"]
         == "Coach the team on the OSA alert process, ensuring alerts are properly investigated before completion."
     )
-    assert "Alerts completed in less than 10 seconds increased from 20.0% to 40.0%" in out["recommended_action"]
+    assert (
+        out["recommended_action"]
+        == "40.0% of alerts were completed in less than 10 seconds, compared with a chain average of 10.0%."
+    )
     assert "30.0pp above the chain average" in out["explanation"]
     assert "week-on-week" not in out["issue"]
     assert "+20.0pp" not in out["explanation"]
+
+
+def test_compliance_vs_chain_only_fallen_rate_narrative():
+    out = generate(
+        _compliance(
+            trigger_types=["VS_CHAIN"],
+            this_week_tf_rate=30.0,
+            last_week_tf_rate=40.0,
+            above_chain_by=20.0,
+        )
+    )
+    _assert_card_keys(out)
+    assert (
+        out["recommended_action"]
+        == "30.0% of alerts were completed in less than 10 seconds, compared with a chain average of 10.0%."
+    )
+    assert "increased" not in out["recommended_action"].lower()
+    assert "40.0%" not in out["recommended_action"]
 
 
 def test_compliance_combined_triggers_narrative():
