@@ -402,10 +402,10 @@ def _card_schema(emit_affected_products: bool = False):
             StructField("QUALITY_REASON", StringType()),
             StructField("SKILL_FILE_USED", StringType()),
             StructField("FALLBACK_USED", StringType()),
-            StructField("PRESENTATION_JSON", StringType()),
     ]
     if emit_affected_products:
         fields.append(StructField("AFFECTED_PRODUCTS", VariantType()))
+    fields.append(StructField("PRESENTATION_JSON", StringType()))
     return StructType(fields)
 
 
@@ -616,10 +616,10 @@ def _card_to_row(
         card.get("quality_reason", ""),
         card.get("skill_file_used", ""),
         "TRUE" if card.get("fallback_used") else "FALSE",
-        card.get("presentation_json"),
     )
     if emit_affected_products:
         row = row + (_affected_products(card),)
+    row = row + (card.get("presentation_json"),)
     return row
 
 
