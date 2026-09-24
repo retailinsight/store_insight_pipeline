@@ -117,7 +117,6 @@ def _fmt_lsv_composition_lines(composition):
 
 def _generate_tick_and_flick(signal: dict) -> dict:
     """Generate narrative for a compliance alert about alerts completed in less than 10 seconds."""
-    site_name = signal.get("site_name") or f"Store {signal['store_id']}"
     triggers = signal.get("trigger_types", [])
     this_worked = signal.get("this_week_worked", 0)
     this_tf = signal.get("this_week_tf", 0)
@@ -132,27 +131,11 @@ def _generate_tick_and_flick(signal: dict) -> dict:
     workload = signal.get("workload", {}) or {}
     volume_classification = workload.get("volume_classification", "STABLE")
     volume_change_pct = workload.get("volume_change_pct", 0.0)
-    facts = signal.get("facts", {})
-    driver = facts.get("driver_assessment", {}) or {}
-    likely_driver = driver.get("likely_driver", "COACHING")
 
     include_wow = "WOW" in triggers or "TICK_AND_FLICK" in triggers
     include_vs_chain = "VS_CHAIN" in triggers or "TICK_AND_FLICK" in triggers
 
-    if "WOW" in triggers and "VS_CHAIN" in triggers:
-        issue = (
-            f"{site_name}: {this_rate:.1f}% of alerts were completed in less than 10 seconds — "
-            f"{above_chain:.1f}pp above chain average and up {rate_change:.1f}pp week-on-week"
-        )
-    elif "VS_CHAIN" in triggers:
-        issue = (
-            f"{site_name}: {this_rate:.1f}% of alerts were completed in less than 10 seconds — "
-            f"{above_chain:.1f}pp above chain average"
-        )
-    elif "WOW" in triggers:
-        issue = f"{site_name}: alerts completed in less than 10 seconds up {rate_change:.1f}pp this week to {this_rate:.1f}%"
-    else:
-        issue = f"{site_name}: alerts completed in less than 10 seconds are increasing"
+    issue = "Coach the team on the OSA alert process, ensuring alerts are properly investigated before completion."
 
     explanation_lines = [
         f"{this_tf} of {this_worked} alerts worked this week were completed in less than 10 seconds ({this_rate:.1f}%).",
@@ -172,19 +155,10 @@ def _generate_tick_and_flick(signal: dict) -> dict:
 
     cost_if_not_fixed = f"\u00a3{projected_cost:,.2f} per week if not fixed."
 
-    if likely_driver == "WORKLOAD":
-        recommended_action = (
-            f"Alert volume is up {volume_change_pct:.0f}% and alerts are being completed too quickly. "
-            f"Area manager to review staffing and alert workload with the store manager at {site_name} "
-            f"this week before treating this as a compliance issue. "
-            f"Review in 7 days against a <10s alert rate of {last_rate:.2f}%."
-        )
-    else:
-        recommended_action = (
-            f"Alert volume is broadly unchanged, so the rise in alerts completed in less than 10 seconds is not explained by workload. "
-            f"Area manager to discuss alert working with the store manager at {site_name} this week. "
-            f"Review in 7 days against a <10s alert rate of {last_rate:.2f}%."
-        )
+    recommended_action = (
+        f"Alerts completed in less than 10 seconds increased from {last_rate:.1f}% to {this_rate:.1f}% "
+        f"compared with the previous 7 days."
+    )
 
     return {
         "issue": issue,

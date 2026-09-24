@@ -221,18 +221,24 @@ def _compliance(**overrides):
 def test_compliance_tick_and_flick_narrative():
     out = generate(_compliance())
     _assert_card_keys(out)
-    assert "Anytown" in out["issue"]
-    assert "alerts completed in less than 10 seconds" in out["issue"].lower()
+    assert (
+        out["issue"]
+        == "Coach the team on the OSA alert process, ensuring alerts are properly investigated before completion."
+    )
     assert "16 of 40" in out["explanation"]
     assert "+20.0pp" in out["explanation"]
     assert "30.0pp above the chain average" in out["explanation"]
-    assert "Anytown" in out["recommended_action"]
+    assert "Alerts completed in less than 10 seconds increased from 20.0% to 40.0%" in out["recommended_action"]
 
 
 def test_compliance_wow_narrative():
     out = generate(_compliance(trigger_types=["WOW"]))
     _assert_card_keys(out)
-    assert "up 20.0pp this week to 40.0%" in out["issue"]
+    assert (
+        out["issue"]
+        == "Coach the team on the OSA alert process, ensuring alerts are properly investigated before completion."
+    )
+    assert "Alerts completed in less than 10 seconds increased from 20.0% to 40.0%" in out["recommended_action"]
     assert "+20.0pp" in out["explanation"]
     assert "chain average" not in out["issue"]
     assert "chain average" not in out["explanation"]
@@ -241,7 +247,11 @@ def test_compliance_wow_narrative():
 def test_compliance_vs_chain_narrative():
     out = generate(_compliance(trigger_types=["VS_CHAIN"]))
     _assert_card_keys(out)
-    assert "30.0pp above chain average" in out["issue"]
+    assert (
+        out["issue"]
+        == "Coach the team on the OSA alert process, ensuring alerts are properly investigated before completion."
+    )
+    assert "Alerts completed in less than 10 seconds increased from 20.0% to 40.0%" in out["recommended_action"]
     assert "30.0pp above the chain average" in out["explanation"]
     assert "week-on-week" not in out["issue"]
     assert "+20.0pp" not in out["explanation"]
@@ -250,8 +260,11 @@ def test_compliance_vs_chain_narrative():
 def test_compliance_combined_triggers_narrative():
     out = generate(_compliance(trigger_types=["VS_CHAIN", "WOW"]))
     _assert_card_keys(out)
-    assert "30.0pp above chain average" in out["issue"]
-    assert "up 20.0pp week-on-week" in out["issue"]
+    assert (
+        out["issue"]
+        == "Coach the team on the OSA alert process, ensuring alerts are properly investigated before completion."
+    )
+    assert "Alerts completed in less than 10 seconds increased from 20.0% to 40.0%" in out["recommended_action"]
     assert "+20.0pp" in out["explanation"]
     assert "30.0pp above the chain average" in out["explanation"]
 
