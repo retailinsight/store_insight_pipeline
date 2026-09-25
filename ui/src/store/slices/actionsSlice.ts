@@ -40,11 +40,7 @@ function transformActions(actions: ActionData[]): SmartAction[] {
     title: action.issue,
     description: action.explanation,
     bullets: generateBullets(action.explanation),
-    // TODO: warning is temporarily populated from costIfNotFixed to maintain the
-    // existing amber warning block. Remove this mapping once the backend supplies
-    // separate warning copy or the warning block is repurposed.
     warning: action.costIfNotFixed,
-    costIfNotFixed: action.costIfNotFixed,
     badges: {
       section: action.section,
       type: action.type,

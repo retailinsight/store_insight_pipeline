@@ -52,11 +52,11 @@ export function formatCurrency(amount: number): string {
 }
 
 export function calculateTotalCost(
-  actions: ReadonlyArray<{ costIfNotFixed?: string }>,
+  actions: ReadonlyArray<{ warning?: string }>,
 ): number {
   return actions.reduce((total, action) => {
-    if (!action.costIfNotFixed) return total;
-    const match = action.costIfNotFixed.match(/£([\d,]+\.?\d*)/);
+    if (!action.warning) return total;
+    const match = action.warning.match(/£([\d,]+\.?\d*)/);
     if (match) {
       return total + parseFloat(match[1].replace(/,/g, ""));
     }

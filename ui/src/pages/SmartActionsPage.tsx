@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import Layout from "@/components/Layout";
 import SmartActionBoardCard, { ActionStatus } from "@/components/SmartActionBoardCard";
-import SmartActionCard, { AccentuatedCostText, SmartAction } from "@/components/SmartActionCard";
+import SmartActionCard, {SmartAction} from "@/components/SmartActionCard";
 import CompleteActionDialog from "@/components/dialogs/CompleteActionDialog";
 import ReminderDialog from "@/components/dialogs/ReminderDialog";
 import CouldNotCompleteDialog from "@/components/dialogs/CouldNotCompleteDialog";
@@ -157,23 +157,6 @@ function ActionDetailPanel({
             </p>
             <p className="font-dm-sans text-sm text-black leading-5">
               {action.description}
-            </p>
-          </div>
-
-          {/* Cost if not actioned */}
-          <div
-            className="flex flex-col gap-3 rounded-2xl border-l-[8px] border-app-warning bg-amber-50 dark:bg-amber-950/20 p-4"
-            data-testid="action-detail-cost-if-not-actioned"
-          >
-            <p className="font-dm-sans font-bold text-sm text-black dark:text-white">
-              Cost if not actioned
-            </p>
-            <p className="font-dm-sans text-sm text-black dark:text-white/80 leading-5">
-              {action.costIfNotFixed ? (
-                <AccentuatedCostText text={action.costIfNotFixed} />
-              ) : (
-                "No projected cost available."
-              )}
             </p>
           </div>
         </div>
