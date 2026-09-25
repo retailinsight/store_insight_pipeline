@@ -26,7 +26,9 @@ CRT_TABLES = [
     "NOTES_BACKUP_20260916",
     "SUCCESSES_BACKUP_20260911_PRE_CLEAR",
     "ALERTS_OSA_SNAPSHOT_PRE_RENAME",
-    "ACTION_STATUS",
+    # NOTE: ACTION_STATUS was originally in this list, but a live API dependency was
+    # discovered on 25 Sep, so it was restored and excluded from the automated
+    # rename. It can be revisited after confirming no consumers read it.
 ]
 
 DEV_TABLES = [
