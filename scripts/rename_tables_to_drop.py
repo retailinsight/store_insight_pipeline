@@ -1,6 +1,10 @@
 """Rename stale test/backup tables with a `_TO_DROP_` prefix.
 
 Default is dry-run; pass --execute to perform renames. CRT requires --allow-crt.
+The candidate list must be passed explicitly with --tables; there are no built-in
+lists after the 25 Sep incident proved even "dead" tables can still have live
+readers. See `CLEANUP_PROPOSAL_2026-09-24.md` for the required checks before any
+rename or drop.
 After 30 quiet days and a query-history check, the renamed tables can be
 dropped with `DROP TABLE <db>.PUBLIC._TO_DROP_<original_name>`.
 """
@@ -11,41 +15,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-CRT_TABLES = [
-    "ALERTS_PIPELINE_OSA_INTEGRATION_20260909",
-    "ALERTS_PIPELINE_PR63_TEST_20260909",
-    "ALERTS_PIPELINE_COMPARISON_20260910_POST_PR74",
-    "ALERTS_PIPELINE_BACKUP_20260910_PRE_PR73",
-    "ALERTS_PIPELINE_BACKUP_PRE_AP_VARIANT_20260914",
-    "ALERTS_PIPELINE_BACKUP_20260916_MISTAKE",
-    "ALERTS_PIPELINE_BACKUP_20260917_PRE_PR86",
-    "ALERTS_LATEST_V1_BACKUP_20260916",
-    "ALERT_ACTION_STATUS_BACKUP_20260916",
-    "ALERT_ACTION_STATUS_BACKUP_20260917",
-    "ALERT_ACTION_STATUS_BACKUP_20260917_PRE_ORPHAN_CLOSE",
-    "NOTES_BACKUP_20260916",
-    "SUCCESSES_BACKUP_20260911_PRE_CLEAR",
-    "ALERTS_OSA_SNAPSHOT_PRE_RENAME",
-    # NOTE: ACTION_STATUS was originally in this list, but a live API dependency was
-    # discovered on 25 Sep, so it was restored and excluded from the automated
-    # rename. It can be revisited after confirming no consumers read it.
-]
-
-DEV_TABLES = [
-    "ALERTS_PIPELINE_OSA_INTEGRATION_20260909",
-    "ALERTS_PIPELINE_PR81_VALIDATION_20260914",
-    "ALERTS_TOPN3_TEST_20260914",
-    "ALERTS_PIPELINE_BACKUP_20260916_SAFE",
-    "ALERTS_PIPELINE_BACKUP_PRE_AP_VARIANT_20260914",
-    "ALERTS_HISTORY_V1_BACKUP_20260916",
-    "ALERTS_LATEST_V1_BACKUP_20260916",
-    "ALERT_ACTION_STATUS_BACKUP_20260916",
-    "ALERT_ACTION_STATUS_BACKUP_20260917",
-    "ALERT_ACTION_STATUS_BACKUP_20260917_PRE_ORPHAN_CLOSE",
-    "NOTES_BACKUP_20260916",
-    "SUCCESSES_BACKUP_20260911_PRE_CLEAR",
-]
-
 
 def main():
     import snowflake.connector
@@ -54,6 +23,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--database', default='STORE_INSIGHT_DEV',
                         choices=['STORE_INSIGHT_DEV', 'STORE_INSIGHT_DB'])
+    parser.add_argument('--tables', required=True,
+                        help='Comma-separated list of table names to rename. '
+                             'No default list is provided after the 25 Sep incident.')
     parser.add_argument('--allow-crt', action='store_true')
     parser.add_argument('--execute', action='store_true')
     parser.add_argument('--warehouse', default='STORE_INSIGHT_DEV_WH')
@@ -62,7 +34,19 @@ def main():
     if args.database == 'STORE_INSIGHT_DB' and not args.allow_crt:
         parser.error('CRT renames require --allow-crt')
 
-    tables = CRT_TABLES if args.database == 'STORE_INSIGHT_DB' else DEV_TABLES
+    tables = [t.strip() for t in args.tables.split(',') if t.strip()]
+    if not tables:
+        parser.error('--tables list is empty')
+
+    # Guard: workflow-related names need explicit approval even in DEV.
+    protected = {'ACTION_STATUS', 'ALERT_ACTION_STATUS', 'NOTES', 'SUCCESSES'}
+    for t in tables:
+        if t in protected or t.startswith('_TO_DROP_'):
+            parser.error(
+                f"Refusing to rename protected/renamed table '{t}'. "
+                "Workflow tables and _TO_DROP_ prefixes require manual handling."
+            )
+
     prefix = '_TO_DROP_'
 
     creds = get_credentials().get_connection_params()
@@ -71,7 +55,7 @@ def main():
         cursor = connection.cursor()
         cursor.execute(f"USE WAREHOUSE {args.warehouse}")
         cursor.execute(f"USE DATABASE {args.database}")
-        cursor.execute(f"USE ROLE STORE_INSIGHT_ROLE")
+        cursor.execute("USE ROLE STORE_INSIGHT_ROLE")
 
         name_list = ', '.join("'" + t + "'" for t in tables)
         cursor.execute(
