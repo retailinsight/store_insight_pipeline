@@ -11,9 +11,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-import snowflake.connector
-from snowflake_credentials import get_credentials
-
 
 PROCEDURE_DDL = """
 CREATE OR REPLACE PROCEDURE STORE_INSIGHT_DEV.PUBLIC.SP_DEPLOY_DEV_ALERT_VIEWS()
@@ -40,6 +37,9 @@ RESUME_DDL = "ALTER TASK STORE_INSIGHT_DEV.PUBLIC.DEPLOY_DEV_ALERT_VIEWS_TASK RE
 
 
 def main():
+    import snowflake.connector
+    from snowflake_credentials import get_credentials
+
     connection = snowflake.connector.connect(**get_credentials().get_connection_params())
     try:
         cursor = connection.cursor()
