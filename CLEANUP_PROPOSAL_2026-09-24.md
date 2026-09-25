@@ -90,6 +90,15 @@ A first cleanup attempt was run on 25 Sep before these findings were complete. T
 
 All `_TO_DROP_*` renames in both `STORE_INSIGHT_DB` and `STORE_INSIGHT_DEV` were restored to their original names. `ACTION_STATUS` had already been restored earlier after it was found to break the app.
 
+### Relationship to the 25 Sep app-down report
+
+The app-down report coincided with the cleanup renames, but the two were largely unrelated:
+- **DEV actions not loading:** caused by the `PRESENTATION_JSON` schema change leaving DEV views with 29 declared columns against a 28-column table after the 07:00 clone. Fixed by recreating DEV views.
+- **CRT login redirect / 500:** caused by the external Auth API/Auth UI app (`uks-eoe-webauthapi-crt` / `uks-eoe-webauthapp-crt`), confirmed by Imran. CRT Snowflake had zero app-view errors and 388 successful API queries in the relevant window.
+- **`ACTION_STATUS` rename:** was an unsafe execution mistake and was restored, but it did not cause the CRT login/auth failure.
+
+This reinforces the safe-process rule: **separate data-layer checks from auth/app-layer checks before attributing an outage.**
+
 ### Implications for the cleanup plan
 
 1. **No CRT table cleanup proceeds** until the API/UI team confirms the app is no longer reading these tables and a follow-up 30-day scan shows zero reads.
