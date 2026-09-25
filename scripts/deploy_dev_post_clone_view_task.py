@@ -1,9 +1,10 @@
-"""Deploy a DEV task that recreates alert views after the 07:00 CRT->DEV clone.
+"""Deploy a DEV task that recreates alert views after the 07:00 CRT→DEV clone.
 
 The clone copies ALERTS_PIPELINE and KPI_AVAILABILITY_SUMMARY tables but not the
 views on top of them. This task recreates ALERTS_LATEST_V1 and
-ALERTS_HISTORY_V1 in DEV 15 minutes after the clone, so any schema change that
-changed ALERTS_PIPELINE column count does not leave the views out of sync.
+ALERTS_HISTORY_V1 in DEV at 07:15 Europe/London, so any schema change that
+changed ALERTS_PIPELINE column count does not leave the views out of sync after
+the clone.
 """
 
 import sys
@@ -43,23 +44,26 @@ def main():
     connection = snowflake.connector.connect(**get_credentials().get_connection_params())
     try:
         cursor = connection.cursor()
-        cursor.execute("USE ROLE STORE_INSIGHT_ROLE")
-        cursor.execute("USE WAREHOUSE STORE_INSIGHT_DEV_WH")
-        cursor.execute("USE DATABASE STORE_INSIGHT_DEV")
+        try:
+            cursor.execute("USE ROLE STORE_INSIGHT_ROLE")
+            cursor.execute("USE WAREHOUSE STORE_INSIGHT_DEV_WH")
+            cursor.execute("USE DATABASE STORE_INSIGHT_DEV")
 
-        for label, sql in [("procedure", PROCEDURE_DDL), ("task", TASK_DDL), ("resume", RESUME_DDL)]:
-            sql = sql.strip()
-            print(f"EXECUTE {label}: {sql[:120]}...")
-            cursor.execute(sql)
+            for label, sql in [("procedure", PROCEDURE_DDL), ("task", TASK_DDL), ("resume", RESUME_DDL)]:
+                sql = sql.strip()
+                print(f"EXECUTE {label}: {sql[:120]}...")
+                cursor.execute(sql)
 
-        print("\nTesting procedure...")
-        cursor.execute("CALL STORE_INSIGHT_DEV.PUBLIC.SP_DEPLOY_DEV_ALERT_VIEWS()")
-        print(cursor.fetchone()[0])
+            print("\nTesting procedure...")
+            cursor.execute("CALL STORE_INSIGHT_DEV.PUBLIC.SP_DEPLOY_DEV_ALERT_VIEWS()")
+            print(cursor.fetchone()[0])
 
-        print("Verifying views...")
-        for v in ["ALERTS_LATEST_V1", "ALERTS_HISTORY_V1"]:
-            n = cursor.execute(f"SELECT COUNT(*) FROM STORE_INSIGHT_DEV.PUBLIC.{v}").fetchone()[0]
-            print(f"{v}: {n} rows")
+            print("Verifying views...")
+            for v in ["ALERTS_LATEST_V1", "ALERTS_HISTORY_V1"]:
+                n = cursor.execute(f"SELECT COUNT(*) FROM STORE_INSIGHT_DEV.PUBLIC.{v}").fetchone()[0]
+                print(f"{v}: {n} rows")
+        finally:
+            cursor.close()
     finally:
         connection.close()
 
