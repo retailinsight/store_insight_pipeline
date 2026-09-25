@@ -153,7 +153,11 @@ def _generate_tick_and_flick(signal: dict) -> dict:
             f"The store rate of alerts completed in less than 10 seconds is {above_chain:.1f}pp above the chain average of {chain_rate:.1f}%.",
         )
 
-    cost_if_not_fixed = f"\u00a3{projected_cost:,.2f} per week if not fixed."
+    four_week_cost = projected_cost * 4
+    cost_if_not_fixed = (
+        f"If this continues, there is a risk that the store could lose "
+        f"\u00a3{four_week_cost:,.2f} in lost sales in the next 4 weeks."
+    )
 
     if "WOW" in triggers or "TICK_AND_FLICK" in triggers:
         recommended_action = (
@@ -240,10 +244,18 @@ def _generate_markdown_override(signal: dict) -> dict:
             f"{top['dept']} was {compliance_pct_top:.1f}% compliant ({top['overrides']} out of {total_top} overrides from this department)."
         )
 
-    cost = (
-        "Items overridden at a higher price are at increased risk of reaching end-of-life unsold, "
-        "driving unnecessary waste."
-    )
+    projected_cost = signal.get("projected_cost", 0.0) or 0.0
+    four_week_cost = projected_cost * 4
+    if four_week_cost > 0:
+        cost = (
+            f"If this continues, the store could lose approximately "
+            f"\u00a3{four_week_cost:,.2f} in the next 4 weeks through unnecessary overrides."
+        )
+    else:
+        cost = (
+            "Items overridden at a higher price are at increased risk of reaching "
+            "end-of-life unsold, driving unnecessary waste."
+        )
 
     return {
         "issue": issue,
@@ -670,8 +682,8 @@ def _osa_actionable_cost(facts: dict, store_lsv: float) -> str:
     weeks = int(projection.get('projection_weeks') or facts.get('projection_weeks') or 4)
     cost = float(projection.get('store_controlled_cost_of_inaction') or store_lsv * weeks)
     return (
-        f'If this continues at the same rate, store-controlled lost sales could cost '
-        f'approximately £{cost:,.2f} over the next {weeks} weeks.'
+        f'If this continues, the store could lose approximately '
+        f'£{cost:,.2f} in lost sales in the next {weeks} weeks.'
     )
 
 
@@ -808,8 +820,8 @@ def _generate_osa_big_drop(signal: dict) -> dict:
     weeks = 4
     cost = round(store_lsv * 7 * weeks, 2)
     cost_text = (
-        f"If {day_word}'s rate of loss continued, store-controlled lost sales could cost "
-        f"approximately £{cost:,.2f} over the next {weeks} weeks."
+        f"If this continues, the store could lose approximately "
+        f"£{cost:,.2f} in lost sales in the next {weeks} weeks."
     )
 
     ppg_names = [ppg['ppg'] for ppg in ppgs[:3] if ppg.get('ppg')]
@@ -910,7 +922,14 @@ def _generate_markdown_compliance(signal: dict) -> dict:
             f"focusing on {focus}. Review in 7 days against a target of {target}."
         )
 
-    cost_if_not_fixed = f"£{projected_cost:,.2f} per week if not fixed."
+    if projected_cost:
+        four_week_cost = projected_cost * 4
+        cost_if_not_fixed = (
+            f"If this continues, the store could lose approximately "
+            f"£{four_week_cost:,.2f} over the next 4 weeks."
+        )
+    else:
+        cost_if_not_fixed = "If compliance continues to fall, waste is likely to increase."
 
     return {
         "issue": issue,
@@ -1004,7 +1023,8 @@ def _generate_prompted_markdown_compliance(signal: dict) -> dict:
     else:
         action = trend + "."
 
-    cost_if_not_fixed = f"£{projected_cost:,.2f} per week if not fixed."
+    # TODO: Interpolate £{last_7d_stb_value} once STB data is available on prompted compliance signals.
+    cost_if_not_fixed = "If compliance continues to fall, straight-to-bin waste is likely to increase."
 
     return {
         "issue": issue,
@@ -1036,11 +1056,11 @@ def _generate_expiry_date_compliance(signal: dict) -> dict:
             f'{prefix}, so the drop is not explained by workload. Store manager to review the expiry check '
             f'routine with the team within 48 hours, focusing on {focus}. Review in 7 days against a target of {target}.'
         )
-    projected_cost = float(signal.get('projected_cost') or 0.0)
+    # TODO: Interpolate £{last_7d_stb_value} once STB data is available on expiry compliance signals.
     return {
         'issue': f"{signal.get('site_name')} expiry date compliance fell {change:.1f}pp",
         'explanation': f"{signal.get('trailing_7d_checks_completed', 0)} of {signal.get('trailing_7d_checks_due', 0)} checks were completed.",
-        'cost_if_not_fixed': f'£{projected_cost:,.2f} per week if not fixed.',
+        'cost_if_not_fixed': "If compliance continues to fall, straight-to-bin waste is likely to increase.",
         'recommended_action': action,
     }
 
@@ -1114,11 +1134,16 @@ def _generate_big_drop_compliance(signal: dict, label: str, due_key: str, comple
 
 
 def _generate_big_drop_prompted_markdown_compliance(signal: dict) -> dict:
-    return _generate_big_drop_compliance(
+    result = _generate_big_drop_compliance(
         signal, 'prompted-markdown compliance', 'this_day_prompts_issued',
         'this_day_prompts_actioned_on_time', 'prompts were actioned on time',
         'prompt response routine', 'Prompt',
     )
+    # TODO: Interpolate £{last_7d_stb_value} once STB data is available on these signals.
+    result["cost_if_not_fixed"] = (
+        "If compliance continues to fall, straight-to-bin waste is likely to increase."
+    )
+    return result
 
 
 def _generate_big_drop_markdown_compliance(signal: dict) -> dict:
@@ -1130,11 +1155,16 @@ def _generate_big_drop_markdown_compliance(signal: dict) -> dict:
 
 
 def _generate_big_drop_expiry_date_compliance(signal: dict) -> dict:
-    return _generate_big_drop_compliance(
+    result = _generate_big_drop_compliance(
         signal, 'expiry-date compliance', 'this_day_checks_due',
         'this_day_checks_completed', 'expiry checks were completed',
         'expiry-check routine', 'Expiry check',
     )
+    # TODO: Interpolate £{last_7d_stb_value} once STB data is available on these signals.
+    result["cost_if_not_fixed"] = (
+        "If compliance continues to decrease, there is a risk that key Waste metrics will get worse."
+    )
+    return result
 
 
 def _generate_straight_to_bin(signal: dict) -> dict:
@@ -1186,7 +1216,11 @@ def _generate_straight_to_bin(signal: dict) -> dict:
         )
         explanation_lines.append(f"Worst departments: {dept_list}.")
 
-    cost_if_not_fixed = f"\u00a3{projected_cost:,.2f} per week if not fixed."
+    four_week_cost = projected_cost * 4
+    cost_if_not_fixed = (
+        f"If this continues, the store could lose approximately "
+        f"\u00a3{four_week_cost:,.2f} to straight-to-bin waste over the next 4 weeks."
+    )
 
     if is_high:
         dept_names = [row['dept'] for row in worst_depts[:3]]

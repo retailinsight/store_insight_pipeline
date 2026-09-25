@@ -128,12 +128,18 @@ class TestCostTemplate:
     def test_cost_matches_projected_cost(self):
         signal = _make_signal(stb_value=349.69)
         result = generate(signal)
-        assert result['cost_if_not_fixed'] == '\u00a3349.69 per week if not fixed.'
+        assert result['cost_if_not_fixed'] == (
+            'If this continues, the store could lose approximately '
+            '\u00a31,398.76 to straight-to-bin waste over the next 4 weeks.'
+        )
 
     def test_cost_with_thousands(self):
         signal = _make_signal(stb_value=1234.56, projected_cost=1234.56)
         result = generate(signal)
-        assert result['cost_if_not_fixed'] == '\u00a31,234.56 per week if not fixed.'
+        assert result['cost_if_not_fixed'] == (
+            'If this continues, the store could lose approximately '
+            '\u00a34,938.24 to straight-to-bin waste over the next 4 weeks.'
+        )
 
 
 # ---------------------------------------------------------------------------

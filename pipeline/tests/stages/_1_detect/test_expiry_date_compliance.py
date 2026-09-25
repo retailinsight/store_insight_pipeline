@@ -104,6 +104,6 @@ def test_narrative_workload_and_coaching_branches_and_weekly_cost():
     signal['facts'] = gather(FakeDF(rows()), [signal], **WINDOWS)[318]
     narrative = generate(signal)
     assert 'staffing and rota coverage' in narrative['recommended_action']
-    assert narrative['cost_if_not_fixed'] == '£21.00 per week if not fixed.'
+    assert narrative['cost_if_not_fixed'] == 'If compliance continues to fall, straight-to-bin waste is likely to increase.'
     signal['facts']['driver_assessment'].update({'likely_driver': 'COACHING', 'volume_classification': 'STABLE'})
     assert 'within 48 hours' in generate(signal)['recommended_action']

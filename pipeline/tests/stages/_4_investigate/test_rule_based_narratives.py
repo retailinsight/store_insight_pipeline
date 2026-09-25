@@ -66,7 +66,12 @@ def test_big_drop_compliance_narratives(signal_type, due_key, completed_key, lab
     assert '20 of 40' in out['explanation']
     assert '35.0pp below' in out['explanation']
     assert 'PRODUCE (25.0%)' in out['explanation']
-    assert '£125.50' in out['cost_if_not_fixed']
+    if signal_type == 'BIG_DROP_MARKDOWN_COMPLIANCE':
+        assert '£125.50' in out['cost_if_not_fixed']
+    elif signal_type == 'BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE':
+        assert out['cost_if_not_fixed'] == 'If compliance continues to fall, straight-to-bin waste is likely to increase.'
+    elif signal_type == 'BIG_DROP_EXPIRY_DATE_COMPLIANCE':
+        assert out['cost_if_not_fixed'] == 'If compliance continues to decrease, there is a risk that key Waste metrics will get worse.'
     assert 'PRODUCE' in out['recommended_action']
 
 
@@ -822,8 +827,8 @@ def test_osa_big_drop_narrative_names_trading_days():
     assert 'upstream context' not in out['explanation']
     assert 'On Sunday the leading PPG was Vodka (£120.00 store-controlled lost sales).' in out['explanation']
     assert out['cost_if_not_fixed'] == (
-        "If Sunday's rate of loss continued, store-controlled lost sales could cost "
-        "approximately £14,000.00 over the next 4 weeks."
+        "If this continues, the store could lose approximately "
+        "£14,000.00 in lost sales in the next 4 weeks."
     )
     assert out['recommended_action'] == (
         'The top contributing PPGs were Vodka, Gin and Whisky.'
@@ -857,7 +862,7 @@ def test_osa_big_drop_without_day_names_falls_back():
         'Investigate why store-controlled OSCA dropped in SPIRITS from 95% to 88%.'
     )
     assert 'Store-controlled OSCA in SPIRITS dropped 7.0pp in a single day — from 95.0% to 88.0%.' in out['explanation']
-    assert out['cost_if_not_fixed'].startswith("If that day's rate of loss continued")
+    assert out['cost_if_not_fixed'].startswith("If this continues, the store could lose approximately")
 
 
 # ---------------------------------------------------------------------------
@@ -911,8 +916,8 @@ def test_markdown_compliance_workload_narrative_matches_example():
     out = generate(_markdown_compliance())
     _assert_card_keys(out)
     assert 'Manningtree' in out['issue']
-    assert '£136.93' in out['cost_if_not_fixed']
-    assert 'per week if not fixed' in out['cost_if_not_fixed']
+    assert '£547.72' in out['cost_if_not_fixed']
+    assert 'over the next 4 weeks' in out['cost_if_not_fixed']
     assert 'up 37%' in out['recommended_action']
     assert 'fallen 14pp' in out['recommended_action']
     assert 'PRODUCE, CHILLED CONVENIENCE, IN-STORE BAKERY' in out['recommended_action']
