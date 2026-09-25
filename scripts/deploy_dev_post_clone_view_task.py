@@ -42,6 +42,7 @@ def main():
     from snowflake_credentials import get_credentials
 
     connection = snowflake.connector.connect(**get_credentials().get_connection_params())
+    cursor = None
     try:
         cursor = connection.cursor()
         try:
@@ -59,11 +60,15 @@ def main():
             print(cursor.fetchone()[0])
 
             print("Verifying views...")
-            for v in ["ALERTS_LATEST_V1", "ALERTS_HISTORY_V1"]:
-                n = cursor.execute(f"SELECT COUNT(*) FROM STORE_INSIGHT_DEV.PUBLIC.{v}").fetchone()[0]
-                print(f"{v}: {n} rows")
+            for view_name, sql in {
+                "ALERTS_LATEST_V1": "SELECT COUNT(*) FROM STORE_INSIGHT_DEV.PUBLIC.ALERTS_LATEST_V1",
+                "ALERTS_HISTORY_V1": "SELECT COUNT(*) FROM STORE_INSIGHT_DEV.PUBLIC.ALERTS_HISTORY_V1",
+            }.items():
+                row_count = cursor.execute(sql).fetchone()[0]
+                print(f"{view_name}: {row_count} rows")
         finally:
-            cursor.close()
+            if cursor is not None:
+                cursor.close()
     finally:
         connection.close()
 
