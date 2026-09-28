@@ -111,6 +111,7 @@ def test_yaml_map_contains_all_expected_signal_types():
         'MARKDOWN_SELLTHROUGH', 'MARKDOWN_SKU', 'STRAIGHT_TO_BIN',
         'BIG_DROP_MARKDOWN_COMPLIANCE', 'BIG_DROP_EXPIRY_DATE_COMPLIANCE',
         'BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE',
+        'BINNED_WASTE',
     }
 
 

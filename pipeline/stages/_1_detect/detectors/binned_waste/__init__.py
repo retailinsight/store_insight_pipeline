@@ -1,0 +1,1 @@
+"""Binned-waste family detectors."""

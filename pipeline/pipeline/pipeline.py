@@ -43,7 +43,7 @@ Checkpointing after detection
     signals = detect_signals(osa, ...)
     save_signals(signals, 'signals_2025-06-14.json')
 
-    # Later — skip detection, run facts → score
+    # Later — skip detection, run facts -> score
     signals = load_signals('signals_2025-06-14.json')
     cards   = run_pipeline_from_signals(signals, osa, ...)
 
@@ -532,7 +532,7 @@ def _write_signals_debug_table(session, table_name, signals, run_date, cfg, anal
     ]
     df = session.create_dataframe(rows, schema=_signals_debug_schema())
     df.write.mode("append").save_as_table(table_name)
-    print(f"[pipeline] {len(rows)} signals written → {table_name}")
+    print(f"[pipeline] {len(rows)} signals written -> {table_name}")
 
 
 def _write_score_audit_table(session, table_name, signals, run_date, cfg, analysis_date):
@@ -555,7 +555,7 @@ def _write_score_audit_table(session, table_name, signals, run_date, cfg, analys
         )
     df = session.create_dataframe(rows, schema=_score_audit_schema())
     df.write.mode("append").save_as_table(table_name)
-    print(f"[pipeline] {len(rows)} score-audit rows written → {table_name}")
+    print(f"[pipeline] {len(rows)} score-audit rows written -> {table_name}")
 
 
 def _write_investigations_debug_table(session, table_name, results, run_date, cfg, analysis_date):
@@ -579,7 +579,7 @@ def _write_investigations_debug_table(session, table_name, results, run_date, cf
         )
     df = session.create_dataframe(rows, schema=_investigations_debug_schema())
     df.write.mode("append").save_as_table(table_name)
-    print(f"[pipeline] {len(rows)} investigations written → {table_name}")
+    print(f"[pipeline] {len(rows)} investigations written -> {table_name}")
 
 
 def _card_to_row(
@@ -671,6 +671,7 @@ def run_pipeline(
     run_id: str | None = None,
     pipeline_version: str | None = None,
     gate_plan=None,
+    signal_types: list[str] | None = None,
 ):
     """
     Run the full alerts pipeline and return a list of alert card dicts.
@@ -712,6 +713,10 @@ def run_pipeline(
     gate_plan            : optional GatePlan from stages._0_quality.quality_gate —
                            skips detectors on FAILED sources and flags signals
                            from SUSPECT sources (never blocks the run)
+    signal_types         : optional list[str] — if provided, only signals whose
+                           ``signal_type`` is in this list are enriched/scored/
+                           narrated. Detection still runs for all enabled detectors;
+                           this filter is applied immediately after detection.
 
     Returns
     -------
@@ -760,6 +765,11 @@ def run_pipeline(
         gate_plan=gate_plan,
     )
 
+    if signal_types:
+        allowed = set(signal_types)
+        signals = [s for s in signals if s.get("signal_type") in allowed]
+        print(f"[pipeline] signal_types filter: {len(signals)} signals retained")
+
     return run_pipeline_from_signals(
         signals,
         osa,
@@ -802,7 +812,7 @@ def save_signals(signals, path):
     """
     with open(path, "w") as f:
         json.dump(signals, f)
-    print(f"[pipeline] {len(signals)} signals saved → {path}")
+    print(f"[pipeline] {len(signals)} signals saved -> {path}")
 
 
 def load_signals(path):
@@ -855,7 +865,7 @@ def run_pipeline_from_signals(
     pipeline_version: str | None = None,
 ):
     """
-    Run Stages 2–4 (facts → investigate → score) from a pre-computed signals list,
+    Run Stages 2–4 (facts -> investigate -> score) from a pre-computed signals list,
     skipping Stage 1 (detection).
 
     Use this together with ``load_signals`` when detection has already been run
@@ -992,7 +1002,7 @@ def run_pipeline_from_signals(
         before = len(signals)
         signals = apply_top_n_filter(signals, top_n=top_n, max_per_type=max_per_type)
         print(
-            f"[pipeline] top_n={top_n} max_per_type={max_per_type}: {before} → {len(signals)} signals before enrichment"
+            f"[pipeline] top_n={top_n} max_per_type={max_per_type}: {before} -> {len(signals)} signals before enrichment"
         )
 
     enriched = enrich_signals(
@@ -1219,4 +1229,4 @@ def write_alerts(
         df.write.mode("append").save_as_table(table)
         mode_label = "append"
 
-    print(f"[pipeline] Written {len(rows)} alert cards → {table} (mode={mode_label})")
+    print(f"[pipeline] Written {len(rows)} alert cards -> {table} (mode={mode_label})")

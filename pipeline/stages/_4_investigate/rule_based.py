@@ -1204,6 +1204,61 @@ def _generate_straight_to_bin(signal: dict) -> dict:
     }
 
 
+def _generate_binned_waste(signal: dict) -> dict:
+    """Generate narrative for a BINNED_WASTE alert (TREND and/or SPIKE triggers)."""
+    triggers = set(signal.get('trigger_types', []))
+    projected_cost = int(round(signal.get('projected_4w_waste_cost', 0)))
+
+    explanation_parts = []
+    recommended_parts = []
+    issue = "Review Binned Waste performance"
+
+    if 'TREND' in triggers:
+        current = int(round(signal.get('current_7d_waste_value', 0)))
+        prior = int(round(signal.get('prior_7d_waste_value', 0)))
+        pct_change = int(round(signal.get('pct_change', 0)))
+        explanation_parts.append(
+            f"Binned-waste value increased by {pct_change}% in the last 7 complete data days, "
+            f"from £{prior} to £{current}."
+        )
+        recommended_parts.append(
+            f"Binned Waste has risen {pct_change}% in the last 7 days from £{prior} to £{current}"
+        )
+        issue = "Coach the team on the Markdown process and timings"
+
+    if 'SPIKE' in triggers:
+        today_value = int(round(signal.get('today_value', 0)))
+        prior_value = int(round(signal.get('prior_day_value', 0)))
+        today_day_name = signal.get('today_day_name', 'today')
+        prior_day_name = signal.get('prior_day_name', 'yesterday')
+        explanation_parts.append(
+            f"Binned-waste value jumped from £{prior_value} on {prior_day_name} "
+            f"to £{today_value} on {today_day_name}."
+        )
+        recommended_parts.append(
+            f"Binned waste has increased from £{prior_value} on {prior_day_name} "
+            f"to £{today_value} on {today_day_name}"
+        )
+        issue = "Investigate the recent spike in Binned Waste"
+
+    if 'TREND' in triggers and 'SPIKE' in triggers:
+        issue = "Investigate Binned Waste trend and recent spike"
+
+    recommended_action = recommended_parts[0] if recommended_parts else "Review binned-waste data for this store."
+    explanation = " ".join(explanation_parts)
+    cost_if_not_fixed = (
+        f"Estimated waste cost: £{projected_cost} projected over 4 weeks\n"
+        f"Based on the last 7 days of waste data. Actual costs may vary."
+    )
+
+    return {
+        'issue': issue,
+        'explanation': explanation,
+        'cost_if_not_fixed': cost_if_not_fixed,
+        'recommended_action': recommended_action,
+    }
+
+
 def generate(signal: dict) -> dict:
     """
     Generate narrative fields for a single enriched signal using templates.
@@ -1269,6 +1324,9 @@ def generate(signal: dict) -> dict:
 
     if signal_type == 'STRAIGHT_TO_BIN':
         return _generate_straight_to_bin(signal)
+
+    if signal_type == 'BINNED_WASTE':
+        return _generate_binned_waste(signal)
 
     dept     = signal['department']
     facts    = signal['facts']

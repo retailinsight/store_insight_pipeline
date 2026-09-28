@@ -85,6 +85,12 @@ STRAIGHT_TO_BIN:
   - name: straight_to_bin_facts
     description: Daily STB breakdown, worst departments, top items, chain average, markdown compliance by day, and items with no expiry date
 
+BINNED_WASTE:
+  - name: binned_waste_trend_facts
+    description: Seven-day waste-value series, prompted-markdown checks due vs actioned, and department/item breakdowns for the current 7-day window (TREND trigger)
+  - name: binned_waste_spike_facts
+    description: Seven-day waste-value series ending today (today highlighted), prompted-markdown checks due vs actioned, and department/item breakdowns for ANALYSIS_DATE only (SPIKE trigger)
+
 MARKDOWN_SKU:
   - name: markdown_sku_history
     description: Week-by-week markdown request and override history for each flagged store-SKU combination

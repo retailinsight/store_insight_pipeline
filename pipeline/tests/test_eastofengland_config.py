@@ -27,6 +27,8 @@ EXPECTED_ENABLED_DETECTORS = [
     'prompted_markdown_compliance.wow',
     'prompted_markdown_compliance.vs_chain',
     'big_drop_prompted_markdown_compliance.big_drop',
+    'binned_waste.trend',
+    'binned_waste.spike',
 ]
 
 

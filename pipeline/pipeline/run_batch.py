@@ -35,6 +35,10 @@ Usage
     # Restrict to specific stores (dry-run)
     python store_insight/pipeline/pipeline/run_batch.py --analysis-date 2025-06-14 --store-id 242 301 402
 
+    # Run only selected signal types through the pipeline (dry-run)
+    python store_insight/pipeline/pipeline/run_batch.py --client eastofengland_dev --analysis-date 2025-06-14 \
+        --signal-types BINNED_WASTE
+
 Arguments
 ---------
 --client          Client config name (subfolder under config/clients/).
@@ -46,6 +50,9 @@ Arguments
                   have rows in the output table.
 --run-date        Date to stamp on output rows. Defaults to today.
 --store-id        Optional: restrict to one or more stores (space-separated).
+--signal-types    Optional: only enrich/score/narrate signals of these types.
+                  Detection still runs for all enabled detectors; this filter
+                  is applied after detection. Useful for testing new signal types.
 --write           Enable Snowflake table writes.  Without this flag the CLI
                   runs in dry-run mode: full pipeline, local JSON output, no
                   Snowflake write.  CRT canonical tables are always refused
@@ -413,6 +420,7 @@ def run_single_date(
     write_secondary_results: bool = False,
     dry_run: bool = True,
     output_json: str | None = None,
+    signal_types: list[str] | None = None,
 ):
     """
     Run the full pipeline for one analysis_date.
@@ -423,6 +431,10 @@ def run_single_date(
 
     When deterministic=True, rule_based narratives are forced and the run is
     compared against the golden regression snapshot at golden_path.
+
+    When signal_types is provided, only signals with those signal_type values
+    are enriched, scored, and narrated. Detection still runs for all enabled
+    detectors; this filter is applied immediately after detection.
     """
     w = derive_windows(analysis_date, cfg=cfg)
     run_id = str(uuid.uuid4())
@@ -476,6 +488,7 @@ def run_single_date(
         run_id=run_id,
         pipeline_version=pipeline_version,
         gate_plan=gate_plan,
+        signal_types=signal_types,
     )
 
     if deterministic:
@@ -600,6 +613,14 @@ def main():
     )
     parser.add_argument(
         "--analysis-date", required=True, help="Last day of the run / backfill range (YYYY-MM-DD)"
+    )
+    parser.add_argument(
+        "--signal-types",
+        nargs="+",
+        default=None,
+        help="Only enrich/score/narrate signals of these signal types. "
+        "Detection still runs for all enabled detectors; this filter is applied "
+        "immediately after detection. Useful for ad-hoc testing of new signal types.",
     )
     parser.add_argument(
         "--start-date",
@@ -815,6 +836,7 @@ def main():
                 write_secondary_results=args.write_secondary_results,
                 dry_run=dry_run,
                 output_json=date_json,
+                signal_types=args.signal_types,
             )
 
         print(
@@ -837,6 +859,7 @@ def main():
             write_secondary_results=args.write_secondary_results,
             dry_run=dry_run,
             output_json=output_json,
+            signal_types=args.signal_types,
         )
 
     print("[run_batch] Done.")
