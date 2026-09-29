@@ -304,13 +304,15 @@ def _build_card(
         type_value = default_type
 
     lineage = run_lineage or {}
+    signal_type = sig.get("signal_type", "")
     return {
         "signal_id": alert_id,
         "alert_id": alert_id,
+        "signal_type": signal_type,
         "issue_key": issue_key,
         "analysis_date": analysis_date,
         "engine_used": narrative.get("_engine", "rule_based"),
-        "alert_type": ",".join(sorted(sig["trigger_types"])),
+        "alert_type": signal_type,
         "store_id": sig["store_id"],
         "section": sig.get("department"),
         "type": type_value,

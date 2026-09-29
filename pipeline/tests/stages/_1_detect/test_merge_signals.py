@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from store_insight.pipeline.stages._1_detect.detect import _merge_signals
 from store_insight.pipeline.stages._1_detect.signals import (
+    make_binned_waste_signal,
     make_compliance_signal,
     make_markdown_compliance_signal,
     make_markdown_override_signal,
@@ -247,3 +248,40 @@ def test_prompted_markdown_compliance_wow_and_vs_chain_merge():
     assert merged[0]['wow_change_pp'] == -10.0
     assert merged[0]['below_chain_pp'] == 15.0
     assert merged[0]['this_week_prompts_issued'] == 100
+
+
+def test_binned_waste_trend_and_spike_merge_preserves_both_trigger_fields():
+    trend = make_binned_waste_signal(
+        store_id=42,
+        trigger_types=['TREND'],
+        current_7d_waste_value=700,
+        prior_7d_waste_value=600,
+        pct_change=17,
+        projected_4w_waste_cost=2800,
+        site_name='Test Store',
+    )
+    spike = make_binned_waste_signal(
+        store_id=42,
+        trigger_types=['SPIKE'],
+        today_value=150,
+        prior_day_value=80,
+        today_day_name='Monday',
+        prior_day_name='Sunday',
+        spike_pct=88,
+        current_7d_waste_value=700,
+        projected_4w_waste_cost=2800,
+        site_name='Test Store',
+    )
+    merged = _merge_signals([trend, spike])
+    assert len(merged) == 1
+    assert merged[0]['signal_type'] == 'BINNED_WASTE'
+    assert merged[0]['trigger_types'] == ['TREND', 'SPIKE']
+    assert merged[0]['current_7d_waste_value'] == 700
+    assert merged[0]['prior_7d_waste_value'] == 600
+    assert merged[0]['pct_change'] == 17
+    assert merged[0]['today_value'] == 150
+    assert merged[0]['prior_day_value'] == 80
+    assert merged[0]['today_day_name'] == 'Monday'
+    assert merged[0]['prior_day_name'] == 'Sunday'
+    assert merged[0]['spike_pct'] == 88
+    assert merged[0]['projected_4w_waste_cost'] == 2800

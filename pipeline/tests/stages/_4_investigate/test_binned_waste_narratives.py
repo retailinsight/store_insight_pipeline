@@ -53,3 +53,20 @@ def test_spike_title_and_subtitle(spike_signal):
     assert narrative['issue'] == 'Investigate the recent spike in Binned Waste'
     assert narrative['recommended_action'] == 'Binned waste has increased from £50 on Thursday to £100 on Friday'
     assert 'Estimated waste cost: £1200 projected over 4 weeks' in narrative['cost_if_not_fixed']
+
+
+def test_merged_trend_and_spike_narrative(trend_signal, spike_signal):
+    """A store with both triggers produces one card with combined narrative text."""
+    merged = {
+        **trend_signal,
+        'trigger_types': ['TREND', 'SPIKE'],
+        'today_value': spike_signal['today_value'],
+        'prior_day_value': spike_signal['prior_day_value'],
+        'today_day_name': spike_signal['today_day_name'],
+        'prior_day_name': spike_signal['prior_day_name'],
+        'spike_pct': spike_signal['spike_pct'],
+    }
+    narrative = rule_based.generate(merged)
+    assert narrative['issue'] == 'Investigate Binned Waste trend and recent spike'
+    assert 'Binned-waste value increased by 10%' in narrative['explanation']
+    assert '£100 on Friday' in narrative['explanation']
