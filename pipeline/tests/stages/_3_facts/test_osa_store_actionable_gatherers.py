@@ -21,18 +21,18 @@ from store_insight.pipeline.stages._3_facts.gatherers import (
 
 
 @pytest.mark.parametrize(
-    'module,keys',
+    'module,keys,signal_types',
     [
-        (ppg_g, ['ppg_lsv_changes']),
-        (item_g, ['item_lsv_changes']),
-        (dow_g, ['dow_pattern', 'worst_day']),
-        (periods_g, ['day_period_pattern', 'worst_day_period', 'day_period_grid', 'grid_scope', 'grid_start_date', 'grid_end_date', 'dow_pattern', 'worst_day']),
-        (chain_g, ['chain_store_last_week_osa', 'chain_store_this_week_osa', 'chain_store_drift_pp']),
-        (cost_g, ['cost_projection']),
+        (ppg_g, ['ppg_lsv_changes'], ['OSA_STORE_ACTIONABLE']),
+        (item_g, ['item_lsv_changes'], ['OSA_STORE_ACTIONABLE']),
+        (dow_g, ['dow_pattern', 'worst_day'], ['OSA_STORE_ACTIONABLE']),
+        (periods_g, ['day_period_pattern', 'worst_day_period', 'day_period_grid', 'grid_scope', 'grid_start_date', 'grid_end_date', 'dow_pattern', 'worst_day'], ['OSA_STORE_ACTIONABLE']),
+        (chain_g, ['chain_store_last_week_osa', 'chain_store_this_week_osa', 'chain_store_drift_pp'], ['OSA_STORE_ACTIONABLE']),
+        (cost_g, ['cost_projection'], ['OSA_STORE_ACTIONABLE']),
     ],
 )
-def test_metadata_declares_actionable_type(module, keys):
-    assert module.METADATA.signal_types == ['OSA_STORE_ACTIONABLE']
+def test_metadata_declares_signal_types(module, keys, signal_types):
+    assert module.METADATA.signal_types == signal_types
     assert module.METADATA.facts_keys == keys
 
 

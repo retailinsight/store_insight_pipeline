@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-15T10:54:56+00:00",
+  "generated_at": "2026-09-30T09:49:11+00:00",
   "pipeline_summary": "Weekly batch that detects retail availability and markdown anomalies, enriches each signal with supporting facts, generates plain-English narrative cards, and scores them so the highest-impact issues surface first.",
   "stages": {
     "1_detect": "Run lightweight statistical detectors → list of signals.",
@@ -304,6 +304,13 @@
             "item_lsv"
           ],
           "description": "Compact time-of-day grid, PPG, and item store-controlled LSV facts."
+        },
+        {
+          "name": "osa_big_drop_item_lsv_changes",
+          "facts_keys": [
+            "item_lsv_changes"
+          ],
+          "description": "Top latest-week item offenders with prior-week attributed LSV and UPC/EAN arrays."
         }
       ],
       "investigator": {
@@ -481,10 +488,10 @@
         {
           "name": "VS_CHAIN",
           "module": "tick_and_flick_vs_chain",
-          "problem": "A store's tick-and-flick rate is above the chain average, indicating poor compliance with the alerting process relative to peers.",
-          "action": "Review the store's alert-working behaviour with the store manager and ensure alerts are being genuinely investigated rather than dismissed.",
-          "baseline": "The chain-wide tick-and-flick rate for the same week.",
-          "logic": "Tick-and-flick rate = rapid dismissals / alerts worked.\nVS_CHAIN: store this-week rate - chain this-week rate >= min_compliance_chain_gap,\nand this-week alerts worked >= min_alerts_worked.",
+          "problem": "A store's rate of alerts completed in less than 10 seconds is above the chain average, indicating poor compliance with the alerting process relative to peers.",
+          "action": "Review the store's alert-working behaviour with the store manager and ensure alerts are being genuinely investigated rather than closed too quickly.",
+          "baseline": "The chain-wide rate of alerts completed in less than 10 seconds for the same week.",
+          "logic": "Rate of alerts completed in less than 10 seconds = alerts completed in <10s / alerts worked.\nVS_CHAIN: store this-week rate - chain this-week rate >= min_compliance_chain_gap,\nand this-week alerts worked >= min_alerts_worked.",
           "config_keys": [
             "min_compliance_chain_gap",
             "min_alerts_worked"
@@ -493,10 +500,10 @@
         {
           "name": "WOW",
           "module": "tick_and_flick_wow",
-          "problem": "A store's tick-and-flick rate has risen sharply week-on-week, indicating deteriorating compliance with the alerting process.",
-          "action": "Review the store's alert-working behaviour with the store manager and ensure alerts are being genuinely investigated rather than dismissed.",
+          "problem": "A store's rate of alerts completed in less than 10 seconds has risen sharply week-on-week, indicating deteriorating compliance with the alerting process.",
+          "action": "Review the store's alert-working behaviour with the store manager and ensure alerts are being genuinely investigated rather than closed too quickly.",
           "baseline": "The same store during the preceding week.",
-          "logic": "Tick-and-flick rate = rapid dismissals / alerts worked.\nWOW: this-week rate - last-week rate >= min_compliance_wow_drop,\nand this-week alerts worked >= min_alerts_worked.",
+          "logic": "Rate of alerts completed in less than 10 seconds = alerts completed in <10s / alerts worked.\nWOW: this-week rate - last-week rate >= min_compliance_wow_drop,\nand this-week alerts worked >= min_alerts_worked.",
           "config_keys": [
             "min_compliance_wow_drop",
             "min_alerts_worked"
@@ -512,7 +519,7 @@
             "trailing_7d_tf",
             "driver_assessment"
           ],
-          "description": "Alert type is the unchanged source ALERT_TYPE_NAME label: the kind of alert intervention the store actioned. It is not a department, severity, SKU grouping, or a category derived by this pipeline. For each alert type, this adds current-week interventions worked, tick-and-flicked dismissals, and tick-and-flick rate = dismissals / interventions worked. Also builds a daily volume breakdown, a seven-day trailing tick-and-flick count series, and a workload/coaching driver assessment."
+          "description": "Alert type is the unchanged source ALERT_TYPE_NAME label: the kind of alert intervention the store actioned. It is not a department, severity, SKU grouping, or a category derived by this pipeline. For each alert type, this adds current-week interventions worked, alerts completed in less than 10 seconds, and <10s completion rate = <10s completions / interventions worked. Also builds a daily volume breakdown, a trailing <10s completion count series for dates that have data, and a workload/coaching driver assessment."
         }
       ],
       "investigator": {
@@ -795,14 +802,6 @@
         {
           "name": "below_chain_pp",
           "type": "float | None"
-        },
-        {
-          "name": "median_response_minutes",
-          "type": "float | None"
-        },
-        {
-          "name": "this_week_at_risk_value",
-          "type": "float"
         },
         {
           "name": "workload",
