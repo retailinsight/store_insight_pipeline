@@ -88,7 +88,9 @@ def test_osa_dispatch_order_matches_yaml():
 def test_osa_big_drop_dispatch_order_matches_yaml():
     big_drop = [m.__name__.rsplit('.', 1)[-1]
                 for m in registry.SIGNAL_TYPE_GATHERERS['OSA_BIG_DROP']]
-    assert big_drop == ['osa_big_drop_day_drilldown']
+    assert big_drop == [
+        'osa_big_drop_day_drilldown', 'osa_store_actionable_item_lsv_changes',
+    ]
 
 
 def test_unknown_yaml_entry_raises_import_error(tmp_path, monkeypatch):

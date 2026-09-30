@@ -359,7 +359,7 @@ def build_catalog() -> dict:
         }
 
     return {
-        'generated_at':      _dt.datetime.now(_dt.UTC).isoformat(timespec='seconds'),
+        'generated_at':      _dt.datetime.now(_dt.timezone.utc).isoformat(timespec='seconds'),
         'pipeline_summary':  (
             'Weekly batch that detects retail availability and markdown anomalies, '
             'enriches each signal with supporting facts, generates plain-English '
