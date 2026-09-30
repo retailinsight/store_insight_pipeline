@@ -1,11 +1,19 @@
 from store_insight.pipeline.stages._3_facts.gatherers import (
     osa_big_drop_day_drilldown as day_g,
 )
+from store_insight.pipeline.stages._3_facts.gatherers import (
+    osa_big_drop_item_lsv_changes as item_g,
+)
 
 
 def test_metadata_declares_compact_big_drop_facts():
     assert day_g.METADATA.signal_types == ['OSA_BIG_DROP']
     assert day_g.METADATA.facts_keys == ['day_period_grid', 'ppg_lsv', 'item_lsv']
+
+
+def test_metadata_declares_big_drop_item_facts():
+    assert item_g.METADATA.signal_types == ['OSA_BIG_DROP']
+    assert item_g.METADATA.facts_keys == ['item_lsv_changes']
 
 
 def test_extract_returns_compact_defaults():

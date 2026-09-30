@@ -184,6 +184,7 @@ gatherers:
     - osa_store_actionable_cost_projection
   OSA_BIG_DROP:
     - osa_big_drop_day_drilldown
+    - osa_big_drop_item_lsv_changes
   OSA_RECURRING_SLOT:
     - osa_recurring_slot_facts
   COMPLIANCE:
