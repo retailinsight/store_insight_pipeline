@@ -383,3 +383,106 @@ def test_society_osa_averages_across_every_store_not_just_one_cluster(local_sess
     # (90 + 50) / (90 + 10 + 50 + 50) = 140 / 200 = 0.70 — not either store's
     # individual rate (0.90 or 0.50), confirming it isn't cluster-scoped.
     assert society_osa == pytest.approx(0.70)
+
+
+# ---------------------------------------------------------------------------
+# Prompted markdown compliance KPI helpers
+# ---------------------------------------------------------------------------
+
+def test_prompted_compliance_store_rate_counts_actioned_rows(local_session):
+    pc = local_session.create_dataframe(
+        [
+            (1, "2026-09-20", True),
+            (1, "2026-09-21", True),
+            (1, "2026-09-22", False),
+            (1, "2026-09-15", True),  # last week, filtered out
+            (2, "2026-09-22", True),
+        ],
+        schema=["STORE_ID", "ALERT_DATE", "COMPLIANT"],
+    )
+    row = kb._prompted_compliance_store_rates(pc, "2026-09-20", "2026-09-22").collect()[0]
+    assert row["STORE_ID"] == 1
+    assert row["PROMPTS_ISSUED"] == 3
+    assert row["PROMPTS_ACTIONED"] == 2
+    assert float(row["PROMPTED_MARKDOWN_COMPLIANCE_RATE"]) == pytest.approx(2 / 3)
+
+
+def test_prompted_compliance_store_rate_treats_null_as_not_actioned(local_session):
+    pc = local_session.create_dataframe(
+        [(1, "2026-09-22", None)],
+        schema=["STORE_ID", "ALERT_DATE", "COMPLIANT"],
+    )
+    row = kb._prompted_compliance_store_rates(pc, "2026-09-22", "2026-09-22").collect()[0]
+    assert row["PROMPTS_ISSUED"] == 1
+    assert row["PROMPTS_ACTIONED"] == 0
+
+
+def test_prompted_compliance_cluster_rate_aggregates_store_rates(local_session):
+    pc = local_session.create_dataframe(
+        [
+            (1, "2026-09-22", True),
+            (1, "2026-09-22", False),
+            (2, "2026-09-22", True),
+            (3, "2026-09-22", True),
+            (3, "2026-09-22", True),
+        ],
+        schema=["STORE_ID", "ALERT_DATE", "COMPLIANT"],
+    )
+    sites = local_session.create_dataframe(
+        [(1, "A"), (2, "A"), (3, "B")],
+        schema=["STORE_ID", "CLUSTER_ID"],
+    )
+    rows = {
+        r["CLUSTER_ID"]: r
+        for r in kb._prompted_compliance_cluster_rates(pc, sites, "2026-09-22", "2026-09-22").collect()
+    }
+    assert float(rows["A"]["CLUSTER_PROMPTED_MARKDOWN_COMPLIANCE_RATE"]) == pytest.approx(2 / 3)
+    assert float(rows["B"]["CLUSTER_PROMPTED_MARKDOWN_COMPLIANCE_RATE"]) == pytest.approx(1.0)
+
+
+def test_prompted_compliance_society_rate_computes_chain_wide_rate(local_session):
+    pc = local_session.create_dataframe(
+        [
+            (1, "2026-09-22", True),
+            (1, "2026-09-22", False),
+            (2, "2026-09-22", False),
+            (2, "2026-09-22", False),
+        ],
+        schema=["STORE_ID", "ALERT_DATE", "COMPLIANT"],
+    )
+    rate = kb._prompted_compliance_society_rate(pc, "2026-09-22", "2026-09-22")
+    assert rate == pytest.approx(0.25)
+
+
+# ---------------------------------------------------------------------------
+# JSON output helper
+# ---------------------------------------------------------------------------
+
+def test_output_rows_to_json_parses_json_string_columns(tmp_path):
+    """JSON-string detail columns should be expanded to nested objects."""
+    schema = kb.StructType([
+        kb.StructField("STORE_ID", kb.IntegerType()),
+        kb.StructField("OVERALL_DETAILS_JSON", kb.StringType()),
+        kb.StructField("TIME_OF_DAY_BREAKDOWN", kb.VariantType()),
+    ])
+    output_rows = [
+        (1, json.dumps({"summary": "hello"}), [{"day": "Mon"}]),
+    ]
+    records = kb._output_rows_to_records(output_rows, schema)
+    assert records == [{
+        "STORE_ID": 1,
+        "OVERALL_DETAILS_JSON": {"summary": "hello"},
+        "TIME_OF_DAY_BREAKDOWN": [{"day": "Mon"}],
+    }]
+
+
+def test_write_output_rows_to_json_creates_file(tmp_path):
+    schema = kb.StructType([
+        kb.StructField("STORE_ID", kb.IntegerType()),
+        kb.StructField("PROMPTED_MARKDOWN_PCT", kb.FloatType()),
+    ])
+    output_rows = [(42, 95.5)]
+    path = tmp_path / "out.json"
+    kb._write_output_rows_to_json(output_rows, schema, str(path))
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    assert loaded == [{"STORE_ID": 42, "PROMPTED_MARKDOWN_PCT": 95.5}]
