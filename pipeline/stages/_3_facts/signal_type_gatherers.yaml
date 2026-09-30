@@ -32,7 +32,7 @@ OSA_STORE_ACTIONABLE:
 OSA_BIG_DROP:
   - name: osa_big_drop_day_drilldown
     description: Compact time-of-day grid, PPG, and item store-controlled LSV facts
-  - name: osa_store_actionable_item_lsv_changes
+  - name: osa_big_drop_item_lsv_changes
     description: Top item offenders with prior-week changes and UPC/EAN arrays (API barcode lookup)
 
 OSA_RECURRING_SLOT:

@@ -16,7 +16,7 @@ from store_insight.pipeline.stages._3_facts.config import GathererInfo
 
 METADATA = GathererInfo(
     name='osa_store_actionable_item_lsv_changes',
-    signal_types=['OSA_STORE_ACTIONABLE', 'OSA_BIG_DROP'],
+    signal_types=['OSA_STORE_ACTIONABLE'],
     facts_keys=['item_lsv_changes'],
     description='Top latest-week item offenders with prior-week attributed LSV and UPC/EAN arrays.',
 )

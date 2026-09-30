@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-30T08:53:46+00:00",
+  "generated_at": "2026-09-30T09:49:11+00:00",
   "pipeline_summary": "Weekly batch that detects retail availability and markdown anomalies, enriches each signal with supporting facts, generates plain-English narrative cards, and scores them so the highest-impact issues surface first.",
   "stages": {
     "1_detect": "Run lightweight statistical detectors → list of signals.",
@@ -306,7 +306,7 @@
           "description": "Compact time-of-day grid, PPG, and item store-controlled LSV facts."
         },
         {
-          "name": "osa_store_actionable_item_lsv_changes",
+          "name": "osa_big_drop_item_lsv_changes",
           "facts_keys": [
             "item_lsv_changes"
           ],
