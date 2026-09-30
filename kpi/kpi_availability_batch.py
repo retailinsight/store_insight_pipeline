@@ -9,7 +9,8 @@ KPI_OUTPUT_TABLE env var (default: STORE_INSIGHT_DB.PUBLIC.KPI_AVAILABILITY_SUMM
 Run manually (from the repo root):
     python kpi/kpi_availability_batch.py --analysis-date 2025-03-22
 
-Credentials are read from api2/.env (copy api2/.env.example to get started).
+Credentials are read from the snowflake_credentials loader
+(.local/credentials/snowflake_credentials.py) or environment variables.
 
 NOTE: writing to STORE_INSIGHT_DB requires SNOWFLAKE_ROLE=STORE_INSIGHT_ROLE
 (the table is owned by STORE_INSIGHT_ROLE; STOREINSIGHT has DML).
@@ -41,30 +42,6 @@ from snowflake.snowpark.types import (
     StructType,
     VariantType,
 )
-
-# .env locations tried when loading credentials locally. The SP relies on
-# Snowflake-injected env vars, so python-dotenv is optional.
-_DOTENV_CANDIDATES = [
-    Path(__file__).parent / ".env",                      # kpi/.env
-    Path(__file__).parent.parent / ".env",                 # store_insight/.env
-    Path(__file__).parent.parent / "api2" / ".env",
-    Path(__file__).parent.parent / "pipeline" / ".env",
-    Path(__file__).parent.parent / "pipeline" / "config" / "clients" / "eastofengland" / ".env",
-    Path(__file__).parent.parent.parent / ".env",          # repo root/.env
-    Path.cwd() / ".env",                                 # cwd/.env
-]
-
-try:  # python-dotenv is not available inside Snowflake stored procedures
-    from dotenv import load_dotenv
-
-    # Load from the most specific locations first, then fall back to broader
-    # project locations so the KPI script can share a single .env file with
-    # the rest of the project.
-    for _dotenv_path in _DOTENV_CANDIDATES:
-        if _dotenv_path.exists():
-            load_dotenv(dotenv_path=_dotenv_path)
-except ImportError:
-    pass
 
 # Use the project's shared credentials loader when running locally. This is
 # intentionally optional: the stored procedure does not package snowflake_credentials,
@@ -124,7 +101,6 @@ DRIVER_TIME_SLOTS = [
 def _missing_credentials_message() -> str:
     """Build a helpful error message when Snowflake env vars are missing."""
     missing = [v for v in ("SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER") if not os.getenv(v)]
-    checked = "\n".join(f"  - {p}" for p in _DOTENV_CANDIDATES)
     return (
         f"Missing required environment variable(s): {', '.join(missing)}.\n\n"
         "The KPI batch needs:\n"
@@ -135,9 +111,8 @@ def _missing_credentials_message() -> str:
         "  SNOWFLAKE_WAREHOUSE (default: STORE_INSIGHT_WH)\n"
         "  SNOWFLAKE_DATABASE (default: STORE_INSIGHT_DB)\n"
         "  SNOWFLAKE_SCHEMA (default: PUBLIC)\n\n"
-        f"Checked .env files:\n{checked}\n\n"
-        "Set the variables in one of those files, use the snowflake_credentials "
-        "loader, or set them in your shell."
+        "Use the snowflake_credentials loader "
+        "(.local/credentials/snowflake_credentials.py) or set them in your shell."
     )
 
 
@@ -798,7 +773,7 @@ def _output_rows_to_records(output_rows: list, schema: StructType) -> list[dict]
     records = []
     for row in output_rows:
         record = {}
-        for field, value in zip(schema.fields, row):
+        for field, value in zip(schema.fields, row, strict=True):
             name = field.name
             if name in _JSON_DETAILS_COLUMNS and isinstance(value, str):
                 record[name] = json.loads(value)
