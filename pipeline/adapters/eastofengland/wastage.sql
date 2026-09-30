@@ -16,9 +16,16 @@
 -- short internal product code that does not overlap with WMD_ITEM_HIERARCHY,
 -- whereas EAN matches it with >99% coverage.  Rows with NULL EAN are
 -- excluded because they cannot be resolved to a hierarchy.
+--
+-- Note: SELECT DISTINCT removes exact re-ingestion duplicates present inside
+-- source files (~6.9% of Sep 2026 rows; verified 30 Sep — all dup groups share
+-- identical SITE_ID, EAN, WASTE_DATETIME, WASTE_QUANTITY and ORIGINAL_PRICE,
+-- inflating SUM(WASTE_QUANTITY × ORIGINAL_PRICE) by ~4%).  Distinct projected
+-- rows collapse only when every exposed column matches, so genuinely separate
+-- waste events (different datetime, quantity or price) are preserved.
 
 CREATE OR REPLACE VIEW STORE_INSIGHT_DB.PUBLIC.WASTAGE_V1 AS
-SELECT
+SELECT DISTINCT
     SITE_ID            AS STORE_ID,
     EAN::NUMBER        AS UPC,
     WASTE_DATE         AS DATE,
