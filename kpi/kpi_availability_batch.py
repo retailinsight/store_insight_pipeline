@@ -1,15 +1,16 @@
 """
 KPI Availability Batch Script
 ==============================
-Joins source tables, aggregates all Availability KPI metrics per store per week,
-builds a deterministic three-sentence availability narrative, and writes the
-result to the table named by the KPI_OUTPUT_TABLE env var (default:
-STORE_INSIGHT_DB.PUBLIC.KPI_AVAILABILITY_SUMMARY).
+Joins source tables, aggregates Availability and Prompted Markdown Compliance
+KPI metrics per store per week, builds a deterministic three-sentence
+availability narrative, and writes the result to the table named by the
+KPI_OUTPUT_TABLE env var (default: STORE_INSIGHT_DB.PUBLIC.KPI_AVAILABILITY_SUMMARY).
 
 Run manually (from the repo root):
     python kpi/kpi_availability_batch.py --analysis-date 2025-03-22
 
-Credentials are read from api2/.env (copy api2/.env.example to get started).
+Credentials are read from the snowflake_credentials loader
+(.local/credentials/snowflake_credentials.py) or environment variables.
 
 NOTE: writing to STORE_INSIGHT_DB requires SNOWFLAKE_ROLE=STORE_INSIGHT_ROLE
 (the table is owned by STORE_INSIGHT_ROLE; STOREINSIGHT has DML).
@@ -20,12 +21,13 @@ yesterday). The script computes KPIs over the 7-day window ending on that date
 
 Writes are idempotent per run date: existing rows for the run date are deleted
 and the new rows appended. The table is never dropped or recreated, so columns
-maintained by other processes (waste/markdown/prompted-markdown/TOD) survive.
+maintained by other processes (waste/markdown/TOD) survive.
 """
 
 import argparse
 import json
 import os
+import sys
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -41,13 +43,13 @@ from snowflake.snowpark.types import (
     VariantType,
 )
 
-try:  # python-dotenv is not available inside Snowflake stored procedures
-    from dotenv import load_dotenv
-
-    load_dotenv(dotenv_path=Path(__file__).parent / ".env")
-    load_dotenv(dotenv_path=Path(__file__).parent.parent / "api2" / ".env")
+# Use the project's shared credentials loader when running locally. This is
+# intentionally optional: the stored procedure does not package snowflake_credentials,
+# so the import is allowed to fail and we fall back to environment variables.
+try:
+    from snowflake_credentials import get_credentials as _get_credentials
 except ImportError:
-    pass
+    _get_credentials = None  # type: ignore[assignment]
 
 # NOTE: everything this script needs (including the narrative builder below)
 # is defined in this single file rather than imported from other modules in
@@ -96,23 +98,57 @@ DRIVER_TIME_SLOTS = [
 ]
 
 
+def _missing_credentials_message() -> str:
+    """Build a helpful error message when Snowflake env vars are missing."""
+    missing = [v for v in ("SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER") if not os.getenv(v)]
+    return (
+        f"Missing required environment variable(s): {', '.join(missing)}.\n\n"
+        "The KPI batch needs:\n"
+        "  SNOWFLAKE_ACCOUNT\n"
+        "  SNOWFLAKE_USER\n\n"
+        "Optional (defaults shown):\n"
+        "  SNOWFLAKE_ROLE (default: STORE_INSIGHT_ROLE)\n"
+        "  SNOWFLAKE_WAREHOUSE (default: STORE_INSIGHT_WH)\n"
+        "  SNOWFLAKE_DATABASE (default: STORE_INSIGHT_DB)\n"
+        "  SNOWFLAKE_SCHEMA (default: PUBLIC)\n\n"
+        "Use the snowflake_credentials loader "
+        "(.local/credentials/snowflake_credentials.py) or set them in your shell."
+    )
+
+
+def _connection_params() -> dict:
+    """Return Snowflake connection params, preferring the project credentials loader."""
+    if _get_credentials is not None:
+        params = _get_credentials().get_connection_params()
+        # Ensure defaults for the KPI batch if the loader did not provide them.
+        params.setdefault("role", "STORE_INSIGHT_ROLE")
+        params.setdefault("warehouse", "STORE_INSIGHT_WH")
+        params.setdefault("database", "STORE_INSIGHT_DB")
+        params.setdefault("schema", "PUBLIC")
+        return params
+
+    if not os.getenv("SNOWFLAKE_ACCOUNT") or not os.getenv("SNOWFLAKE_USER"):
+        raise RuntimeError(_missing_credentials_message())
+    params = {
+        "account":   os.environ["SNOWFLAKE_ACCOUNT"],
+        "user":      os.environ["SNOWFLAKE_USER"],
+        "role":      os.getenv("SNOWFLAKE_ROLE",      "STORE_INSIGHT_ROLE"),
+        "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE", "STORE_INSIGHT_WH"),
+        "database":  os.getenv("SNOWFLAKE_DATABASE",  "STORE_INSIGHT_DB"),
+        "schema":    os.getenv("SNOWFLAKE_SCHEMA",    "PUBLIC"),
+    }
+    password = os.getenv("SNOWFLAKE_PASSWORD")
+    if password:
+        params["password"] = password
+    else:
+        params["authenticator"] = "externalbrowser"
+    return params
+
+
 def get_session() -> Session:
     global _session
     if _session is None:
-        params = {
-            "account":   os.environ["SNOWFLAKE_ACCOUNT"],
-            "user":      os.environ["SNOWFLAKE_USER"],
-            "role":      os.getenv("SNOWFLAKE_ROLE",      "STORE_INSIGHT_ROLE"),
-            "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE", "STORE_INSIGHT_WH"),
-            "database":  os.getenv("SNOWFLAKE_DATABASE",  "STORE_INSIGHT_DB"),
-            "schema":    os.getenv("SNOWFLAKE_SCHEMA",    "PUBLIC"),
-        }
-        password = os.getenv("SNOWFLAKE_PASSWORD")
-        if password:
-            params["password"] = password
-        else:
-            params["authenticator"] = "externalbrowser"
-        _session = Session.builder.configs(params).create()
+        _session = Session.builder.configs(_connection_params()).create()
     return _session
 
 # ---------------------------------------------------------------------------
@@ -122,6 +158,7 @@ OSA_TABLE       = "ANALYSIS.FINAL.LSM_REPORT_ITEM_STORE_DAY_REPORTING_PERIOD"
 HIERARCHY_TABLE = "ANALYSIS.FINAL.LSM_ITEM_HIERARCHY"
 SITE_TABLE      = "ANALYSIS.FINAL.LSM_SITE_HIERARCHY"
 FEEDBACK_TABLE  = "ANALYSIS.FINAL.LSM_ALERT_FEEDBACK"
+PROMPTED_COMPLIANCE_TABLE = "STORE_INSIGHT_DB.PUBLIC.PROMPTED_COMPLIANCE_V1"
 OUTPUT_TABLE    = os.getenv("KPI_OUTPUT_TABLE", "STORE_INSIGHT_DB.PUBLIC.KPI_AVAILABILITY_SUMMARY")
 
 # RAG threshold
@@ -437,6 +474,86 @@ def _feedback_metrics(feedback):
     )
 
 
+def _load_prompted_compliance(session: Session, tw_start: str, tw_end: str, lw_start: str, lw_end: str):
+    """Load prompted markdown compliance rows for this week and last week.
+
+    Uses the canonical adapter view (STORE_INSIGHT_DB.PUBLIC.PROMPTED_COMPLIANCE_V1)
+    so the KPI batch does not reimplement source deduplication / column mapping.
+    """
+    return (
+        session.table(PROMPTED_COMPLIANCE_TABLE)
+        .filter(
+            ((F.col("ALERT_DATE") >= tw_start) & (F.col("ALERT_DATE") <= tw_end))
+            | ((F.col("ALERT_DATE") >= lw_start) & (F.col("ALERT_DATE") <= lw_end))
+        )
+        .select(
+            F.col("STORE_ID"),
+            F.col("ALERT_DATE"),
+            F.col("COMPLIANT"),
+        )
+        .cache_result()
+    )
+
+
+def _actioned_prompts():
+    """Snowpark expression: 1 when COMPLIANT is true, otherwise 0 (NULL counts as 0)."""
+    return F.when(F.col("COMPLIANT") == True, F.lit(1)).otherwise(F.lit(0))
+
+
+def _prompted_compliance_store_rates(pc, start: str, end: str):
+    """Prompted markdown compliance rate per store for a date window."""
+    return (
+        pc.filter((F.col("ALERT_DATE") >= start) & (F.col("ALERT_DATE") <= end))
+        .group_by("STORE_ID")
+        .agg(
+            F.count("*").alias("PROMPTS_ISSUED"),
+            F.sum(_actioned_prompts()).alias("PROMPTS_ACTIONED"),
+        )
+        .with_column(
+            "PROMPTED_MARKDOWN_COMPLIANCE_RATE",
+            F.when(
+                F.col("PROMPTS_ISSUED") > 0,
+                F.col("PROMPTS_ACTIONED") / F.col("PROMPTS_ISSUED"),
+            ).otherwise(F.lit(0.0)),
+        )
+    )
+
+
+def _prompted_compliance_cluster_rates(pc, sites, start: str, end: str):
+    """Prompted markdown compliance rate per cluster for a date window."""
+    store_rates = _prompted_compliance_store_rates(pc, start, end)
+    return (
+        store_rates.join(sites, on=["STORE_ID"], how="left")
+        .group_by("CLUSTER_ID")
+        .agg(
+            F.sum("PROMPTS_ISSUED").alias("CLUSTER_PROMPTS_ISSUED"),
+            F.sum("PROMPTS_ACTIONED").alias("CLUSTER_PROMPTS_ACTIONED"),
+        )
+        .with_column(
+            "CLUSTER_PROMPTED_MARKDOWN_COMPLIANCE_RATE",
+            F.when(
+                F.col("CLUSTER_PROMPTS_ISSUED") > 0,
+                F.col("CLUSTER_PROMPTS_ACTIONED") / F.col("CLUSTER_PROMPTS_ISSUED"),
+            ).otherwise(F.lit(0.0)),
+        )
+    )
+
+
+def _prompted_compliance_society_rate(pc, start: str, end: str) -> float:
+    """Chain-wide prompted markdown compliance rate for a date window."""
+    row = (
+        pc.filter((F.col("ALERT_DATE") >= start) & (F.col("ALERT_DATE") <= end))
+        .agg(
+            F.count("*").alias("TOTAL_ISSUED"),
+            F.sum(_actioned_prompts()).alias("TOTAL_ACTIONED"),
+        )
+        .collect()[0]
+    )
+    issued = float(row["TOTAL_ISSUED"] or 0)
+    actioned = float(row["TOTAL_ACTIONED"] or 0)
+    return actioned / issued if issued > 0 else 0.0
+
+
 # ---------------------------------------------------------------------------
 # Deterministic narrative generation
 # ---------------------------------------------------------------------------
@@ -636,11 +753,58 @@ def _narrative_fields(key_insights: list[str]) -> dict:
     }
 
 
+_JSON_DETAILS_COLUMNS = {
+    "OVERALL_DETAILS_JSON",
+    "AVAILABILITY_DETAILS_JSON",
+    "OSCA_DETAILS_JSON",
+    "STORE_CONTROLLABLE_OSCA_DETAILS_JSON",
+    "WASTE_DETAILS_JSON",
+    "MARKDOWN_DETAILS_JSON",
+    "PROMPTED_MARKDOWN_DETAILS_JSON",
+}
+
+
+def _output_rows_to_records(output_rows: list, schema: StructType) -> list[dict]:
+    """Convert the output row tuples into plain dicts for JSON export.
+
+    JSON-string columns are parsed back into nested objects so the exported
+    file is human-readable.
+    """
+    records = []
+    for row in output_rows:
+        record = {}
+        for field, value in zip(schema.fields, row, strict=True):
+            name = field.name
+            if name in _JSON_DETAILS_COLUMNS and isinstance(value, str):
+                record[name] = json.loads(value)
+            else:
+                record[name] = value
+        records.append(record)
+    return records
+
+
+def _write_output_rows_to_json(
+    output_rows: list,
+    schema: StructType,
+    path: str,
+) -> None:
+    """Write the generated KPI rows to a local JSON file."""
+    records = _output_rows_to_records(output_rows, schema)
+    out_path = Path(path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w", encoding="utf-8") as fh:
+        json.dump(records, fh, indent=2, default=str)
+
+
 # ---------------------------------------------------------------------------
 # Main assembly
 # ---------------------------------------------------------------------------
 
-def run_batch(analysis_date_str: str, run_date_str: str | None = None):
+def run_batch(
+    analysis_date_str: str,
+    run_date_str: str | None = None,
+    json_output_path: str | None = None,
+):
     if run_date_str is None:
         run_date_str = str(date.today())
 
@@ -662,6 +826,7 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
     osa      = _load_osa(session, lookback, tw_end)
     sites    = _load_sites(session)
     feedback = _load_feedback(session, tw_start, tw_end)
+    prompted_compliance = _load_prompted_compliance(session, tw_start, tw_end, lw_start, lw_end)
 
     print("Aggregating OSA scores...")
     tw_store  = _store_osa(osa, tw_start, tw_end)
@@ -678,6 +843,12 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
     tod_data = _tod_osa(osa, tw_start, tw_end)
 
     fb_metrics = _feedback_metrics(feedback)
+
+    print("Aggregating prompted markdown compliance...")
+    tw_store_pmd = _prompted_compliance_store_rates(prompted_compliance, tw_start, tw_end)
+    lw_store_pmd = _prompted_compliance_store_rates(prompted_compliance, lw_start, lw_end)
+    tw_cluster_pmd = _prompted_compliance_cluster_rates(prompted_compliance, sites, tw_start, tw_end)
+    society_pmd_rate = _prompted_compliance_society_rate(prompted_compliance, tw_start, tw_end)
 
     # Join store scores
     store_joined = (
@@ -711,6 +882,34 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
             F.col("STORE_ID"),
             F.col("ACTIONABILITY"), F.col("ALERT_COMPLIANCE"), F.col("TICK_FLICK_RATE")
         ), on=["STORE_ID"], how="left")
+        .join(
+            tw_store_pmd.select(
+                F.col("STORE_ID"),
+                F.col("PROMPTS_ISSUED").alias("TW_PROMPTS_ISSUED"),
+                F.col("PROMPTS_ACTIONED").alias("TW_PROMPTS_ACTIONED"),
+                F.col("PROMPTED_MARKDOWN_COMPLIANCE_RATE").alias("TW_PROMPTED_MARKDOWN_COMPLIANCE_RATE"),
+            ),
+            on=["STORE_ID"],
+            how="left",
+        )
+        .join(
+            lw_store_pmd.select(
+                F.col("STORE_ID"),
+                F.col("PROMPTS_ISSUED").alias("LW_PROMPTS_ISSUED"),
+                F.col("PROMPTS_ACTIONED").alias("LW_PROMPTS_ACTIONED"),
+                F.col("PROMPTED_MARKDOWN_COMPLIANCE_RATE").alias("LW_PROMPTED_MARKDOWN_COMPLIANCE_RATE"),
+            ),
+            on=["STORE_ID"],
+            how="left",
+        )
+        .join(
+            tw_cluster_pmd.select(
+                F.col("CLUSTER_ID"),
+                F.col("CLUSTER_PROMPTED_MARKDOWN_COMPLIANCE_RATE"),
+            ),
+            on=["CLUSTER_ID"],
+            how="left",
+        )
     )
 
     # Collect per-store rows
@@ -754,6 +953,17 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
         actionability    = float(row["ACTIONABILITY"]    or 0) * 100
         alert_compliance = float(row["ALERT_COMPLIANCE"] or 0) * 100
         tick_flick       = float(row["TICK_FLICK_RATE"]  or 0) * 100
+
+        # Prompted markdown compliance metrics
+        tw_pmd_rate = float(row["TW_PROMPTED_MARKDOWN_COMPLIANCE_RATE"] or 0)
+        lw_pmd_rate = float(row["LW_PROMPTED_MARKDOWN_COMPLIANCE_RATE"] or 0)
+        cl_pmd_rate = float(row["CLUSTER_PROMPTED_MARKDOWN_COMPLIANCE_RATE"] or 0)
+        tw_pmd_issued = int(row["TW_PROMPTS_ISSUED"] or 0)
+        tw_pmd_actioned = int(row["TW_PROMPTS_ACTIONED"] or 0)
+        lw_pmd_issued = int(row["LW_PROMPTS_ISSUED"] or 0)
+        lw_pmd_actioned = int(row["LW_PROMPTS_ACTIONED"] or 0)
+        pmd_wow_pp = (tw_pmd_rate - lw_pmd_rate) * 100
+        pmd_trend = "up" if pmd_wow_pp >= 0 else "down"
 
         # Department performance
         dept_tw = {r["DEPARTMENT_NAME"]: r for r in dept_tw_by_store.get(sid, [])}
@@ -989,6 +1199,38 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
             "time_of_day_analysis": store_time_of_day,
         }
 
+        # Prompted markdown compliance narrative and details
+        if lw_pmd_issued > 0:
+            pmd_summary = (
+                f"Prompted markdown compliance was {tw_pmd_rate*100:.1f}% this week "
+                f"({tw_pmd_issued} prompts issued, {tw_pmd_actioned} actioned on time), "
+                f"{pmd_trend} from {lw_pmd_rate*100:.1f}% last week. "
+                f"The cluster average was {cl_pmd_rate*100:.1f}%."
+            )
+        else:
+            pmd_summary = (
+                f"Prompted markdown compliance was {tw_pmd_rate*100:.1f}% this week "
+                f"({tw_pmd_issued} prompts issued, {tw_pmd_actioned} actioned on time). "
+                f"The cluster average was {cl_pmd_rate*100:.1f}%."
+            )
+        prompted_markdown_details = {
+            "summary": pmd_summary,
+            "performance_breakdown": {
+                "current_week": f"{tw_pmd_rate*100:.1f}%",
+                "last_week": f"{lw_pmd_rate*100:.1f}%" if lw_pmd_issued > 0 else None,
+                "cluster_average": f"{cl_pmd_rate*100:.1f}%",
+                "society_average": f"{society_pmd_rate*100:.1f}%",
+            },
+            "prompt_volume": {
+                "current_week": tw_pmd_issued,
+                "last_week": lw_pmd_issued,
+            },
+            "prompts_actioned": {
+                "current_week": tw_pmd_actioned,
+                "last_week": lw_pmd_actioned,
+            },
+        }
+
         output_rows.append((
             run_date_str,
             analysis_date_str,
@@ -1002,8 +1244,8 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
             "up" if wow_pp >= 0 else "down",
             json.dumps(overall_details),
             json.dumps(availability_details),
-            # Waste / markdown / prompted-markdown metrics are not computed by
-            # this batch yet — write None so existing column data is preserved.
+            # Waste and markdown KPIs are not computed by this batch yet — write
+            # None so any existing column data is preserved.
             None,  # WASTE_PCT
             None,  # WASTE_WOW_CHANGE_PP
             None,  # WASTE_CLUSTER_PCT
@@ -1014,11 +1256,11 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
             None,  # MARKDOWN_CLUSTER_PCT
             None,  # MARKDOWN_TREND_DIRECTION
             None,  # MARKDOWN_DETAILS_JSON
-            None,  # PROMPTED_MARKDOWN_PCT
-            None,  # PROMPTED_MARKDOWN_WOW_CHANGE_PP
-            None,  # PROMPTED_MARKDOWN_CLUSTER_PCT
-            None,  # PROMPTED_MARKDOWN_TREND_DIRECTION
-            None,  # PROMPTED_MARKDOWN_DETAILS_JSON
+            round(tw_pmd_rate * 100, 2),          # PROMPTED_MARKDOWN_PCT
+            round(pmd_wow_pp, 2),                 # PROMPTED_MARKDOWN_WOW_CHANGE_PP
+            round(cl_pmd_rate * 100, 2),          # PROMPTED_MARKDOWN_CLUSTER_PCT
+            pmd_trend,                            # PROMPTED_MARKDOWN_TREND_DIRECTION
+            json.dumps(prompted_markdown_details),  # PROMPTED_MARKDOWN_DETAILS_JSON
             tod_breakdown or None,  # TIME_OF_DAY_BREAKDOWN
             round(tw_osa * 100, 2),
             round(wow_pp, 2),
@@ -1077,6 +1319,11 @@ def run_batch(analysis_date_str: str, run_date_str: str | None = None):
 
     df = session.create_dataframe(output_rows, schema=schema)
 
+    if json_output_path:
+        _write_output_rows_to_json(output_rows, schema, json_output_path)
+        print(f"Done. Written {len(output_rows)} rows to {json_output_path}.")
+        return
+
     # Idempotent write: delete any existing rows for this run date, then
     # append.  NEVER use mode("overwrite") here — it drops and recreates the
     # table, destroying columns maintained by other processes and all grants.
@@ -1119,6 +1366,22 @@ def run_batch_sp(
 # Entry point
 # ---------------------------------------------------------------------------
 
+def _load_client_env(client: str) -> None:
+    """Load the client's .env via the project config loader.
+
+    This is only used when running locally from the repo; inside the Snowflake
+    stored procedure the import is unavailable and credentials come from env vars.
+    """
+    # Ensure the repo root is on sys.path so the store_insight package can be
+    # imported when the script is run directly.
+    repo_root = Path(__file__).resolve().parents[2]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    from store_insight.pipeline.config.loader import load_config
+
+    load_config(client)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="KPI Availability Batch")
     parser.add_argument(
@@ -1134,5 +1397,26 @@ if __name__ == "__main__":
         default=None,
         help="Date the batch was executed, YYYY-MM-DD. Defaults to today.",
     )
+    parser.add_argument(
+        "--json-output",
+        dest="json_output",
+        default=None,
+        help="If provided, write the generated rows to this local JSON file instead "
+             "of saving to the Snowflake table.",
+    )
+    parser.add_argument(
+        "--client",
+        dest="client",
+        default=None,
+        help="Client name (e.g. eastofengland). Loads secrets from "
+             "store_insight/pipeline/config/clients/<client>/.env via the "
+             "project config loader.",
+    )
     args = parser.parse_args()
-    run_batch(args.analysis_date, run_date_str=args.run_date)
+    if args.client:
+        _load_client_env(args.client)
+    run_batch(
+        args.analysis_date,
+        run_date_str=args.run_date,
+        json_output_path=args.json_output,
+    )
