@@ -146,6 +146,57 @@ def test_osca_series_performance_breakdown_matches_exact_crt_contract():
 
 
 # ---------------------------------------------------------------------------
+# _division_breakdown: division + department OSCA/SC for the KPI pop-up
+# ---------------------------------------------------------------------------
+
+def _dept_row(division, dept, sales, lsv, sc_lsv):
+    return {
+        "DIVISION_NAME": division,
+        "DEPARTMENT_NAME": dept,
+        "DEPT_SALES": sales,
+        "DEPT_LSV": lsv,
+        "DEPT_STORE_CONTROLLED_LSV": sc_lsv,
+        "DEPT_OSA": sales / (sales + lsv) if sales + lsv else 0.0,
+        "DEPT_STORE_CONTROLLABLE_OSCA": sales / (sales + sc_lsv) if sales + sc_lsv else 0.0,
+    }
+
+
+def test_division_breakdown_groups_departments_under_divisions():
+    rows = [
+        _dept_row("FROZEN FOODS", "ICE CREAM & RELATED PRODS", 70, 30, 40),
+        _dept_row("FROZEN FOODS", "FROZEN VEGETABLES", 80, 20, 25),
+        _dept_row("CHILLED", "MILK", 90, 10, 5),
+    ]
+
+    result = kb._division_breakdown(rows)
+
+    assert [d["division"] for d in result] == ["CHILLED", "FROZEN FOODS"]
+
+    frozen = result[1]
+    # Division totals come from summed volumes: sales=150, lsv=50, sc_lsv=65
+    assert frozen["osca"] == "75.0%"
+    assert frozen["store_controllable_osca"] == "69.8%"
+    # Departments sorted worst-first by OSCA
+    assert [d["department"] for d in frozen["departments"]] == [
+        "ICE CREAM & RELATED PRODS",
+        "FROZEN VEGETABLES",
+    ]
+    assert frozen["departments"][0]["osca"] == "70.0%"
+    assert frozen["departments"][0]["store_controllable_osca"] == "63.6%"
+
+
+def test_division_breakdown_handles_missing_division_name():
+    result = kb._division_breakdown([_dept_row(None, "MISC", 50, 50, 50)])
+
+    assert result[0]["division"] == "Unknown"
+    assert result[0]["departments"][0]["department"] == "MISC"
+
+
+def test_division_breakdown_empty_when_no_departments():
+    assert kb._division_breakdown([]) == []
+
+
+# ---------------------------------------------------------------------------
 # _feedback_metrics: actionability / alert compliance / tick & flick ratios
 # ---------------------------------------------------------------------------
 

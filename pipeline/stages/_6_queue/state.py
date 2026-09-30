@@ -55,6 +55,20 @@ def write_expired_statuses(session, action_table: str, expired: list[dict]) -> N
         ).collect()
 
 
+def latest_view_ddl(database: str, schema: str = 'PUBLIC') -> str:
+    """Return the ALERTS_LATEST_V1 DDL.
+
+    Returns the latest completed alerts run for each store. Mirrors the
+    canonical ALERTS_PIPELINE columns; after a schema change (e.g. adding
+    PRESENTATION_JSON) the view must be recreated so SELECT * expands.
+    """
+    prefix = f'{database}.{schema}'
+    return f"""CREATE OR REPLACE VIEW {prefix}.ALERTS_LATEST_V1 AS
+SELECT a.*
+FROM {prefix}.ALERTS_PIPELINE a
+WHERE a.RUN_DATE = (SELECT MAX(RUN_DATE) FROM {prefix}.ALERTS_PIPELINE)"""
+
+
 def history_view_ddl(database: str, schema: str = 'PUBLIC',
                      client: str = 'eastofengland') -> str:
     """Return the ALERTS_HISTORY_V1 DDL.

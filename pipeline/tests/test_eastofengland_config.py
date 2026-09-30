@@ -154,11 +154,14 @@ class TestEastOfEnglandOutputContract:
         )
 
         assert cfg.output.emit_affected_products is True
-        assert len(schema.fields) == 28
-        assert schema.fields[-1].name == 'AFFECTED_PRODUCTS'
+        assert len(schema.fields) == 29
+        assert schema.fields[-2].name == 'AFFECTED_PRODUCTS'
+        assert schema.fields[-2].nullable is True
+        assert schema.fields[-1].name == 'PRESENTATION_JSON'
         assert schema.fields[-1].nullable is True
-        assert len(row) == 28
-        assert row[-1] is None
+        assert len(row) == 29
+        assert row[-2] is None
+        assert row[-1] is None or isinstance(row[-1], str)
 
 
 class TestEastOfEnglandQueueSafeguard:
