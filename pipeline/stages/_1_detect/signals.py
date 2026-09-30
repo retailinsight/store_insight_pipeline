@@ -331,6 +331,24 @@ class StraightToBinSignal(TypedDict):
     vs_chain_multiple:          float
 
 
+class BinnedWasteSignal(TypedDict):
+    """Typed shape for a binned-waste alert signal."""
+    signal_type:               str                     # always 'BINNED_WASTE'
+    merge_key:                 tuple[str, int]         # ('BINNED_WASTE', store_id)
+    store_id:                  int
+    site_name:                 str
+    trigger_types:             list[str]
+    current_7d_waste_value:    float | None
+    prior_7d_waste_value:      float | None
+    pct_change:                float | None
+    today_value:               float | None
+    prior_day_value:           float | None
+    today_day_name:            str | None
+    prior_day_name:            str | None
+    spike_pct:                 float | None
+    projected_4w_waste_cost:   float | None
+
+
 Signal = (
     OsaSignal
     | OsaStoreActionableSignal
@@ -348,6 +366,7 @@ Signal = (
     | MarkdownSkuSignal
     | WasteTrimSignal
     | StraightToBinSignal
+    | BinnedWasteSignal
 )
 
 
@@ -1075,4 +1094,58 @@ def make_straight_to_bin_signal(
         'last_week_stb_items':          last_week_stb_items,
         'chain_avg_stb_value_per_store': chain_avg_stb_value_per_store,
         'vs_chain_multiple':            vs_chain_multiple,
+    }
+
+
+def make_binned_waste_signal(
+    store_id: int,
+    trigger_types: list[str],
+    site_name: str | None = None,
+    current_7d_waste_value: float | None = None,
+    prior_7d_waste_value: float | None = None,
+    pct_change: float | None = None,
+    today_value: float | None = None,
+    prior_day_value: float | None = None,
+    today_day_name: str | None = None,
+    prior_day_name: str | None = None,
+    spike_pct: float | None = None,
+    projected_4w_waste_cost: float | None = None,
+) -> BinnedWasteSignal:
+    """
+    Build a signal dict for a binned-waste alert.
+
+    One signal type (`BINNED_WASTE`) can be fired by either or both triggers:
+    `TREND` (7-on-7 rise) and `SPIKE` (day-on-day rise). Trigger-specific
+    fields are left as None when that trigger did not fire.
+
+    Parameters
+    ----------
+    store_id                  : int
+    trigger_types             : list[str] — e.g. ['TREND'] or ['SPIKE'] or ['TREND', 'SPIKE']
+    site_name                 : str | None — human-readable store name
+    current_7d_waste_value    : float | None — total £ waste in the last 7 complete data days
+    prior_7d_waste_value      : float | None — total £ waste in the preceding 7 complete data days (TREND)
+    pct_change                : float | None — percentage increase (whole number scale, TREND)
+    today_value               : float | None — total £ waste on ANALYSIS_DATE (SPIKE)
+    prior_day_value           : float | None — total £ waste on the most recent preceding data day (SPIKE)
+    today_day_name            : str | None — full day name for ANALYSIS_DATE (SPIKE)
+    prior_day_name            : str | None — full day name for PRIOR_DAY (SPIKE)
+    spike_pct                 : float | None — percentage increase (whole number scale, SPIKE)
+    projected_4w_waste_cost   : float | None — projected 4-week waste cost
+    """
+    return {
+        'signal_type':               'BINNED_WASTE',
+        'merge_key':                 ('BINNED_WASTE', store_id),
+        'store_id':                  store_id,
+        'site_name':                 site_name or f'Store {store_id}',
+        'trigger_types':             list(trigger_types),
+        'current_7d_waste_value':    current_7d_waste_value,
+        'prior_7d_waste_value':      prior_7d_waste_value,
+        'pct_change':                pct_change,
+        'today_value':               today_value,
+        'prior_day_value':           prior_day_value,
+        'today_day_name':            today_day_name,
+        'prior_day_name':            prior_day_name,
+        'spike_pct':                 spike_pct,
+        'projected_4w_waste_cost':   projected_4w_waste_cost,
     }

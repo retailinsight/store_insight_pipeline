@@ -135,6 +135,10 @@ def _merge_signals(all_signals):
                 # STRAIGHT_TO_BIN fields
                 'threshold_value', 'last_week_stb_value', 'last_week_stb_items',
                 'chain_avg_stb_value_per_store', 'vs_chain_multiple',
+                # BINNED_WASTE fields (TREND + SPIKE triggers merge into one card)
+                'current_7d_waste_value', 'prior_7d_waste_value', 'pct_change',
+                'today_value', 'prior_day_value', 'today_day_name', 'prior_day_name',
+                'spike_pct', 'projected_4w_waste_cost',
                 # Data-quality gate (stage 0)
                 'data_quality_flag',
             ):

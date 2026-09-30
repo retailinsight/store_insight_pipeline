@@ -25,6 +25,8 @@ EXPECTED_GATHERERS = {
     'markdown_sellthrough_dept_breakdown',
     'markdown_sku_history',
     'straight_to_bin_facts',
+    'binned_waste_trend_facts',
+    'binned_waste_spike_facts',
 }
 
 
@@ -57,6 +59,7 @@ def test_signal_type_gatherers_populated():
         'MARKDOWN_SELLTHROUGH', 'MARKDOWN_SKU', 'STRAIGHT_TO_BIN',
         'BIG_DROP_MARKDOWN_COMPLIANCE', 'BIG_DROP_EXPIRY_DATE_COMPLIANCE',
         'BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE',
+        'BINNED_WASTE',
     }
 
 

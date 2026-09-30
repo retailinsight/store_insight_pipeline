@@ -98,3 +98,8 @@ STRAIGHT_TO_BIN:
   skill_file: ""
   description: Straight-to-bin value threshold alerts — VALUE_THRESHOLD trigger
 
+BINNED_WASTE:
+  engine: rule_based
+  skill_file: ""
+  description: Binned-waste alerts — TREND and/or SPIKE triggers
+

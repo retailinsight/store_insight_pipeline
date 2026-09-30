@@ -62,6 +62,7 @@ output:
     WASTE:                Waste
     WASTE_TRIM:           WASTE_TRIM
     STRAIGHT_TO_BIN:      Waste
+    BINNED_WASTE:         Waste
 
 # ── Detectors ─────────────────────────────────────────────────────────────────
 # Module names relative to stages/_1_detect/detectors/.
@@ -81,6 +82,8 @@ detectors:
     - markdown_sellthrough.wow
     - markdown_sku.repeat_request
     - markdown_sku.excessive_override
+    - binned_waste.trend
+    - binned_waste.spike
 
 # ── Detector configuration ─────────────────────────────────────────────────────
 # Thresholds and time windows for detectors
@@ -169,6 +172,11 @@ detector_config:
     STRAIGHT_TO_BIN:
       min_stb_value_threshold: 100.0  # VALUE_THRESHOLD — £ threshold, fires when strictly exceeded
 
+    BINNED_WASTE:
+      min_binned_waste_pct_change: 5.0
+      min_binned_waste_value:      50.0
+      min_binned_waste_data_days:  5
+
   lookback_windows:
     wmd: 28   # 4 weeks — required by MARKDOWN_SKU detectors
 
@@ -207,6 +215,9 @@ gatherers:
     - markdown_sku_history
   STRAIGHT_TO_BIN:
     - straight_to_bin_facts
+  BINNED_WASTE:
+    - binned_waste_trend_facts
+    - binned_waste_spike_facts
 
 # ── Investigation — narrative engine per signal type ─────────────────────────
 investigation:
@@ -249,6 +260,9 @@ investigation:
   STRAIGHT_TO_BIN:
     engine:     rule_based
     skill_file: ""
+  BINNED_WASTE:
+    engine:     rule_based
+    skill_file: ""
 
 # ── Schedule & deploy ────────────────────────────────────────────────────────
 schedule:
@@ -276,6 +290,7 @@ scoring:
     MARKDOWN_SELLTHROUGH: 1.0
     MARKDOWN_SKU:         1.0
     STRAIGHT_TO_BIN:      1.0
+    BINNED_WASTE:         1.0
 
   # Composite score dimension weights (must sum to 1.0).
   # Default: 100% financial severity = score equals projected cost normalised by ceiling.
@@ -304,6 +319,7 @@ scoring:
     MARKDOWN_SELLTHROUGH: 5000.0
     MARKDOWN_SKU:         5000.0
     STRAIGHT_TO_BIN:      5000.0
+    BINNED_WASTE:         10000.0
 
   # Percentage-point ceiling for vs_control_benchmark (how far below chain = worst case).
   benchmark_ceilings:
@@ -318,6 +334,7 @@ scoring:
     MARKDOWN_OVERRIDE:    20.0
     MARKDOWN_SELLTHROUGH: 20.0
     STRAIGHT_TO_BIN:      20.0
+    BINNED_WASTE:         20.0
 
   # Percentage-point ceiling for vs_historical_benchmark (WoW deterioration = worst case).
   wow_ceilings:
@@ -332,6 +349,7 @@ scoring:
     MARKDOWN_OVERRIDE:    15.0
     MARKDOWN_SELLTHROUGH: 15.0
     STRAIGHT_TO_BIN:      15.0
+    BINNED_WASTE:         15.0
 
 # ── Data quality / source-data completeness checks ───────────────────────────
 # Run before detection.  Warnings are printed by default; strict=true turns

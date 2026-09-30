@@ -137,6 +137,8 @@ def test_build_card_includes_stable_ids():
     assert len(card['signal_id']) == 16
     assert card['analysis_date'] == '2025-01-19'
     assert card['engine_used'] == 'rule_based'
+    assert card['signal_type'] == 'OSA'
+    assert card['alert_type'] == 'OSA'
 
 
 def test_build_card_records_cortex_engine_used():

@@ -37,6 +37,8 @@ detectors:
     - prompted_markdown_compliance.wow
     - prompted_markdown_compliance.vs_chain
     - big_drop_prompted_markdown_compliance.big_drop
+    - binned_waste.trend
+    - binned_waste.spike
 
 detector_config:
   thresholds:
@@ -78,6 +80,11 @@ detector_config:
       min_markdown_requests:   12
       min_sku_override_rate:   0.75
       min_sku_requests:        4
+
+    BINNED_WASTE:
+      min_binned_waste_pct_change: 5.0
+      min_binned_waste_value:      50.0
+      min_binned_waste_data_days:  5
 
 investigation:
   COMPLIANCE:

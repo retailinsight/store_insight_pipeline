@@ -52,8 +52,34 @@ class RankedListWidget(BaseModel):
     format: Literal["currency", "percentage", "number"]
 
 
+class ChartSeries(BaseModel):
+    name: str
+    data: list[float]
+
+
+class BarChartWidget(BaseModel):
+    type: Literal["bar_chart"] = "bar_chart"
+    id: str
+    title: str
+    subtitle: str | None = None
+    categories: list[str]
+    series: list[ChartSeries]
+    format: Literal["currency", "percentage", "number"]
+    highlighted_index: int | None = None
+
+
+class LineChartWidget(BaseModel):
+    type: Literal["line_chart"] = "line_chart"
+    id: str
+    title: str
+    subtitle: str | None = None
+    categories: list[str]
+    series: list[ChartSeries]
+    format: Literal["currency", "percentage", "number"]
+
+
 Widget = Annotated[
-    StatWidget | MatrixWidget | RankedListWidget,
+    StatWidget | MatrixWidget | RankedListWidget | BarChartWidget | LineChartWidget,
     Field(discriminator="type"),
 ]
 
