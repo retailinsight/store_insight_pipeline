@@ -23,7 +23,6 @@ from store_insight.pipeline.presentation.builders.prompted_markdown_compliance i
     build_prompted_markdown_compliance_presentation,
 )
 
-
 # -----------------------------------------------------------------------------
 # PROMPTED_MARKDOWN_COMPLIANCE
 # -----------------------------------------------------------------------------
