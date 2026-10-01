@@ -60,10 +60,16 @@ def test_trend_presentation_serializes_all_widgets():
     data = json.loads(presentation.model_dump_json())
     assert data['schema_version'] == 1
     widgets = {w['type'] for w in data['widgets']}
-    assert widgets == {'bar_chart', 'matrix', 'ranked_list'}
+    assert widgets == {'bar_chart', 'line_chart', 'ranked_list'}
     # Two ranked_list widgets: departments and items
     assert sum(1 for w in data['widgets'] if w['type'] == 'ranked_list') == 2
-    assert any(w['id'] == 'prompted_checks' and w['type'] == 'matrix' for w in data['widgets'])
+    chart = next(w for w in data['widgets'] if w['id'] == 'prompted_checks')
+    assert chart['type'] == 'line_chart'
+    assert chart['categories'] == [{'label': 'Tuesday', 'date': '2026-09-29'}]
+    assert chart['series'] == [
+        {'name': 'Checks due', 'data': [5.0]},
+        {'name': 'Actioned on time', 'data': [4.0]},
+    ]
 
 
 def test_spike_presentation_flags_today_bar():
@@ -71,3 +77,7 @@ def test_spike_presentation_flags_today_bar():
     data = json.loads(presentation.model_dump_json())
     bar = next(w for w in data['widgets'] if w['type'] == 'bar_chart')
     assert bar['highlighted_index'] == 1
+    assert bar['categories'] == [
+        {'label': 'Sunday', 'date': '2026-10-04'},
+        {'label': 'Monday', 'date': '2026-10-05'},
+    ]

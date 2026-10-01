@@ -6,6 +6,8 @@ from store_insight.pipeline.presentation.models import (
     MatrixColumn,
     MatrixRow,
     MatrixWidget,
+    RankedListItem,
+    RankedListWidget,
     StatWidget,
 )
 
@@ -48,9 +50,11 @@ def build_osa_store_actionable_presentation(signal: dict, narrative: dict) -> Al
             MatrixColumn(key="evening", label="Evening"),
         ]
         rows_by_day: dict[str, dict[str, float]] = {}
+        dates_by_day: dict[str, str | None] = {}
         for entry in grid:
             day = entry.get("day") or entry.get("date")
             label = day
+            dates_by_day.setdefault(label, entry.get("date"))
             if entry.get("period_label", "").startswith("Morning"):
                 key = "morning"
             elif entry.get("period_label", "").startswith("Afternoon"):
@@ -62,7 +66,7 @@ def build_osa_store_actionable_presentation(signal: dict, narrative: dict) -> Al
             rows_by_day.setdefault(label, {})[key] = float(entry.get("total_osa_pct", 0))
 
         rows = [
-            MatrixRow(label=day, values=values)
+            MatrixRow(label=day, date=dates_by_day[day], values=values)
             for day, values in rows_by_day.items()
         ]
         if rows:
@@ -75,5 +79,49 @@ def build_osa_store_actionable_presentation(signal: dict, narrative: dict) -> Al
                     format="percentage",
                 )
             )
+
+    ppgs = facts.get("ppg_lsv_changes", [])
+    if ppgs:
+        widgets.append(
+            RankedListWidget(
+                id="ppg_lsv_changes",
+                title="Worst performing PPGs",
+                subtitle="Store-controlled lost sales this week",
+                items=[
+                    RankedListItem(
+                        label=str(item.get("ppg") or "Unknown"),
+                        value=float(
+                            (item.get("latest_week_lsv") or {}).get("store_controlled") or 0
+                        ),
+                    )
+                    for item in ppgs
+                ],
+                format="currency",
+            )
+        )
+
+    items = facts.get("item_lsv_changes", [])
+    if items:
+        widgets.append(
+            RankedListWidget(
+                id="item_lsv_changes",
+                title="Worst performing items",
+                subtitle="Store-controlled lost sales this week",
+                items=[
+                    RankedListItem(
+                        label=str(item.get("item_name") or item.get("item_code") or "Unknown"),
+                        secondary_label=str(
+                            ((item.get("eans") or item.get("upcs") or [None])[0]) or ""
+                        )
+                        or None,
+                        value=float(
+                            (item.get("latest_week_lsv") or {}).get("store_controlled") or 0
+                        ),
+                    )
+                    for item in items
+                ],
+                format="currency",
+            )
+        )
 
     return AlertPresentation(widgets=widgets)

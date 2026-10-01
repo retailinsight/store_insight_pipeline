@@ -5,10 +5,9 @@ from __future__ import annotations
 from store_insight.pipeline.presentation.models import (
     AlertPresentation,
     BarChartWidget,
+    ChartCategory,
     ChartSeries,
-    MatrixColumn,
-    MatrixRow,
-    MatrixWidget,
+    LineChartWidget,
     RankedListItem,
     RankedListWidget,
 )
@@ -22,7 +21,10 @@ def build_binned_waste_spike_presentation(signal: dict, narrative: dict) -> Aler
     # Panel (a): 7-day waste value bar chart ending on ANALYSIS_DATE, today highlighted
     panel_a = facts.get('panel_a_waste_by_day', [])
     if panel_a:
-        categories = [p['day'] for p in panel_a]
+        categories = [
+            ChartCategory(label=str(p['day']), date=str(p['date']))
+            for p in panel_a
+        ]
         values = [float(p['waste_value']) for p in panel_a]
         highlighted = next(
             (i for i, p in enumerate(panel_a) if p.get('is_today')),
@@ -44,23 +46,23 @@ def build_binned_waste_spike_presentation(signal: dict, narrative: dict) -> Aler
     panel_b = facts.get('panel_b_prompted_checks', [])
     if panel_b:
         widgets.append(
-            MatrixWidget(
+            LineChartWidget(
                 id='prompted_checks',
                 title='Prompted markdown compliance — last 7 days',
                 subtitle='Checks due vs actioned on time',
-                columns=[
-                    MatrixColumn(key='due', label='Checks due'),
-                    MatrixColumn(key='actioned', label='Actioned on time'),
-                ],
-                rows=[
-                    MatrixRow(
-                        label=str(p['day']),
-                        values={
-                            'due': float(p['checks_due']),
-                            'actioned': float(p['actioned_on_time']),
-                        },
-                    )
+                categories=[
+                    ChartCategory(label=str(p['day']), date=str(p['date']))
                     for p in panel_b
+                ],
+                series=[
+                    ChartSeries(
+                        name='Checks due',
+                        data=[float(p['checks_due']) for p in panel_b],
+                    ),
+                    ChartSeries(
+                        name='Actioned on time',
+                        data=[float(p['actioned_on_time']) for p in panel_b],
+                    ),
                 ],
                 format='number',
             )
