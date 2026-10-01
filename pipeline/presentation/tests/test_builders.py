@@ -68,33 +68,25 @@ def test_osa_store_actionable_includes_osa_stat_and_matrix():
     assert ranked[1].items[0].secondary_label == "5014379012866"
 
 
-def test_compliance_includes_stat_line_chart_and_ranked_list():
+def test_compliance_includes_line_chart_only():
     signal = {
         "signal_type": "COMPLIANCE",
         "facts": {
-            "alert_volume_by_day": [
-                {"date": "2026-09-18", "generated": 10, "worked": 10},
-                {"date": "2026-09-19", "generated": 5, "worked": 4},
-            ],
             "trailing_7d_tf": [
                 {"date": "2026-09-18", "day": "Friday", "worked": 10, "tf_count": 10},
                 {"date": "2026-09-19", "day": "Saturday", "worked": 4, "tf_count": 4},
             ],
-            "tf_by_alert_type": [
-                {"alert_type": "Availability", "worked": 69, "tf_count": 25, "tf_rate": 36.23},
-            ],
         },
     }
     pres = build_compliance_presentation(signal, {})
-    assert any(w.id == "latest_compliance_rate" for w in pres.widgets if isinstance(w, StatWidget))
-    chart = next(w for w in pres.widgets if isinstance(w, LineChartWidget))
+    assert len(pres.widgets) == 1
+    chart = pres.widgets[0]
+    assert isinstance(chart, LineChartWidget)
     assert chart.id == "trailing_7d_tf"
     assert chart.categories[0].label == "Friday"
     assert chart.categories[0].date == "2026-09-18"
     assert len(chart.series) == 1
     assert chart.series[0].data == [10.0, 4.0]
-    ranked = next(w for w in pres.widgets if isinstance(w, RankedListWidget))
-    assert ranked.id == "tf_rate_by_alert_type"
 
 
 def test_build_presentation_returns_model_for_known_signal():

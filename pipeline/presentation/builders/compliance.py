@@ -6,9 +6,6 @@ from store_insight.pipeline.presentation.models import (
     ChartCategory,
     ChartSeries,
     LineChartWidget,
-    RankedListItem,
-    RankedListWidget,
-    StatWidget,
 )
 
 
@@ -17,23 +14,7 @@ def build_compliance_presentation(signal: dict, narrative: dict) -> AlertPresent
 
     widgets = []
 
-    # Latest-day compliance rate from alert_volume_by_day
-    by_day = facts.get("alert_volume_by_day", [])
-    if by_day:
-        latest = by_day[-1]
-        generated = latest.get("generated", 0)
-        worked = latest.get("worked", 0)
-        rate = (worked / generated * 100) if generated else 0.0
-        widgets.append(
-            StatWidget(
-                id="latest_compliance_rate",
-                title="Compliance rate",
-                value=round(rate, 2),
-                format="percentage",
-            )
-        )
-
-    # Trailing 7-day worked/generated matrix
+    # Trailing 7-day tick-and-flick count line chart
     trailing = facts.get("trailing_7d_tf", [])
     if trailing:
         widgets.append(
@@ -54,25 +35,6 @@ def build_compliance_presentation(signal: dict, narrative: dict) -> AlertPresent
                     )
                 ],
                 format="number",
-            )
-        )
-
-    # Breakdown by alert type
-    by_type = facts.get("tf_by_alert_type", [])
-    if by_type:
-        items = [
-            RankedListItem(
-                label=entry.get("alert_type", "Unknown"),
-                value=float(entry.get("tf_rate", 0)),
-            )
-            for entry in by_type
-        ]
-        widgets.append(
-            RankedListWidget(
-                id="tf_rate_by_alert_type",
-                title="Tick & flick rate by alert type",
-                items=items,
-                format="percentage",
             )
         )
 
