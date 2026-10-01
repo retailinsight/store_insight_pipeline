@@ -368,13 +368,16 @@ Example for store 642, CP COD FLT SKIN/BONELESS (analysis date 2026-09-30):
 
 Open question: do you want the request count and average markdown % as two separate line charts, or one combined chart? Again, they have different units.
 
-## Open questions for Imran / Cornelious
+## Confirmed decisions (Imran, 1 Oct)
 
-1. Should `PROMPTED_MARKDOWN_COMPLIANCE` expose `driver_assessment` as a widget, or rely on the existing narrative text?
-2. For `OSA_RECURRING_SLOT` and `MARKDOWN_SKU`, do you prefer two separate line charts or one combined line chart with two series?
-3. Are the proposed `stat` format choices correct? In particular, should WoW change in percentage points use `format: "number"` and be rendered by the UI as e.g. `+5.94 pp`?
-4. Are the proposed titles and subtitles acceptable, or should they match specific UI copy?
-5. For ranked lists, is `secondary_label` the right place for counts/codes, or do you need a different structure?
+1. `OSA_RECURRING_SLOT` and `MARKDOWN_SKU` use **two separate line charts** when the series have different units.
+2. `ranked_list.format` matches the value semantics:
+   - `currency` for lost sales / value;
+   - `percentage` for compliance and override rates;
+   - `number` for counts.
+3. `secondary_label` is kept for supporting context: item codes, barcodes, action/override counts, etc.
+4. `driver_assessment` stays in the existing issue/explanation text; no separate widget.
+5. Widget types stay specific to the renderer (`matrix` for day/period grids, `line_chart` for series, etc.).
 
 ## Implementation notes
 

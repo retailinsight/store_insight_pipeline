@@ -1,6 +1,6 @@
 # Store Insight — TODO
 
-Last updated: 2026-09-13
+Last updated: 2026-10-01
 
 ## Environment naming — READ FIRST (agreed with Dan and Dave, 13 Sep 21:09)
 
@@ -13,6 +13,418 @@ Last updated: 2026-09-13
 - Everywhere else in this file, **"PROD" means `STORE_INSIGHT_DB` = Dave's CRT**. Scheduled tasks (06:00 alerts, chained KPI, 07:00 monitoring, 11:30 source check, 11:45 KPI refresh) run in `STORE_INSIGHT_DB` and therefore feed the client-facing app directly.
 - Consequence for how we talk and act: a "PROD deployment" is a **client-facing deployment**; a "manual delete in PROD" removes data the client can see; the 07:00 clone is **CRT → DEV**, not "PROD → DEV".
 - The 13 Sep confusion cost real time: I proposed a "Snowflake DEV fallback" to hide actions that would have changed nothing the client sees, and Dan and Dave both had to correct the naming in the thread. **Use their names (CRT / DEV) in every Slack message; use the DB name in every technical note.**
+
+## Worktrees — READ THIS TOO
+
+Two local checkouts of `dantretailinsight/store_insight`:
+
+| Worktree | Path | Current state | What it's for |
+|---|---|---|---|
+| **Main** | `C:\Users\ElahehKalantari\OneDrive - Retail Insight Ltd\store_insight` | `f0d39d9` on branch `sync/pipeline-osa-refactor` | Day-to-day work. Local docs (TODO.md, PRDs, meeting notes, scripts) live here as untracked files. |
+| **Guardrails** | `C:\Users\ElahehKalantari\guardrails\store_insight` | `4d70468` detached HEAD | Clean deployments to CRT and DEV. No local files. Deploy from here only. |
+
+**Known issues (still to fix):**
+- **`main` branch held by stale worktree:** `C:\Users\ElahehKalantari\kpi_api_breakdown_sync\store_insight` at `da84653` owns the `main` branch, so neither the main nor guardrails worktree can check out `main` directly. Guardrails is detached at the correct merged commit (`4d70468`). **Fix:** prune the stale `kpi_api_breakdown_sync` worktree and reassign `main` to guardrails (see housekeeping task below).
+- **Uncommitted `deploy.py` encoding tweak in guardrails:** `pipeline/deploy/deploy.py` has a `→` → `->` change for Windows console compatibility. Intentionally excluded from PR #96 (unrelated). **Fix:** either commit as a standalone housekeeping PR or discard with `git checkout -- pipeline/deploy/deploy.py`.
+- **22 stale worktrees total:** `git worktree list` shows 22 entries. Only **main** and **guardrails** are actively used. The rest are old PR review/sync trees at various detached commits. Safe to prune after confirming none have uncommitted work.
+
+**Rules:**
+- Always deploy from the **guardrails** worktree — it has no untracked files that could get bundled into the zip.
+- Always read code from the **same worktree** you're writing about — the stale-merge mismatch on 21 Sep happened because the main worktree was stuck on an old branch while guardrails was on `main`.
+- Keep both worktrees on the same commit. After any `git fetch origin main`, update both.
+- Local-only files (TODO.md, PRDs, meeting notes) go in the **main** worktree only. They are untracked and not pushed.
+
+## Lessons learned — 2026-09-25
+
+### 1. Schema change deployment: DEV clones reset the table but not the views
+
+**What happened:** I added `PRESENTATION_JSON` to `STORE_INSIGHT_DEV.PUBLIC.ALERTS_PIPELINE` and recreated the DEV views on 24 Sep. On 25 Sep at 07:00 the `CLONE_PROD_TO_DEV_TASK` re-copied `ALERTS_PIPELINE` from CRT, dropping the DEV table back to 28 columns, while the DEV views still declared 29. Every `ALERTS_LATEST_V1` / `ALERTS_HISTORY_V1` query in DEV failed with `declared 29 column(s), but view query produces 28`.
+
+**Fix:** recreate the DEV views after every clone event that changes `ALERTS_PIPELINE` schema, or ensure schema changes land in CRT before the 07:00 DEV clone.
+
+**Rule for future:**
+1. Migrate CRT `ALERTS_PIPELINE` first.
+2. Recreate CRT `ALERTS_LATEST_V1` / `ALERTS_HISTORY_V1`.
+3. Either let the 07:00 clone copy the new-schema CRT table into DEV, or add a post-clone step that recreates DEV views.
+4. Never declare a schema change "done" until both CRT and DEV views return rows.
+
+### 2. API code already selects explicit columns; a nullable extra column cannot break it
+
+**What happened:** Imran assumed the API failed because it couldn't handle the new JSON. The actual error was the view mismatch above, not `PRESENTATION_JSON`. The API `SELECT`s specific columns, so a new nullable column is ignored.
+
+**Rule for future:** additive, nullable columns are safe for the API; breaking the view definition is not.
+
+### 3. Cleanup renames must wait for dependency + query-history proof
+
+**What happened:** I renamed 14 CRT backup/test tables to `_TO_DROP_*` and one of them (`ACTION_STATUS`) turned out to still be read by the app. I restored it, then restored all the others after the 30-day scan showed historical reads.
+
+**Rule for future:** before any CRT rename or drop, run:
+1. Code search across all repos.
+2. `SNOWFLAKE.ACCOUNT_USAGE.OBJECT_DEPENDENCIES` check.
+3. 30-day `QUERY_HISTORY` + `ACCESS_HISTORY` scan (run by an account with ACCOUNTADMIN access).
+4. Direct confirmation from the API/UI owner.
+5. Have a restore script (`scripts/restore_renamed_tables.py`) ready.
+
+Also: my local scripts connect as `SVC_STOREINSIGHT`, so any query-history scan that matches table names will be polluted by my own validation queries. Use `ACCESS_HISTORY` and filter out the automation account's own diagnostic queries.
+
+### 4. CRT and DEV outages look different
+
+- **DEV actions failure:** Snowflake view error → fixed by DDL.
+- **CRT login 500 / old-style redirect:** app/auth/deployment issue, not Snowflake data — Snowflake query history shows 388 successful CRT API queries in 2 hours and zero CRT view errors.
+- **Root cause of CRT login confirmed external (Imran, 11:51):** the redirect kick-off and callback landing page are in the frontend (`oauthFlow.ts` / `AuthCallback.tsx`), but the actual `/oauth/authorize` endpoint, hosted login form, and redirect back are owned by the Auth API/Auth UI app (`uks-eoe-webauthapi-crt` / `uks-eoe-webauthapp-crt`). It is client-initiated OAuth to an external auth service, not driven by our API or Snowflake.
+
+**Rule for future:** when the app breaks, check `INFORMATION_SCHEMA.QUERY_HISTORY_BY_USER` for the service account before guessing at the cause. Separate auth errors from data errors. Ask the auth team for the `uks-eoe-webauth*` logs if login fails.
+
+### 5. Dan's proposed rollback vs. the data
+
+Dan suggested (11:28) restoring `ALERTS_LATEST_V1` without `PRESENTATION_JSON`, switching off the code that produces it in CRT tomorrow, and retrying next week in DEV first. This is safe to do, but not necessary:
+- CRT Snowflake is healthy: 388 successful API queries, zero CRT view errors.
+- The API selects explicit columns, so a nullable 29th column is ignored unless they explicitly changed their mapping.
+- The only failure we caused was the **DEV view mismatch**, fixed by recreating DEV views.
+- If we do roll back, the safe sequence is: make builders emit `NULL` (or remove builder calls), then `CREATE OR REPLACE VIEW` the alert views **without** the extra column, then optionally `ALTER TABLE ... DROP COLUMN` after all views are recreated. Dropping the column before recreating views would break them the same way.
+
+**Rule for future:** additive nullable columns do not require rollbacks; view definitions are what matter. Plan the rollback sequence before deploying the forward change.
+
+### 6. DEV clone must recreate alert views
+
+The 07:00 `CLONE_PROD_TO_DEV_TASK` copies tables (`ALERTS_PIPELINE`, `KPI_AVAILABILITY_SUMMARY`) but not views. Any schema change to `ALERTS_PIPELINE` that changes its column count will leave DEV views out of sync until `scripts/deploy_alert_views.py --database STORE_INSIGHT_DEV` is rerun.
+
+**Rule for future:** add a post-clone step that recreates `ALERTS_LATEST_V1`, `ALERTS_HISTORY_V1`, and `KPI_AVAILABILITY_LATEST_V1` in DEV after the 07:00 clone. Until then, rerun `deploy_alert_views.py` manually after every schema change.
+
+## Actions from Dan approvals (25 Sep 2026)
+
+- [x] **Create `prds/prd-feature-delivery-playbook.md`** — done. Captures the 25 Sep lessons into a repeatable PRD-to-CRT checklist.
+- [x] **Automate DEV view recreation after the 07:00 clone.** Dan approved in principle. Deployed a new task rather than modifying the clone task:
+  - Created `STORE_INSIGHT_DEV.PUBLIC.SP_DEPLOY_DEV_ALERT_VIEWS()` JavaScript procedure that recreates `ALERTS_LATEST_V1` and `ALERTS_HISTORY_V1`.
+  - Created `STORE_INSIGHT_DEV.PUBLIC.DEPLOY_DEV_ALERT_VIEWS_TASK` scheduled at **07:15 Europe/London** on `STORE_INSIGHT_DEV_WH`, so it runs 15 minutes after the 07:00 CRT→DEV clone.
+  - Script: `scripts/deploy_dev_post_clone_view_task.py`.
+  - Verified: procedure returned OK; DEV `ALERTS_LATEST_V1` = 358 rows, `ALERTS_HISTORY_V1` = 53,729 rows.
+  - PR: https://github.com/dantretailinsight/store_insight/pull/new/feat/dev-post-clone-view-task
+- [ ] **Share the playbook with the team** (Dan, Dave, Imran, Cornelious) so every feature PRD is written against it. Linked in messages to Dan and Dave; still need explicit team sign-off.
+
+## Current waiting / next actions (25 Sep 2026)
+
+| Item | Status | Next step |
+|---|---|---|
+| PR #106 — cleanup docs/tools | **Merged** | Dan merged. `sync/pipeline-osa-refactor` merged `origin/main` to pick it up. Contains doc archive, cleanup proposal, and safe rename/restore scripts. No Snowflake table changes executed. |
+| Post-clone DEV view task PR | **Merged** | Dan merged PR #107. `sync/pipeline-osa-refactor` merged `origin/main` to pick up Dan's post-merge lint/hardening fixes. Task `DEPLOY_DEV_ALERT_VIEWS_TASK` verified `STARTED` with 07:15 Europe/London schedule. Verify 26 Sep 07:15 run recreates DEV views. |
+| 25 Sep auth/login outage | Cornelious temp fix applied, Dave can log in | Root cause is Auth API null scope from its own DB, not Snowflake changes. Monitor Cornelious's permanent fix; no action from pipeline side. |
+| Table cleanup in CRT/DEV | Partial sign-off received; still blocked on UI/auth/ETL + scan | Cornelious confirmed API does not read `ALERTS_PIPELINE_OSA_INTEGRATION_20260909`, `ALERTS_OSA_SNAPSHOT_PRE_RENAME`, or any `*_BACKUP_*` tables in dev/cert. Need UI, auth service and ETL sign-off, plus a clean 30-day `ACCOUNT_USAGE` scan that excludes our own diagnostic queries, before any rename/drop. |
+| Agentic workflow PRD | Rewritten in plain English after PR #112; awaiting team role/default review | Full draft: `prds/prd-agentic-new-action-workflow.md`; short note: `prds/prd-agentic-new-action-workflow_short.md`. It uses short sentences and direct wording while keeping Dan's approved scope, gates and DEV-ready checks. It also records the PR #112 lesson: define Pydantic widget types and exact JSON examples first; API/UI approve them before builder code; DEV evidence includes the Snowflake payload, API response and UI screenshot for the same card; plan around the 07:00 clone. Open defaults: named approvers, shared-definition rule, Coco DEV remit and first trial action. |
+| Remaining presentation builders | Widget proposal sent to Imran/Cornelious (1 Oct); preparing implementation plan/test fixtures while awaiting approval; no builder logic until shapes confirmed | Current DEV coverage is 299/362 cards: OSA_STORE_ACTIONABLE 192, COMPLIANCE 40, BINNED_WASTE 67. Remaining fallback cards: PROMPTED_MARKDOWN_COMPLIANCE 24, OSA_BIG_DROP 16, OSA_RECURRING_SLOT 16, MARKDOWN_OVERRIDE 4, MARKDOWN_SKU 3. Staged CRT deployment approved by Dan: first three go after API/UI DEV acceptance; remaining five stay on null fallback. Audit order: Prompted Markdown, OSA Big Drop, OSA Recurring Slot, then the two Markdown types. |
+
+## Remaining cleanup tasks (from `CLEANUP_PROPOSAL_2026-09-24.md`)
+
+### Snowflake table cleanup
+
+1. Re-run 30-day `SNOWFLAKE.ACCOUNT_USAGE.QUERY_HISTORY` and `ACCESS_HISTORY` scan for every candidate table in both `STORE_INSIGHT_DB` and `STORE_INSIGHT_DEV` (needs ACCOUNTADMIN or equivalent).
+2. Confirm no consumer for each candidate from:
+   - API (`retailinsight/store-insight-api` / `dantretailinsight/store_insight_api`) — **confirmed by Cornelious for dev/cert.**
+   - UI (`retailinsight/store-insight-ui`)
+   - Auth service / ETL / notebooks
+3. Build a per-table sign-off list. Cornelious has confirmed the API does **not** read `ALERTS_PIPELINE_OSA_INTEGRATION_20260909`, `ALERTS_OSA_SNAPSHOT_PRE_RENAME`, or any `*_BACKUP_*` tables in dev/cert. Need the same confirmation for UI, auth service and ETL, and for CRT/live app if separate.
+4. **Never touch `ACTION_STATUS`** until the API/UI team explicitly confirms they no longer read it and a clean 30-day scan proves zero live reads.
+5. **Never touch `ALERTS_PIPELINE_OSA_INTEGRATION_20260909`** until its consumer is moved off it.
+6. For proven-dead tables, rename to `_TO_DROP_*` (or a `_TO_DROP` schema) in DEV first, smoke-test 24 hours, then repeat in CRT one table at a time. Wait 30 quiet days and re-scan before final `DROP`.
+7. Dan decision: `ACTION_LIFECYCLE_EVENTS` + `pipeline/lifecycle/measurement.py` — keep for planned lifecycle feature or drop together.
+
+### Repo document/folder cleanup
+
+PR #106 archived most stale docs. The following still need Dan's tick-off:
+
+- `BUGS.md` — keep as bug tracker or archive if issues moved to GitHub/Trello.
+- `CONTEXT-MAP.md` — verify current or archive.
+- `MERGE_PLAYBOOK.md` — keep if still the merge process or archive.
+- `api/` — Python prototype, superseded by `retailinsight/store-insight-api`. Archive or delete.
+- `ui/` — old scaffold, superseded by `retailinsight/store-insight-ui`. Archive or delete.
+- `pipeline_ui/` — internal workbench, overlaps `store_insight_pipeline`. Keep one home.
+- `mcp/` — read-only MCP server, also lives in `store_insight_pipeline`. Keep one home.
+
+Suggested safe action: one commit moving the agreed files to `archive/` (git history kept).
+
+### Repo migration
+
+- Consolidate live code into `retailinsight/store_insight_pipeline`: move `dantretailinsight/store_insight` history as `main`, port useful parts from `dantretailinsight/store_insight_pipeline` (Meijer client, migrations, MCP, workbench), and move API contract docs from `dantretailinsight/store_insight_api`. DevOps/Dan decision; not started.
+
+## Current status — 2026-10-01
+
+- Implemented the five Phase 2 presentation builders after Imran confirmed the widget shapes:
+  - `PROMPTED_MARKDOWN_COMPLIANCE`
+  - `OSA_BIG_DROP`
+  - `OSA_RECURRING_SLOT`
+  - `MARKDOWN_OVERRIDE`
+  - `MARKDOWN_SKU`
+- Registered builders in `pipeline/presentation/builders/__init__.py`; tests in `pipeline/presentation/tests/test_phase2_builders.py` now run and pass.
+- Full test suite: `884 passed, 2 skipped`.
+- Branch: `feat/presentation-phase2-remaining-builders`.
+- Next: DEV Snowflake validation of one card per new type, then CRT deploy proposal (staged, after the existing three types have API/UI sign-off).
+
+## Current status — 2026-09-29
+
+### Ownership this week (Dan, 29 Sep 09:18)
+
+Dan asked Elaheh to **take charge of getting Store Insight items through** while he stands up Decision Insight for the SLT meeting. Focus areas:
+
+1. **KPI** — prompted markdown KPIs; `by_division` shape in `OSCA_DETAILS_JSON` (live in DEV — Cornelious was reading the wrong key, resolved 15:25).
+2. **New waste alerts** — `BINNED_WASTE_TREND` + `BINNED_WASTE_SPIKE` via the agentic workflow (specs: `04_store_action_definition`, `09_store_action_build_spec` — well-formed, implementable).
+3. **Bugs** — Trello board `actions-pipeline` right-hand bugs column (29 Sep triage):
+   - **"Old style actions still showing text format"** — pipeline/DB side fixed by PR #112 and fully validated in DEV: typed stats/matrices/ranked lists/bar/line charts, structured dates, OSA PPG/items/barcodes. Remaining work is API/UI acceptance. Agreed contract: Snowflake stores JSON text; API deserializes once and returns an object or null without remapping/dropping fields; UI renders by `widget.type`; null presentation keeps the old fallback. Dan confirmation and Cornelious/Imran implementation/sign-off remain.
+   - **"Barcode not showing in API for some OSA alerts"** — pipeline root cause fixed, merged (PR #109), and DEV-verified (30 Sep): standalone `OSA_BIG_DROP` gatherer now supplies `item_lsv_changes`; all 35 DEV BIG_DROP rows carry `upcs`/`eans`/`identifier_mapping_status` (store 638 spot-checked). **Not yet closed:** Cornelious/Imran must confirm the API returns these fields and the UI barcode displays in DEV; CRT deployment remains separate.
+   - **"Prompted compliance worst performing departments needs more context"** — not fixed by the current PRs; this is a separate feature requiring pipeline and API changes (risk score = alerts due × (1 − compliance rate); API needs compliance %, due count and compliant/actioned count). Dan assigned Bryan 28 Sep. Keep open until Bryan links a PR and DEV evidence confirms the added context.
+   - KPI NULL columns resolved by product decision: `PROMPTED_MARKDOWN_*` is fixed and DEV-verified for 121/121 stores; Waste has no KPI and stays hidden; generic Markdown stays null until Bryan's valid source-data PR.
+4. **Also on Dan's week plan:** cost of inaction deployed; OSA performance by category collapsed.
+
+### Verification results (29 Sep)
+
+- **Post-clone task:** SUCCEEDED on 26, 27, 28 Sep; next run 29 Sep 07:15.
+- **DEV run today:** `RUN_DATE=2026-09-29`, `ANALYSIS_DATE=2026-09-27`. `BINNED_WASTE` = 67 cards. Store 239 card has a valid 4-widget `PRESENTATION_JSON` (bar_chart + matrix + 2 ranked_lists).
+- **Dan's latest commit (29 Sep 10:04):** fixes `BINNED_WASTE` merge in `_merge_signals` so TREND+SPIKE keep both trigger fields; sets `alert_type` to signal type.
+- **DEV KPI issue found:** `KPI_AVAILABILITY_LATEST_V1` has NULL `WASTE_PCT`, `MARKDOWN_PCT`, `PROMPTED_MARKDOWN_PCT` (and their `*_DETAILS_JSON`) for **all 121 stores** on runs 26–29 Sep. Older rows (≤11 Sep) show static 97.0/98.5 values. The new KPI generation is not populating these columns — this is why the app shows `MARKDOWN COMPLIANCE 0.0%` and explains Dan's "16–22 vs 27" mismatch (stale/empty KPI data, plus old persisted action cards like the 22 Sep analysis card moved to In Progress on 24 Sep).
+- **`OSA_BIG_DROP` `item_lsv_changes`:** still 0 of 19 rows have it — fix is not in `feature/binned-waste`. API needs it for barcodes.
+- **Branch test run (Elaheh, temp worktree `bw_test` @ `7b608d7`):** `877 passed, 2 skipped` in 86s; `ruff check` clean. Branch is green.
+- **Single-trigger BINNED_WASTE rendering:** store 234 chart wasn't rendering; Cornelious fixed it 17:49 (single-trigger path). 204/239 render correctly.
+- **DEV login 500 (Dave, 29 Sep morning):** same class of auth issue as 25 Sep — flag to Cornelious, not Snowflake.
+- **Cornelious asked (17:56)** whether DEV data is on "dev or cert" — confirm branch-only runs land in DEV; the 07:00 clone will keep overwriting DEV with CRT until merge + CRT deploy.
+
+### DEV validation results (30 Sep)
+
+- **Worktrees synced** to `origin/main` `9ce33c7` (main repo merged into `sync/pipeline-osa-refactor`; guardrails detached clean).
+- **DEV SP deployed** from guardrails with `eastofengland_dev` client + `--task-off`. Guardrail correctly refused the first call (client `eastofengland` resolves output to CRT).
+- **DEV source views were missing** — all nine `*_V1` views (`OSA_V1`, `WASTAGE_V1`, etc.) absent in `STORE_INSIGHT_DEV` because the 07:00 clone copies tables only. Recreated all 9 from `pipeline/adapters/eastofengland/*.sql` with target FQN swapped to `STORE_INSIGHT_DEV.PUBLIC` (sources are account-level `ANALYSIS.FINAL`/`INBOUND.SOURCE`). **Watch:** if the clone drops views again, add them to the post-clone task.
+- **DEV run `2026-09-30`:** 361 cards. `item_lsv_changes` verified (above).
+- **Prompted Markdown KPI restored in DEV after PR #112 deploy (1 Oct):** deployed merged `SP_KPI_AVAILABILITY_BATCH`, leaving `KPI_AVAILABILITY_BATCH_TASK` suspended, and ran a supervised refresh on `STORE_INSIGHT_DEV_WH` for `RUN_DATE=2026-10-01`, `ANALYSIS_DATE=2026-09-30`. Both the summary table and `KPI_AVAILABILITY_LATEST_V1 WHERE IS_LATEST_FOR_STORE` return 121/121 stores with all five real `PROMPTED_MARKDOWN_*` fields populated; all `WASTE_*` and generic `MARKDOWN_*` fields remain NULL. Store 205: 96.08%, +5.94 pp WoW, cluster 89.08%, trend `up`. Rollback snapshot: `STORE_INSIGHT_DEV.PUBLIC.KPI_AVAILABILITY_SUMMARY_BACKUP_20261001_PRE_PR112_DEV` (121 pre-refresh rows). CRT was not targeted or changed.
+- **Binned-waste PR #111 merged** to `main` at `b327ce9` (30 Sep). Branch verification before merge: 884 passed, 2 skipped; ruff clean.
+- **Exact wastage dedupe merged in PR #111** (`99fc9fb`): `WASTAGE_V1` uses `SELECT DISTINCT` on projected fields, reducing Sep DEV rows from 51,068 to 49,406 and waste value from £213.3K to £206.8K while preserving non-identical repeat events.
+- **Contract current:** `SNOWFLAKE_CONTRACT_FOR_API_UI_V1.7.md` reflects merged/deployed `main` `10dee55` (PR #112), exact typed widget fields, dated matrices/categories, one/two-series line charts, OSA PPG/item lists, optional barcode secondary label, KPI state and DEV validation. Stores 239 (SPIKE) and 204 (combined) are ready for API/UI confirmation.
+- **Merged `main` deployed to DEV** (30 Sep 13:32): clean guardrails worktree detached at `b327ce9`; recreated `STORE_INSIGHT_DEV.PUBLIC.WASTAGE_V1`; uploaded the new package and replaced `STORE_INSIGHT_DEV.PUBLIC.RUN_ALERTS_PIPELINE` using `eastofengland_dev --task-off`. No DEV task was created or changed. Sep deduped view verified at 49,406 rows / £206,808.13.
+- **PR #112 DEV deployment and full DB acceptance passed** (1 Oct, analysis date 27 Sep): merged `main` `10dee55` deployed with `--task-off`; 362 cards / 362 distinct alert IDs. All 299 populated presentation payloads parse with schema version 1; every widget has its required fields and all chart category/series lengths match. COMPLIANCE: 40/40 dated one-series line charts, 280/280 points match facts. BINNED_WASTE: 67/67 dated two-series line charts, 546/546 line points and 538/538 bar points match facts; all 34 SPIKE cards highlight the spike bar; department/item lists match facts. OSA: 192/192 dated matrices; 1,344/1,344 rows have date and all three periods; 833/833 PPG and 911/911 item values match facts; zero missing or extra barcode secondary labels. Stores 204/239 expose the expected widgets. Latest quality checks are all OK/NONE. Rollback snapshot: `STORE_INSIGHT_DEV.PUBLIC.ALERTS_PIPELINE_BACKUP_20261001_PRE_PR112_DEV` (360 rows). CRT unchanged.
+
+### Blockers before CRT deploy
+
+- [x] `item_lsv_changes` restored in `OSA_BIG_DROP` FACTS_JSON — merged + DEV-verified.
+- [x] `PROMPTED_MARKDOWN_*` KPI columns populate — merged + DEV-verified.
+- [x] `WASTE_*`/`MARKDOWN_*` KPI scope agreed with Dan (30 Sep 14:24): **Waste:** no KPI; do not build, keep `WASTE_*` null and the tile hidden. **Generic Markdown Compliance:** current source data has no actual compliance column, so keep `MARKDOWN_*` null; Bryan has raised a source-data ticket and will raise the implementation PR when the data is available. **Prompted Markdown Compliance:** separate source and valid metric; `PROMPTED_MARKDOWN_*` implementation is approved/good. Do not start `feat/waste-markdown-kpi`; Bryan owns the generic Markdown follow-up.
+- [x] `WMD_WASTAGE` exact-duplicate handling — Dan approved dedupe before CRT; implemented in `WASTAGE_V1`, DEV-verified, and merged in PR #111 (`99fc9fb`). Source check found each filename loaded once, so duplicates are inside source files rather than repeated Snowflake loads.
+- [x] Pipeline `feature/binned-waste` PR **#111** reviewed and merged to `main` (`b327ce9`).
+- [x] Post-merge DEV deployment from `main` `b327ce9`: deployed SP and deduplicated `WASTAGE_V1` from the clean guardrails worktree with task registration disabled.
+- [x] Post-merge DEV run validation: 67 BINNED_WASTE cards verified; trigger merge, facts panels, presentation JSON, run integrity, and data-quality checks all passed.
+- [ ] API/UI presentation pass-through: PR #112 is merged, deployed and Snowflake-validated in DEV. COMPLIANCE has a dated one-series `line_chart`; BINNED_WASTE prompted checks has a dated two-series `line_chart`; OSA has dated matrices plus PPG/item lists and barcode `secondary_label`. Cornelious must preserve each discriminated widget's required fields rather than map all widgets to one nullable DTO; Imran must confirm stores 204/239 render correctly.
+- [ ] CRT deploy of merged `main` (PRs #109 + #110 + #111 + #112) per delivery playbook, only after API/UI DEV acceptance and Dan approval.
+
+### Next steps
+
+- [x] 1 Oct post-clone check and restore: `DEPLOY_DEV_ALERT_VIEWS_TASK` succeeded at 07:15; all nine adapter views were present. After PR #112 merged, DEV alerts and KPI rows were restored with rollback snapshots.
+- [x] Prompted-markdown KPI operational follow-up: merged DEV KPI procedure deployed with task suspended; supervised analysis-date 30 Sep refresh completed; `KPI_AVAILABILITY_LATEST_V1` verified with all five real fields for 121/121 stores.
+- [x] KPI ownership/scope confirmed: Prompted Markdown is good; Waste is not a KPI; generic Markdown Compliance waits for Bryan's source-data ticket and PR.
+- [x] API/UI contract advanced to `SNOWFLAKE_CONTRACT_FOR_API_UI_V1.9.md`: KPI decisions plus the live DEV widget map, structured dates, chart series, OSA PPG/item lists and API pass-through rules. Trello cards still need the same status update.
+- [x] Deploy merged `main` `10dee55` SP to DEV only (`--task-off`); adapter views checked; CRT unchanged.
+- [x] Rerun and validate BINNED_WASTE in DEV; 67 cards passed typed-presentation and data checks. CRT remains unchanged.
+- [x] Presentation target defined from Imran's document and Dan's Pydantic-first direction: explicit `line_chart` for one/two series, structured day/date categories, dated matrix rows, OSA PPG/item ranked lists, and optional item secondary label. V1.7 and `prd-alert-presentation-contract.md` updated.
+- [x] Presentation pipeline PR #112 merged (`10dee55`), deployed to DEV and Snowflake-validated. Local verification before merge: 891 passed, 2 skipped; Ruff/diff/secret checks clean. DEV acceptance now waits only on API/UI rendering.
+- [x] Sync `sync/pipeline-osa-refactor` with `origin/main` (1 Oct). Branch now includes PR #112 and all related builder/test/model changes; `pipeline/presentation/models.py` now has `BarChartWidget`/`LineChartWidget`.
+- [ ] API presentation pass-through: Cornelious updated DEV API on 1 Oct to return parsed `presentationJson` object/null. Screenshot confirms object output and structured `{label,date}` categories. Final checks remain for line-chart `series`, ranked-list `items`, OSA item `secondary_label`, null fallback and stores 204/239. Nested presentation fields remain unchanged `snake_case` (`schema_version`, `highlighted_index`, `secondary_label`); V1.9 now states this explicitly. Imran UI sign-off and Dan's final contract confirmation remain.
+- [ ] PR #108 Cost if Not Actioned: request changes before merge—remove monetary Markdown Compliance claims until Bryan's valid source-data PR, preserve OSA_BIG_DROP's drop-day projection basis, add zero/unavailable-cost fallbacks, rebase onto `main`, and treat API/UI panel support as separate PRs. Review verification on rebased change: 83 focused tests passed; full suite 883 passed, 2 skipped, plus one worktree-name packaging artifact.
+- [ ] Cornelious/Imran: validate OSA_STORE_ACTIONABLE, COMPLIANCE and BINNED_WASTE end to end in DEV against V1.9; use store 239 (SPIKE plus OSA lists/barcodes) and store 204 (combined SPIKE+TREND plus COMPLIANCE). Record API payload and UI screenshot for the same cards.
+- [x] Remaining builders Gate 2: read-only audit completed for PROMPTED_MARKDOWN_COMPLIANCE, OSA_BIG_DROP, OSA_RECURRING_SLOT, MARKDOWN_OVERRIDE and MARKDOWN_SKU. Exact UX/JSON widget proposals sent to Imran/Cornelious for approval. Audit script: `scripts/audit_remaining_presentations.py`.
+- [x] Remaining builders Gate 3: implementation plan and skipped acceptance tests prepared in branch `feat/presentation-phase2-remaining-builders`. Design doc: `docs/presentation-phase2-design.md`. Test fixtures: `pipeline/presentation/tests/test_phase2_builders.py`. Branch pushed; draft PR ready at https://github.com/dantretailinsight/store_insight/pull/new/feat/presentation-phase2-remaining-builders. Tests: 5 passed, 5 skipped.
+- [ ] Remaining builders Gate 4: implement the five builders and remove pytest skip markers after Imran/Cornelious approve the widget shapes.
+  - Proposed `PROMPTED_MARKDOWN_COMPLIANCE`: stat current compliance %, stat WoW change (pp), line chart daily compliance (7 days), ranked_list worst 3 departments, optional driver assessment.
+  - Proposed `OSA_BIG_DROP`: stat latest OSA %, stat drop (pp), matrix day/period lost sales, ranked_list top PPGs, ranked_list worst items with barcode secondary_label.
+  - Proposed `OSA_RECURRING_SLOT`: stats total/avg weekly lost sales, line chart slot history (LSV and OSA %), ranked_list recurring items.
+  - Proposed `MARKDOWN_OVERRIDE`: stat this-week override rate, stat WoW change (pp), ranked_list departments by override rate.
+  - Proposed `MARKDOWN_SKU`: stat avg markdown depth %, stat request count, line chart weekly request count / avg markdown % history.
+- [x] Dan decision: deploy the three completed builders incrementally to CRT once API/UI DEV acceptance passes; remaining five builders continue via null fallback until their builders are ready. Staged deployment approved by Dan 1 Oct.
+- [ ] CRT deploy remains held with Dan and Dave approval. DEV data is restored and ready now; deploy CRT only after API/UI acceptance and Dan approves the final deployment.
+
+## New tasks — 2026-09-21
+
+### 1. Snowflake cost investigation
+
+**Context:** `WAREHOUSE_MONITOR_MASTER` hit 200% of its 200-credit monthly quota and suspended `STORE_INSIGHT_WH`. `STORE_INSIGHT_ROLE` cannot query `SNOWFLAKE.ACCOUNT_USAGE` or see monitor recipient details.
+
+- [x] Dan got spend-by-user data from Maidwell (21 Sep): `SVC_STOREINSIGHT` $538, `SVC_SENTINEL_UKCOOP` $249 (security — can't cut), `DANIEL.T` $145, `SYSTEM` $117, `ELAHEH.K` $116. Total visible ~$1,165 on the UKCOOP instance.
+- [x] Confirmed: `SVC_STOREINSIGHT` runs both the five daily tasks and the API reads. It's the biggest item ($538) and the one we can profile.
+- [x] `ACCOUNTADMIN` granted via `ACL_Snowflake_EOE_PRD_Admin` group (Enoch, 21 Sep). Both Elaheh and Dan added.
+- [x] **Break down `SVC_STOREINSIGHT` spend by task vs API reads.** Done (21 Sep, `ACCOUNT_USAGE.QUERY_HISTORY`): 69,301 API SELECTs = 350 mins; 66 pipeline CALLs = 154 mins; rest (INSERT/CREATE/etc) = 44 mins. Total 548 mins. The API reads are the bulk by query count; the pipeline calls are the bulk by per-query cost (~2.3 mins each).
+- [x] **Confirm which workloads share `WAREHOUSE_MONITOR_MASTER`.** Done. The monitor is **account-level** — it covers all 14 warehouses on the `UUTQCJV-UKCOOP` account. No individual warehouse has a `resource_monitor` set. September spend: `STORE_INSIGHT_WH` 239 credits, `EEC_OPERATIONS` 72, `PARADIME` 19, `EEC_ANALYTICS` 9, others <1. Total 340 credits against 300-credit quota.
+- [x] **Check the current monthly cost.** September: 340 credits used, 300 quota, -124 remaining (monitor shows 424 used, which includes rollover from prior period). `STORE_INSIGHT_WH` daily run rate last 7 days: 1.8–24.9 credits/day (high days = Streamlit dashboard sessions).
+- [ ] Assess whether the increased quota is enough as prompted-markdown detectors go live and source data grows. **Preliminary answer:** scheduled tasks cost only ~6.5 credits/month (~0.22/day). Adding prompted detectors adds negligible cost. The real risks are: (a) Streamlit dashboard (~100 credits/month — will remove), (b) shared monitor with EEC teams (~100 credits/month we can't control), (c) warehouse idle time from API auto-resume bursts.
+- [x] **Identified biggest cost items:**
+  - Streamlit `PILOT_HEALTH_DASHBOARD`: 64 sessions, 614 mins total, largest single item. Will suspend.
+  - Cortex COMPLETE: 6,534 calls, 327 mins. Already fixed (stopped 12 Sep after PR #79).
+  - SYSTEM scheduled tasks: 644 mins, ~6.5 credits/month. Reasonable.
+  - API reads: 69K queries, 548 mins. Cost is mainly warehouse idle time between bursts.
+- [x] Sent full analysis to Dan (21 Sep) with recommendations.
+
+**Blocker: lifted.** `ACCOUNTADMIN` access working. All investigation queries run successfully.
+
+### 2. Snowflake alert configuration
+
+- [x] **Confirm who receives threshold alerts.** Done. `notify_users` is **empty** — nobody receives the 50%, 75%, or 95% alerts. Thresholds: notify at 50%/75%/95%, suspend at 200%, suspend immediately at 300%.
+- [x] **Fix notify_users.** Dan and Elaheh verified emails in Snowsight (22 Sep). `ALTER RESOURCE MONITOR WAREHOUSE_MONITOR_MASTER SET NOTIFY_USERS = ('DANIEL.T@RETAILINSIGHT.IO', 'ELAHEH.K@RETAILINSIGHT.IO')` executed successfully. Both now receive email alerts at 50%/75%/95% of the 300-credit quota. Dave's email is still unverified — can be added later with `ALTER RESOURCE MONITOR WAREHOUSE_MONITOR_MASTER SET NOTIFY_USERS = ('DANIEL.T@RETAILINSIGHT.IO', 'ELAHEH.K@RETAILINSIGHT.IO', 'DAVE.B@RETAILINSIGHT.IO');`.
+- [ ] Consider adding monitoring that does not depend on the warehouse being available (e.g. a separate lightweight check from Azure/GitHub Actions, or a Snowflake notification integration that fires before suspension).
+
+**Blocker: lifted.** `ACCOUNTADMIN` access working.
+
+### 3. Snowflake efficiency — shared with Daniel
+
+**Context:** `STORE_INSIGHT_WH` is size Small, processing ~125 stores across five scheduled tasks. 200 credits/month was exceeded.
+
+- [x] **Profile credit usage per task (last 7 days, CRT).** `RUN_ALERTS_PIPELINE`: ~4 mins/day. `SP_KPI_AVAILABILITY_BATCH` (×2): ~1.5 mins total. `SP_RUN_MONITORING`: ~1 min. `SP_SOURCE_VOLUME_CHECK`: ~12 secs. Total: ~6.5 mins/day = ~0.22 credits/day = ~6.5 credits/month. The pipeline is cheap.
+- [x] **Cortex COMPLETE was a big cost but is already fixed.** 6,534 calls, 327 mins (Aug 22 – Sep 12). Stopped on 12 Sep when PR #79 removed Cortex from KPI narrative generation. Zero Cortex calls since.
+- [ ] Check whether the prompted-compliance source view (`PROMPTED_COMPLIANCE_V1`, 1M rows with dedup CTE) adds material cost per run. Need to check after tomorrow's 06:00 run with prompted detectors live.
+- [x] **Biggest inefficiency identified: Streamlit dashboard** (614 mins / ~100 credits in September). Second: warehouse idle time from API auto-resume. Scheduled tasks are not the problem.
+- [ ] Estimate per-store marginal cost for Kroger scale planning. Now have the data to do this: ~0.22 credits/day for 125 stores = ~0.002 credits/store/day.
+- [x] **Reduce warehouse idle timeout.** Checked: `AUTO_SUSPEND` was already 60s (not 300s as assumed). No change needed.
+- [x] **Removed Streamlit `PILOT_HEALTH_DASHBOARD`** from `STORE_INSIGHT_DB.PUBLIC` (22 Sep, ACCOUNTADMIN). Verified: 0 Streamlit apps remaining in `STORE_INSIGHT_DB`. Saves ~100 credits/month. Local Python monitoring script (`monitoring/pilot_monitoring.py`) remains available.
+- [ ] Propose refactoring if needed: warehouse sizing, task consolidation, query optimisation, or source materialisation. **Current view:** no pipeline refactoring needed; the wins are operational (Streamlit removal, idle timeout, monitor separation).
+
+### 4. Scheduled-action design — shared with Dave and Daniel
+
+**Context:** the current pipeline generates all actions at 06:00 for the day. Scheduled/recurring actions (e.g. weekly prompted-markdown checks) may conflict with higher-priority reactive actions under the `top_n_per_store: 3` cap.
+
+- [x] Document the current timing, caps, and score ranges from Snowflake data. Done in `prds/prd-scheduled-action-design.md`.
+- [x] Ran score analysis against CRT and DEV: all reactive cards score 0.00–0.11; prompted cards score 1.0 (deliberate `FIXED_SCORE` pin in PR #90 because no pound value exists). 116/120 stores at the 3-card cap. Prompted card always takes slot #1 and pushes out the weakest reactive card.
+- [x] Wrote up five options (A–E) with trade-offs and per-store displacement data for the 6 prompted stores.
+- [x] Recommendation: keep current behaviour (all at 06:00, same 3 slots) but fix the scorer so prompted cards land in the 0.01–0.11 range.
+- [x] Sent the write-up to Dan and Dave (21 Sep). Waiting for a steer on whether prompted cards should always show or earn their slot.
+- [ ] Adjust `FIXED_SCORE` once Dan/Dave decide. Two paths: (a) give the scorer a real cost formula and remove the pin, or (b) lower the pin from 1.0 to something in the reactive range (e.g. 0.05).
+
+## Current status — 2026-09-23
+
+- [ ] **Warehouse rule (Dan, 23 Sep — permanent):** use `STORE_INSIGHT_DEV_WH` for all local/experiment/validation runs. Never run experiments on `STORE_INSIGHT_WH` — it is shared with the CRT API (`SVC_STOREINSIGHT`) and heavy OSA scans slow the app. Warehouse is compute-only; prod object reads still work from DEV_WH. `_local/sf_session.py` default changed to `STORE_INSIGHT_DEV_WH` (`PROD_WAREHOUSE` kept for prod-intended work); for `run_batch` pass `SNOWFLAKE_WAREHOUSE=STORE_INSIGHT_DEV_WH` in env — do not edit shared `pipeline/.env`. Verified: both `STORE_INSIGHT_ROLE` and `SVC_STOREINSIGHT_DEV` have USAGE on it.
+- [x] **Validated the 23 Sep 06:00 CRT run — prompted cards are live.** `RUN_DATE=2026-09-23`: 355 rows / 120 stores, **7 `PROMPTED_MARKDOWN_COMPLIANCE` cards** incl. store 634 (stores 204/205/209/240/282/471/634). PR #96 handler fix verified in production.
+- [x] **PR #101 merged by Dan** (`3755faa`) — tick-and-flick relabel to "alerts completed in less than 10 seconds" + `trailing_7d_tf` fix (series ends at latest day with data, drops missing days instead of zero-padding).
+- [x] **Prompted-markdown same bug fixed on PR #101** (commit `d599a33`): `prompted_markdown_compliance_facts._build_daily` padded calendar days with `0%` (Dan's Tue/Wed screenshot). Same anchor-on-latest-data fix applied; 3 new tests; 845 pass on branch.
+- [x] **PR #101 deployed to DEV SP + DEV run validated.** Deployed `3755faa` to `STORE_INSIGHT_DEV.PUBLIC.RUN_ALERTS_PIPELINE` (`--task-off`). Ran `run_batch --client eastofengland --analysis-date 2026-09-22 --run-date 2026-09-24 --write --target-table STORE_INSIGHT_DEV.PUBLIC.ALERTS_PIPELINE`: 358 cards / 120 stores now visible via `ALERTS_LATEST_V1`. Verified live: prompted daily series ends 21 Sep (last data day, no trailing 0% day); `trailing_7d_tf` ends 21 Sep with interior gaps dropped (store 511 shows 6 points). DEV gets re-cloned 07:00 tomorrow — Dan checking today.
+- [x] **Dan confirmed DEV visuals fixed** (23 Sep ~10:36): "We fixed the visuals in dev — let's deploy in snowflake before tomorrow's run." Chart now ends Mon with real values, no trailing zeros.
+- [x] **CRT + DEV SPs deployed from `main` `7264ac9`** (23 Sep ~11:05, `--task-off` both). CRT: `RUN_ALERTS_PIPELINE` re-registered 11:05:43; all 5 tasks still STARTED, schedules untouched; `RUN_DATE=2026-09-23` data unchanged (355 rows). Deploy ran on `STORE_INSIGHT_DEV_WH` — prod WH untouched. Tomorrow's 06:00 run ships the fixed charts + new wording.
+- [x] **PR #98 merged by Dan + deployed** (`bd2dba0`, 23 Sep ~11:3x). Both SPs redeployed to `main` `bd2dba0` (#101+#102+#98) with `--task-off`; all 5 CRT tasks STARTED, `RUN_DATE=2026-09-23` unchanged (355 rows). Handler/CLI source-loading parity now by construction via shared `load_sources()`. Tomorrow's 06:00 run ships the full current tree.
+- [x] **`deploy.py` `→` crash fixed properly — PR #102 merged** (`7264ac9`). `UnicodeEncodeError` (cp1252) had killed a DEV deploy mid-run; fix branch `fix/deploy-arrow-encoding` committed `0bbc72a`, Dan merged same day.
+- [x] **EoEStockMovement DEV import complete.** All 16 September extracts → `STORE_INSIGHT_DEV.PUBLIC.EOSTOCKMOVEMENT_RAW`: **12,431,177 rows, 16 consecutive business dates 31 Aug–15 Sep, 138 stores, 0 load errors**. New DEV objects only: `EOSTOCKMOVEMENT_STAGE`, `FF_EOE_CSV`, `EOSTOCKMOVEMENT_RAW` (+`SOURCE_FILE`, `LOAD_TS`). `BARCODE` VARCHAR (leading zeros kept). Unzip→PUT→COPY per file; COPY skips loaded files. Reported to Dave; flagged `.zip`→`.csv`/`.csv.gz` for any recurring feed.
+- [ ] **Kroger plan drafted** — `KROGER_INFRASTRUCTURE_PLAN.md` (plain English): infra/access/cost asks, reuse-vs-fix lists, and §8 release-process improvements answering Dan's ask (contract-first, views-only API grants, versioned views, migrations runner, post-run contract check, one release checklist, stable keys, reliable DEV). Awaiting Dan sign-off (§10 item 9) before it goes to Dave.
+
+## Current status — 2026-09-24
+
+- [x] **PR #103 (`by_division`) merged by Dan + deployed.** `SP_KPI_AVAILABILITY_BATCH` re-registered in DEV and CRT from `main` `d0e85b4`. All five CRT tasks stayed STARTED, schedules unchanged; existing rows untouched. `by_division` confirmed live in the 24 Sep chained run (store 204: OSCA 93.5%, SC 95.6%).
+- [x] **C6 07:00 FAIL was a false alarm — monitoring fix deployed.** The check asserted `performance_breakdown` has exactly 5 keys (`ARRAY_SIZE(OBJECT_KEYS(...)) = 5`); `by_division` made it 6 → "OSCA=0/121". Now asserts the five required keys are present, additive fields allowed (`monitoring/pilot_monitoring.py`, commit `970c91b` on `sync/pipeline-osa-refactor`). `SP_RUN_MONITORING` re-registered DEV + CRT; `MONITORING_TASK` STARTED, 07:00 schedule intact; verified 121/121 rows pass the fixed check on `RUN_DATE=2026-09-24`.
+- [x] **Yesterday's deploys validated against today's 06:00/06:04 runs.** `RUN_DATE=2026-09-24`: 357 alerts / 357 unique IDs / 120 stores — Availability 290, Compliance 58, Markdown 9. 6 `PROMPTED_MARKDOWN_COMPLIANCE` cards (204/209/240/471/492/634); `daily_performance_last_7d` ends Tue 22 Sep (last data day) with real values, no zero-padding — PR #101 fix confirmed in prod output. KPI rows: `by_division` live (store 204: OSCA 93.5%, SC 95.6%, 5 required keys + `by_division`).
+- [ ] **"KPIs out of date" (Dave, 24 Sep 07:36) = late source feed, not a bug.** The 06:04 chained batch ran before the 09-23 rows landed in `ANALYSIS.FINAL.LSM_REPORT_ITEM_STORE_DAY_REPORTING_PERIOD` — TOD ends Tue 22nd and that day's volume is missing from OSCA. Source rows for 09-23 confirmed present later (store 204: periods 1–3 exist). The **11:45 `KPI_AVAILABILITY_REFRESH_TASK`** rewrites `RUN_DATE=2026-09-24` with complete data — scheduled, hadn't run yet. If Dave needs it before 11:45: `CALL STORE_INSIGHT_DB.PUBLIC.SP_KPI_AVAILABILITY_BATCH(NULL, NULL)` is the safe re-run (task does the same — CRT write, get Dan/Dave go-ahead first).
+- [x] **Post-11:45 verification (24 Sep 12:20):** refresh ran 11:45–11:46; `RUN_DATE=2026-09-24` now has TOD max `2026-09-23` (7 dated entries), 121 rows, 0 null OSCA. Dave's stale-KPI issue self-corrected.
+- [x] **New C10 monitoring check built + deployed:** `check_c10_kpi_source_timing` added to `monitoring/pilot_monitoring.py` — WARN if KPI `ANALYSIS_DATE` is later than the latest TOD date (feed landed after batch). Tests pass (45/45); SP redeployed DEV + CRT; manual run at 24 Sep ~13:00 returned all checks OK incl. C10; Slack message sent.
+- [x] **Dan approved both docs 24 Sep ~14:15:** refactor PRD (`prd-alert-presentation-contract.md`) + cleanup proposal (`CLEANUP_PROPOSAL_2026-09-24.md`).
+
+## Current status — 2026-09-24 (continued)
+
+- [x] **Dan approved EoE first for the presentation refactor** (Slack 24 Sep).
+- [x] **Phase 1 branch built + pushed:** `feat/alert-presentation-contract` from `main` `d0e85b4` in guardrails worktree, commits `b54aec5`, `0429751`, `bc898d6`, `40bf714`.
+- [x] **Phase 1 code:** Pydantic `AlertPresentation` with discriminated `StatWidget`/`MatrixWidget`/`RankedListWidget`; `build_presentation()` dispatcher; builders for `OSA_STORE_ACTIONABLE` and `COMPLIANCE`; `PRESENTATION_JSON` wired into `ALERTS_PIPELINE` schema + `_card_to_row` as the last column (after `AFFECTED_PRODUCTS`); fail-soft validation (bad card → `NULL` + quality log, alert still written).
+- [x] **Tests + lint:** 859 passed / 2 skipped; Ruff clean. Schema/row tests updated for the additive 29th column.
+- [x] **DEV table + views updated:** `ALTER TABLE STORE_INSIGHT_DEV.PUBLIC.ALERTS_PIPELINE ADD COLUMN PRESENTATION_JSON VARCHAR`; `ALERTS_LATEST_V1` and `ALERTS_HISTORY_V1` recreated via `scripts/deploy_alert_views.py` so `SELECT *` includes it.
+- [x] **DEV validation (local `run_batch.py`):** store 204 run with `--target-table STORE_INSIGHT_DEV.PUBLIC.ALERTS_PIPELINE` wrote 3 cards; `PRESENTATION_JSON` populated for the `OSA_STORE_ACTIONABLE` rows, `NULL` for the compliance row whose signal type is not covered in Phase 1 (expected fail-soft).
+- [ ] **DEV SP validation blocked by known DEV source-view parity gap:** `eastofengland_dev` client is missing source views (`OSA_V1` etc.) because the 07:00 DEV clone copies only `ALERTS_PIPELINE` + `KPI_AVAILABILITY_SUMMARY`. The local `eastofengland` client reads CRT sources and writes to DEV, so it validates the write path. A full DEV SP run would need either a source-view clone or a DEV client that points at CRT sources while writing to DEV.
+- [x] **PR #104 merged to `main` (`4b8a456`)**: Dave/Imran compliance title/subtitle fix (VS_CHAIN-only edge case). Rebased `feat/alert-presentation-contract` onto `origin/main`; tests now `860 passed / 2 skipped`; branch pushed (`653b6e6`).
+- [x] **PR opened + merged:** `feat/alert-presentation-contract` → `main` (PR #105, merged 25 Sep).
+- [x] **Cleanup attempted and rolled back 25 Sep:**
+  - Branch `feat/cleanup-stale-tables-and-docs` from `main`.
+  - Archived 11 stale docs to `archive/` (left `BUGS.md`, `CONTEXT-MAP.md`, `api/`, `ui/`, `pipeline_ui/`, `mcp/` for Dan decision).
+  - Renamed 11 tables in DEV and 14 in CRT to `_TO_DROP_*`, then restored them after the 30-day history scan showed active reads.
+  - **Key finding:** `ACTION_STATUS` = 7,326 reads last 30d by live app/API; `ALERTS_PIPELINE_OSA_INTEGRATION_20260909` = 2,172 reads. Both are still live consumers. `ACTION_STATUS` was restored first after the app-down report; the rest were restored after the scan.
+  - All `_TO_DROP_*` names removed from both databases; original names restored.
+  - Cleanup script updated to exclude `ACTION_STATUS` and the process tightened to require dependency/history proof before any rename.
+- [ ] **Cleanup next gate:** Dan reviews updated proposal; identify and move live consumers off `ACTION_STATUS` and `ALERTS_PIPELINE_OSA_INTEGRATION_20260909`; no CRT renames/drops until 30-day scan is clean.
+- [x] **CRT migration + deploy completed 25 Sep:**
+  - Added `PRESENTATION_JSON VARCHAR` to `STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE`.
+  - Recreated `ALERTS_LATEST_V1` and `ALERTS_HISTORY_V1` (SELECT * now exposes the column).
+  - Deployed combined SP from `main` (`e8d9060`, PRs #104 + #105) to `STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE`.
+  - All CRT tasks remain STARTED with original schedules.
+  - Supervised CRT overwrite for `ANALYSIS_DATE=2026-09-25` succeeded: `359 candidate alert cards processed`.
+  - Verified in `ALERTS_LATEST_V1`: `OSA_STORE_ACTIONABLE` (217 rows) and `COMPLIANCE` (41 rows) have valid `PRESENTATION_JSON`; other signal types are `NULL` as expected for Phase 1.
+- [x] **25 Sep 07:00 monitoring checks investigated.**
+  - **C10 WARN (KPI source timing)** — expected. The 06:05 `KPI_AVAILABILITY_BATCH` used `ANALYSIS_DATE=2026-09-24`, but TOD source max was `2026-09-23` at that time. TOD rows for `2026-09-24` are now present (`1,125,600` rows at 07:xx). The 11:45 `KPI_AVAILABILITY_REFRESH_TASK` will rewrite `RUN_DATE=2026-09-25` with the complete day.
+  - **C1 WARN (feedback source volume)** — transient load delay, not a data bug. The 06:00 alerts pipeline checked feedback for `2026-09-22` and found `1,113` rows vs a same-weekday baseline of `1,724` (64.6%). By 07:00 the source file had finished loading and the count rose to `1,163`. This only affects markdown detectors; the message correctly states OSA is unaffected. Options: keep the warn-only alert, or increase `feedback` lag from 3 to 4 days if the daily warning becomes noise.
+- [x] **Pinned channel guide updated + synced** (`monitoring/CHANNEL_GUIDE.md` = Downloads pin copy): normal-day timeline added, KPI batch corrected to ~06:05, dashboard references removed (`PILOT_HEALTH_DASHBOARD` dropped 22 Sep), Slack footer text fixed. Monitoring SP redeployed DEV + CRT, task STARTED.
+- [x] **DEV app blank for Dan = auth/store-mapping, not data.** DEV verified healthy (122 latest KPI rows to 09-23, 357 alerts today, all views populated). "NO STORE ASSIGNED" + vanished store selector = DEV API `/stores` failing for Dan's login — Cornelious/DevOps side. Reply sent in thread.
+- [x] **Cleanup proposal written for Dan's tidy-up ask** — `CLEANUP_PROPOSAL_2026-09-24.md` (committed): 14 CRT + 10 DEV test/backup tables incl. `ALERTS_PIPELINE_OSA_INTEGRATION_20260909` (the 13 Sep stale-incident table, in both DBs), legacy `ACTION_STATUS` (7 rows, zero code refs), ~16 stale docs for `archive/`, `api/`+`ui/`+`pipeline_ui/` superseded folders. **Awaiting Dan's tick-off — no deletions done.** Also found: DEV clone carries tables but not views (missing `OSA_V1` etc.) — flagged for Kroger plan §3.
+- [x] **Dan's refactor plan → PRD written** (`prds/prd-alert-presentation-contract.md`, committed `36f47f4`): `PRESENTATION_JSON` column with his `AlertPresentation` widget schema, presentation builder stage, write-time validation, 5 additive phases. Facts/signals JSONs kept (typed, internal). Open questions for Dan in the doc: chart widget needed? `rag_status` on widget or UI?
+
+## Status — 2026-09-22
+
+- [x] PR #91 merged to `main` (`3824241`) — production-write guardrails: canonical CRT write protection, partial-store rejection, shared-writer enforcement, atomic run-date replacement, secondary-write controls, explicit target logging, and `.devin/rules/production-write-safety.md`.
+- [x] PR #90 merged to `main` (`0b4a6ef`) — East of England prompted-markdown compliance source, contract, scorer, gatherer and narratives. Detectors remain **disabled** in `client.yaml`; enabling requires a separate PR with ranking/mix decision, API/UI contract and first-run validation.
+- [x] Live Snowflake verification of PR #91 against CRT (SSO as `STORE_INSIGHT_ROLE`): all 8 canonical write attempts rejected, query history shows only `SELECT`s, `ALERTS_PIPELINE` unchanged at 51,231 rows; the exact 16-store `--overwrite` incident command fails at preflight before connecting.
+- [x] DEV scratch write verified: append + transactional overwrite to a DEV scratch table succeeded and was dropped; DEV canonical untouched.
+- [x] DEV procedure-only deploy of merged `main` completed; staged zip inspected (3.4 MB, guardrails present, prompted detectors disabled, no `.env`).
+- [x] PR #92 branch `fix/handler-environment-guard` pushed (`266ba5b`) — handler refuses scheduled runs whose resolved output database differs from the procedure's session database, closing the remaining 16 Sep routing gap. 842 tests pass, Ruff clean, no credential patterns in staged changes.
+- [x] PR #92 merged to `main` (`3094c74`). Merged `main` verified: 842 passed, 2 skipped; Ruff clean.
+- [x] **DEV alert SP deployed 18 Sep 17:42 from `main` `3094c74`** (`--database STORE_INSIGHT_DEV --task-off`). Staged zip inspected: guardrails, PR #92 environment guard before the first read, PR #90 files present, prompted detectors disabled, no `.env`. No DEV alerts task exists; DEV SP calls with `'eastofengland'` are now refused by the environment guard — DEV test runs use `run_batch.py --target-table STORE_INSIGHT_DEV....`.
+- [x] **CRT alert SP deployed 18 Sep 17:45 from `main` `3094c74`** (`--database STORE_INSIGHT_DB --task-off`) from the clean `guardrails` worktree (3.4 MB zip, replacing the 114 MB zip from the 09:46 build). `STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE` replaced at 17:45:18; `RUN_ALERTS_PIPELINE_TASK` (06:00), `KPI_AVAILABILITY_BATCH_TASK`, `KPI_AVAILABILITY_REFRESH_TASK`, `MONITORING_TASK`, `SOURCE_VOLUME_CHECK_TASK` all remain STARTED; next alerts run scheduled 19 Sep 06:00. `ALERTS_PIPELINE` untouched: 51,231 rows total, `RUN_DATE=2026-09-18` 357 rows / 357 IDs / 121 stores. Staged CRT zip inspected with the same checks as DEV.
+- [x] **Validate the 19 Sep 06:00 CRT run:** `RUN_ALERTS_PIPELINE_TASK` SUCCEEDED on 21 Sep at 05:58 UTC (07:58 BST? verify); CRT `ALERTS_PIPELINE` `RUN_DATE=2026-09-21`: 357 rows / 357 unique `ALERT_ID`s / 121 stores — identical shape to 18 Sep. Alert mix unchanged (no `PROMPTED_MARKDOWN_COMPLIANCE`). `OSA_BIG_DROP` grids anchored to `SIGNAL_JSON:latest_date`. Store 204 example: 2 × `OSA_STORE_ACTIONABLE`, 1 × `COMPLIANCE`. Rollback not needed.
+- [x] Updated `store_insight_api/SNOWFLAKE_CONTRACT_FOR_API_UI_V0.8.md` for Cornelious/Imran: 21 Sep update adds full `PROMPTED_MARKDOWN_COMPLIANCE` and `BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE` contract (SIGNAL_JSON, FACTS_JSON, card fields, rendering guidance). Previous 18 Sep entry covered the CRT deployment of `main` `3094c74`.
+- [x] **Snowflake view audit after PR #90 (18 Sep, read-only):** CRT has 15 views, DEV 6. New in CRT today: `PROMPTED_COMPLIANCE_V1` (Dan, 15:43) and `LATEST_SYSTEM_HEALTH` (monitoring, 11:24). Nothing new in DEV. DEV has **no** source adapter views (`OSA_V1`, `FEEDBACK_V1`, `MARKDOWN_*_V1`, `WASTAGE_V1`, hierarchies, `PROMPTED_COMPLIANCE_V1`) and never has — DEV pipeline runs read CRT sources; the 07:00 clone copies only `ALERTS_PIPELINE` and `KPI_AVAILABILITY_SUMMARY`. Implication for the PR #92 follow-up: routing a DEV SP's output to DEV is not sufficient on its own; its sources would still be CRT views.
+- [x] `STORE_INSIGHT_DB.PUBLIC.PROMPTED_COMPLIANCE_V1` verified: reads `INBOUND.SOURCE.SOURCE_PROMPTED_COMPLIANCE` (Bryan's sandbox dependency removed), queryable as `STORE_INSIGHT_ROLE`, matches the PR #90 adapter SQL. 7,194,481 rows, 116 stores, `ALERT_DATE` 2026-06-19 → 2026-09-17, no nulls in `STORE_ID`/`UPC`/`COMPLIANT`/`ITEM_HIERARCHY_2`; 116/122 active trial stores in the last 14 days. Grants: `OWNERSHIP → STORE_INSIGHT_ROLE` only (correct — pipeline input, not an app view).
+- [x] **Fixed `PROMPTED_COMPLIANCE_V1` duplication:** updated `pipeline/adapters/eastofengland/prompted_compliance.sql` to deduplicate incremental source files by `(STORE_ID, UPC, ALERT_DATE)` keeping the latest `FILE_TIMESTAMP` with `LOAD_TIMESTAMP` and metadata-populated rows as tie-breakers. View re-created in CRT: 1,007,970 rows, 116 stores, `ALERT_DATE` 2026-06-19 → 2026-09-20, **0 duplicate grain groups**. Also aligned `UPC` to `VARCHAR` to match the contract.
+- [x] **DEV validation with prompted detectors enabled (temporary):** wrote to `STORE_INSIGHT_DEV.PUBLIC.ALERTS_PIPELINE` for `RUN_DATE=2026-09-21`, `ANALYSIS_DATE=2026-09-20`. Produced 357 cards / 120 stores; 6 `PROMPTED_MARKDOWN_COMPLIANCE` cards across 6 stores, scores 1.0, facts keys `daily_performance_last_7d`, `worst_departments_top3`, `driver_assessment`. `client.yaml` reverted after the run; DEV has the prompted cards until the next 07:00 CRT→DEV clone.
+- [x] Branch `fix/dedupe-prompted-compliance` pushed with the SQL and narrative fixes; tests 844 pass, Ruff clean.
+- [x] Fixed rule-based narrative for `PROMPTED_MARKDOWN_COMPLIANCE` and `MARKDOWN_COMPLIANCE`: now says "dropped"/"increased"/"unchanged" based on actual WoW direction, and VS_CHAIN-only cards no longer compare to last week. DEV cards verified: VS_CHAIN-only stores 240/634/282 now say "Compliance is X% this week"; WOW cards correctly say "dropped".
+- [x] PR #93 (`fix/dedupe-prompted-compliance`) raised with SQL dedup, narrative direction fix, and regression tests. 844 passed, Ruff clean.
+- [x] PR #94 (`feat/enable-prompted-detectors`) raised, stacked on #93. Adds the three prompted detectors to `client.yaml`: `prompted_markdown_compliance.wow`, `prompted_markdown_compliance.vs_chain`, `big_drop_prompted_markdown_compliance.big_drop`. Updated `test_eastofengland_config.py` expected list. 844 passed, Ruff clean.
+- [x] DEV run with prompted detectors enabled: wrote to `STORE_INSIGHT_DEV.PUBLIC.ALERTS_PIPELINE` for `RUN_DATE=2026-09-21`, `ANALYSIS_DATE=2026-09-20`. 357 cards / 120 stores, 6 `PROMPTED_MARKDOWN_COMPLIANCE` cards across 6 stores, scores 1.0. Narratives verified: VS_CHAIN-only stores say "Compliance is X% this week"; WOW stores use correct directional wording.
+- [x] Updated `store_insight_api/SNOWFLAKE_CONTRACT_FOR_API_UI_V0.8.md` with full `PROMPTED_MARKDOWN_COMPLIANCE` and `BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE` contract: `SIGNAL_JSON` fields, `FACTS_JSON` fields (`daily_performance_last_7d`, `worst_departments_top3`, `driver_assessment`), card fields (`TYPE=Compliance`, `SORT_VALUE=1.0`), rendering guidance, and nullable field notes.
+- [x] **Dan merged PR #93 and PR #94 on 21 Sep.** `origin/main` is now `f0d39d9` (merge of #94 on top of #93 on top of `3094c74`).
+- [x] **DEV SP deployed 21 Sep 14:03 from `main` `f0d39d9`** (`--database STORE_INSIGHT_DEV --task-off`). DEV tasks untouched (clone STARTED, others suspended).
+- [x] **CRT SP deployed 21 Sep 14:05 from `main` `f0d39d9`** (`--database STORE_INSIGHT_DB --task-off`). All five CRT tasks remain STARTED: `RUN_ALERTS_PIPELINE_TASK` (06:00), `KPI_AVAILABILITY_BATCH_TASK` (chained), `MONITORING_TASK` (07:00), `SOURCE_VOLUME_CHECK_TASK` (11:30), `KPI_AVAILABILITY_REFRESH_TASK` (11:45). CRT data unchanged: `RUN_DATE=2026-09-21`, 355 rows / 355 unique IDs / 120 stores, signal types `OSA_STORE_ACTIONABLE` (210), `COMPLIANCE` (49), `OSA_RECURRING_SLOT` (43), `OSA_BIG_DROP` (40), `MARKDOWN_SKU` (9), `MARKDOWN_OVERRIDE` (4). No `PROMPTED_MARKDOWN_COMPLIANCE` yet — first appearance expected in the **22 Sep 06:00** run.
+- [x] **Validated the 22 Sep 06:00 CRT run — FAILED to produce prompted cards.** `RUN_ALERTS_PIPELINE_TASK` SUCCEEDED (06:00:00 → 06:03:40). `RUN_DATE=2026-09-22`: 357 rows / 120 stores, **0 `PROMPTED_MARKDOWN_COMPLIANCE`**. Store 634 got `OSA_BIG_DROP`, `OSA_STORE_ACTIONABLE`, `OSA_RECURRING_SLOT` (all 0.01) — not the prompted card Dan's dry run predicted.
+- [x] **Root cause (22 Sep, verified from `ACCOUNT_USAGE.QUERY_HISTORY` and the deployed zip):** the deployed zip on `@ALERTS_PIPELINE_STAGE` (uploaded 21 Sep 14:05, md5 `b48b6ab…`) is correct — `client.yaml` has all three prompted detectors enabled and all prompted code is present. But **`pipeline/deploy/handler.py` never loads `PROMPTED_COMPLIANCE_V1`**: it imports only `load_feedback`, `load_osa`, `load_wmd` from `run_batch.py` (line 154–159) and calls `run_pipeline(...)` without `prompted_compliance=` (line 217–235), so it defaults to `None` and all three detectors hit `if prompted_compliance is None: return []` and exit silently. Query history for the 06:00 run confirms: 7 source views read (`OSA_V1`, `FEEDBACK_V1`, `MARKDOWN_LOG_V1`, `MARKDOWN_SALES_V1`, `WASTAGE_V1`, `WMD_HIERARCHY_V1`, `STORE_HIERARCHY_V1`), **zero queries against `PROMPTED_COMPLIANCE_V1`**. `run_batch.py` (used for the 21 Sep DEV validation) does load it (line 371–375, 393) — which is why DEV produced 6 cards and the SP produced 0. Neither the SP handler nor the local script would ever have hit the `top_n_per_store: 3` cap for a prompted card: the cards were never generated.
+- [x] **Fix pushed:** branch `fix/handler-load-prompted-compliance`, commit `11495f6` on top of `f0d39d9`. `handler.py` imports `load_prompted_compliance`, loads it over `w["lookback_start"]`–`w["this_week_end"]`, passes `prompted_compliance=` into `run_pipeline`. Two regression tests in `test_deploy_daily.py`: static parity (handler passes the same source kwargs as `run_batch.run_single_date`) and functional (loaded frame reaches `run_pipeline`). Both fail on `f0d39d9`, pass with fix. 846 passed / 2 skipped, Ruff clean. `gh` not installed — PR to be opened in the browser.
+- [x] PR #96 merged by Dan (22 Sep) → `main` `4d70468`. Dan's comment: "More monkey patches" — fair; the real fix is a shared `load_sources()` used by both `handler.run` and `run_single_date` so parity holds by construction. Follow-up below.
+- [x] **DEV and CRT SP redeployed 22 Sep 10:11/10:12 BST from `main` `4d70468`** (guardrails worktree, `--task-off`). Verified: both staged zips contain the fixed handler (`load_prompted_compliance` imported and passed), no `.env` in zip, all 5 CRT tasks STARTED with schedules unchanged, CRT data unchanged (`RUN_DATE=2026-09-22`, 357/120). Deploying today does not change today's cards — handler skips when `ANALYSIS_DATE` already has rows.
+- [ ] **Validate the 23 Sep 06:00 CRT run:** expect ~6 `PROMPTED_MARKDOWN_COMPLIANCE` cards incl. store 634; query history should show a read of `PROMPTED_COMPLIANCE_V1`; no duplicate `ALERT_ID`s; correct narratives; API/UI rendering with Cornelious/Imran.
+- [x] **No overwrite of today's cards.** Dan (22 Sep 10:23): "No, don't regenerate them — I think we risk losing any interaction they've had." Correct decision — staff may already be working from today's 357 cards. Prompted cards will appear in the 23 Sep 06:00 run.
+- [x] **PR #97 review (22 Sep):** Dan's `store_actionable_upc-fix` branch was based on `3094c74` (PR #92), before PRs #93/#94/#96. Zero merge conflicts → auto-merge would silently revert the handler fix, prompted detectors, dedup CTE, direction-aware narratives, and all regression tests. Also had placeholder dev connection values and `TRY_TO_NUMBER(BARCODE)`. Feedback sent to Dan — he created PR #99 instead (see below).
+- [x] **PR #99 review (22 Sep):** Dan's `fix/osa-store-actionable-upcs-v2` branch, correctly based on `4d70468` (current `main`). 5 files, no overlap with PRs #93/#94/#96, no silent reverts. Changes: (1) WMD hierarchy `SELECT DISTINCT` → `WHERE FILE_TIMESTAMP = MAX(...)` — proper latest-snapshot dedup, (2) QC regex fix: `DISTINCT?` → `(?:DISTINCT\s+)?`, (3) UPC/EAN grouping refactored to distinct rows + Python-side grouping, (4) `eastofengland_dev/client.yaml` with correct connection values (`STORE_INSIGHT_DEV`/`STOREINSIGHT`/`STORE_INSIGHT_WH`), (5) contract notes updated. One note: dev config is missing the 3 prompted detectors that CRT has — may be intentional. Safe to merge, no impact on 23 Sep 06:00 run. Feedback sent to Dan.
+- [x] **Snowflake cost analysis sent to Dan (22 Sep).** All facts verified from `ACCOUNT_USAGE`. Key findings: monitor is account-level (300 credits), September total 340 (over quota); `notify_users` is empty; Streamlit dashboard is biggest single item (~100 credits/month); Cortex already fixed (stopped 12 Sep); scheduled tasks only ~6.5 credits/month. Recommendations: fix `notify_users`, remove Streamlit, raise shared monitor with Maidwell, drop `AUTO_SUSPEND` to 60s.
+- [x] **Dave's "would 5/day have helped?" answered (22 Sep).** No — the cap wasn't reached because no prompted cards were generated. With the fix, prompted cards score 1.0 and take slot #1 under the existing 3-card cap.
+- [x] **Pre-flight check for 23 Sep 06:00 run (22 Sep, `_local/preflight_23sep.py`).** All checks passed:
+  - All 5 CRT tasks STARTED; `RUN_ALERTS_PIPELINE_TASK` scheduled for 23 Sep 06:00 BST.
+  - CRT procedure `LAST_ALTERED=2026-09-22 10:12:58` (today's deployment).
+  - Staged zip `store_insight.zip` uploaded `2026-09-22 09:12:52 GMT` (3.4 MB, md5 `800b33b3…`).
+  - `PROMPTED_COMPLIANCE_V1`: `MAX_ALERT_DATE=2026-09-21`, 116 stores, 1,017,651 total rows, 284,012 in 28-day lookback window.
+  - `OSA_V1`: `MAX_DATE=2026-09-21`, 121 stores, 3.3M rows in last 3 days.
+  - `FEEDBACK_V1`: `MAX_DATE=2026-09-20`, 121 stores, 7,959 rows in last 7 days.
+  - `ANALYSIS_DATE=2026-09-23` has 0 existing rows — handler will NOT skip.
+  - Current CRT: `RUN_DATE=2026-09-22`, 357 rows, 120 stores, max 3 cards/store, 0 prompted.
+  - Store 634 currently has 3 reactive cards (all score 0.01). Tomorrow the prompted card (score 1.0) should take slot #1 and push out the weakest.
+  - DEV procedure also deployed (`LAST_ALTERED=2026-09-22 10:12:20`).
+- [x] **Refactor (answer to "monkey patches"):** PR #98 (`refactor/shared-load-sources`, now `114848a` — rebased onto `3755faa` post-#101, force-pushed 23 Sep). One `load_sources(session, windows, cfg, capabilities)` in `run_batch.py` returning every source frame; both `handler.run` and `run_single_date` call it. Dropped the regex-parity and 9-monkeypatch tests from PR #96; replaced with 3 cleaner tests (structural parity, key completeness, functional sentinel check with 3 monkeypatches). 856 passed / 2 skipped, Ruff clean. 23 Sep run validated (7 prompted cards incl. 634) — **ready for Dan to merge**.
+- [ ] **Deploy PR #98 to DEV and CRT** after Dan merges.
+- [x] **Safe-by-default CLI (PR #100).** Dan approved and merged (22 Sep). Branch `feat/safe-by-default-cli` (commit `5413c6c` on `d9d569e`), 3 files changed:
+  - `run_batch.py`: default CLI run = dry run → full pipeline + local JSON (`alerts_<client>_<date>.json`), no Snowflake write. `--write` required for any table write; CRT canonical tables refused at preflight. `--overwrite`/`--write-secondary-results` require `--write`. `--full-replace` removed entirely (Dan asked). `--output-json` overrides default path. `--deterministic` dumps raw/enriched signals.
+  - `test_deploy_daily.py`: 6 new tests (flag deps, dry-run JSON, write-mode, defaults, handler separation).
+  - `test_run_batch_write_safety.py`: updated existing test to include `--write`.
+  - SP handler path untouched. 852 passed, 2 skipped, Ruff clean.
+  - **Also resolved:** Dan confirmed `eastofengland_dev` adapters not needed for safety — the safe-by-default CLI handles it.
+  - **Note:** PR #98 (`refactor/shared-load-sources`) was rebased onto `189867e` (post-#100 merge) and force-pushed as `4c2248c`. All 853 tests pass on the rebased branch. Ready for Dan to merge after 23 Sep run validates.
+- [ ] **Worktree housekeeping (still needed):**
+  - [ ] Prune the stale `kpi_api_breakdown_sync` worktree that holds the `main` branch at `da84653`. Then `git branch -f main 4d70468` so guardrails can check out `main` properly.
+  - [ ] Prune the remaining 20 stale worktrees (old PR review/sync trees at detached commits). Verify none have uncommitted work first: `for w in $(git worktree list --porcelain | grep '^worktree' | awk '{print $2}'); do echo "=== $w ==="; git -C "$w" status -s; done`.
+  - [ ] **`deploy.py` `→` crash — raise tiny fix PR.** Reapplied the `→`→`->` fix 23 Sep after it killed a real DEV deploy (`UnicodeEncodeError` cp1252 mid-run, after upload, before SP registration). Currently uncommitted in the guardrails worktree — should land properly.
+- [x] **Answer to Dave's "would 5/day have helped?"**: answered and sent (22 Sep). See above.
+- [x] Sent V0.8 update to Cornelious/Imran; Imran confirmed store 204 in CRT returns only `OSA_STORE_ACTIONABLE` and `COMPLIANCE` cards — no `PROMPTED_MARKDOWN_COMPLIANCE`, consistent with detectors disabled. Store 204 in CRT on 21 Sep: 2 × `OSA_STORE_ACTIONABLE`, 1 × `COMPLIANCE`.
+- [ ] Confirm with Cornelious/Imran: (a) store 479 `OSA_BIG_DROP` heatmap shows 7 dates ending on `latest_date`; (b) prompted-markdown cards render correctly in DEV (check before 07:00 clone); (c) To Do / In Progress / Completed behaviour unchanged.
+- [ ] Investigate the VS_CHAIN-only `OSA_STORE_ACTIONABLE` card rendering issue: store 204 BEER/LAGER card shows old/simple style because `trigger_types: ["VS_CHAIN"]` has null WOW fields. Dan identified; Cornelious confirmed API gates evidence on WOW field presence. Fix is API/UI-side: render expanded evidence for all `OSA_STORE_ACTIONABLE` cards, not only WOW-triggered ones.
+- [ ] Stage housekeeping (low priority): two July `tmp*.zip` files remain under `@STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE_STAGE/store_insight.zip/`; unused by the SP `IMPORTS`. Remove only with Dan's agreement.
+- [x] PR #90 enablement path complete: source dedup in PR #93, detector enablement in PR #94, API/UI contract updated in `SNOWFLAKE_CONTRACT_FOR_API_UI_V0.8.md`. Dan merged both PRs; CRT deployed 21 Sep 14:05.
+- [x] **Full Snowflake validation (21 Sep, 12 tests):** `guardrails/_local/validate_prompted_compliance.py` — all 12 passed:
+  - Source view: 0 duplicate grain groups, 1,007,970 rows, 116 stores, UPC is VARCHAR, no nulls in required columns.
+  - Daily volume: stable 9,164–10,990 rows/day across last 14 days, no anomalous spikes.
+  - DEV cards: 6 `PROMPTED_MARKDOWN_COMPLIANCE` across 6 stores, all ALERT_IDs unique, TYPE=Compliance, SORT_VALUE=1.0, correct labels.
+  - SIGNAL_JSON: all required fields present; WOW-triggered cards have `last_week_compliance_rate` and `wow_change_pp`; VS_CHAIN-only cards have them null.
+  - FACTS_JSON: all 6 cards have 7 daily rows, up to 3 departments, complete driver assessment.
+  - Narratives: WOW stores (471, 204, 209) correctly say "dropped"; VS_CHAIN-only stores (634, 240, 282) say "Compliance is X% this week" — no false direction claims.
+  - CRT: 0 prompted cards in latest run (correct, pre-22 Sep 06:00); all 5 tasks STARTED.
+- [x] Updated `store_insight_api/SNOWFLAKE_CONTRACT_FOR_API_UI_V0.9.md`: deployment updated to 22 Sep `4d70468` (PRs #89–#94 + #96), first prompted run corrected to 23 Sep 06:00, CRT run stats `RUN_DATE=2026-09-22` (357/120).
+- [x] **Local worktree reset to `main` `f0d39d9` (21 Sep).** Stale in-progress merge from PR #91 aborted. Both worktrees (main and guardrails) now match `origin/main`. Untracked local files (PRDs, meeting notes, scripts) kept.
 
 ## Current status — 2026-09-12
 
@@ -988,7 +1400,7 @@ on small feature branches off the merged `main` — no more stacking on the inte
 - [x] Dan confirmed at 12:01 that store 239 had moved all three cards that morning and instructed: "Fair enough, don't change anything." Keep the existing rule: up to three fresh eligible To Do cards per daily run; do not add continuous same-day replenishment.
 - [x] No pipeline, API, UI, PRD or contract change required for this report.
 - [x] **Source-control alignment:** deployed follow-up commits `c3b6dd2`, `fcc59c6`, `bda27c0`, and `ff56104` merged to `main` through PR #89 (`220d4f4`).
-- [ ] **API contract alignment:** contract commits `ddd11da`, `df2f95d`, `fb8c22f`, and `3166814` remain on `fix/dev-reclone-after-rebuild`; API `origin/main` has moved ahead by three commits. Refresh the branch and open/merge a focused documentation PR.
+- [ ] **API contract alignment:** contract commits `ddd11da`, `df2f95d`, `fb8c22f`, and `3166814` remain on `fix/dev-reclone-after-rebuild`; API `origin/main` has moved ahead by three commits. `SNOWFLAKE_CONTRACT_FOR_API_UI_V0.8.md` (18 Sep deployment notes, prompted-markdown not-live section) is also uncommitted there. Refresh the branch, commit V0.8, and open/merge a focused documentation PR.
 
 ## 2026-09-18 — Clearer source-quality monitoring (Dan approved)
 

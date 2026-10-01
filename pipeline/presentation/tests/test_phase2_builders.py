@@ -1,14 +1,27 @@
-"""Pending acceptance tests for the Phase 2 presentation builders.
+"""Acceptance tests for the Phase 2 presentation builders.
 
-These tests are skipped until Imran and Cornelious approve the widget shapes in
-`docs/presentation-phase2-design.md`. Once approved, the skip markers can be
-removed and the corresponding builder functions implemented.
+These tests exercise the five remaining fallback signal types now that Imran has
+confirmed the widget shapes in `docs/presentation-phase2-design.md`.
 """
 from __future__ import annotations
 
 import json
 
-import pytest
+from store_insight.pipeline.presentation.builders.markdown_override import (
+    build_markdown_override_presentation,
+)
+from store_insight.pipeline.presentation.builders.markdown_sku import (
+    build_markdown_sku_presentation,
+)
+from store_insight.pipeline.presentation.builders.osa_big_drop import (
+    build_osa_big_drop_presentation,
+)
+from store_insight.pipeline.presentation.builders.osa_recurring_slot import (
+    build_osa_recurring_slot_presentation,
+)
+from store_insight.pipeline.presentation.builders.prompted_markdown_compliance import (
+    build_prompted_markdown_compliance_presentation,
+)
 
 
 # -----------------------------------------------------------------------------
@@ -91,12 +104,7 @@ PROMPTED_MARKDOWN_COMPLIANCE_EXPECTED = {
 }
 
 
-@pytest.mark.skip(reason="widget shapes pending Imran/Cornelious approval")
 def test_prompted_markdown_compliance_presentation():
-    from store_insight.pipeline.presentation.builders.prompted_markdown_compliance import (
-        build_prompted_markdown_compliance_presentation,
-    )
-
     pres = build_prompted_markdown_compliance_presentation(PROMPTED_MARKDOWN_COMPLIANCE_SIGNAL, {})
     assert json.loads(pres.model_dump_json()) == PROMPTED_MARKDOWN_COMPLIANCE_EXPECTED
 
@@ -170,6 +178,7 @@ OSA_BIG_DROP_EXPECTED = {
             "type": "matrix",
             "id": "day_period_grid",
             "title": "Lost sales by day and period",
+            "subtitle": None,
             "columns": [
                 {"key": "morning", "label": "Morning"},
                 {"key": "afternoon", "label": "Afternoon"},
@@ -191,7 +200,7 @@ OSA_BIG_DROP_EXPECTED = {
             "id": "ppg_lsv",
             "title": "Worst performing PPGs",
             "subtitle": "Store-controlled lost sales this week",
-            "items": [{"label": "HAND ROLLING TOBACCO", "value": 28.97}],
+            "items": [{"label": "HAND ROLLING TOBACCO", "value": 28.97, "secondary_label": None}],
             "format": "currency",
         },
         {
@@ -208,12 +217,7 @@ OSA_BIG_DROP_EXPECTED = {
 }
 
 
-@pytest.mark.skip(reason="widget shapes pending Imran/Cornelious approval")
 def test_osa_big_drop_presentation():
-    from store_insight.pipeline.presentation.builders.osa_big_drop import (
-        build_osa_big_drop_presentation,
-    )
-
     pres = build_osa_big_drop_presentation(OSA_BIG_DROP_SIGNAL, {})
     assert json.loads(pres.model_dump_json()) == OSA_BIG_DROP_EXPECTED
 
@@ -264,11 +268,11 @@ OSA_RECURRING_SLOT_EXPECTED = {
             "title": "Slot lost sales history",
             "subtitle": "Last 10 weeks",
             "categories": [
-                {"label": "2026-W35"},
-                {"label": "2026-W36"},
-                {"label": "2026-W37"},
-                {"label": "2026-W38"},
-                {"label": "2026-W39"},
+                {"label": "2026-W35", "date": None},
+                {"label": "2026-W36", "date": None},
+                {"label": "2026-W37", "date": None},
+                {"label": "2026-W38", "date": None},
+                {"label": "2026-W39", "date": None},
             ],
             "series": [{"name": "Lost sales value", "data": [7.25, 13.0, 7.6, 56.85, 45.86]}],
             "format": "currency",
@@ -279,11 +283,11 @@ OSA_RECURRING_SLOT_EXPECTED = {
             "title": "Slot OSA history",
             "subtitle": "Last 10 weeks",
             "categories": [
-                {"label": "2026-W35"},
-                {"label": "2026-W36"},
-                {"label": "2026-W37"},
-                {"label": "2026-W38"},
-                {"label": "2026-W39"},
+                {"label": "2026-W35", "date": None},
+                {"label": "2026-W36", "date": None},
+                {"label": "2026-W37", "date": None},
+                {"label": "2026-W38", "date": None},
+                {"label": "2026-W39", "date": None},
             ],
             "series": [{"name": "OSA %", "data": [92.72, 82.62, 89.71, 15.05, 11.75]}],
             "format": "percentage",
@@ -304,12 +308,7 @@ OSA_RECURRING_SLOT_EXPECTED = {
 }
 
 
-@pytest.mark.skip(reason="widget shapes pending Imran/Cornelious approval")
 def test_osa_recurring_slot_presentation():
-    from store_insight.pipeline.presentation.builders.osa_recurring_slot import (
-        build_osa_recurring_slot_presentation,
-    )
-
     pres = build_osa_recurring_slot_presentation(OSA_RECURRING_SLOT_SIGNAL, {})
     assert json.loads(pres.model_dump_json()) == OSA_RECURRING_SLOT_EXPECTED
 
@@ -351,6 +350,7 @@ MARKDOWN_OVERRIDE_EXPECTED = {
             "type": "ranked_list",
             "id": "override_departments",
             "title": "Departments by override rate",
+            "subtitle": None,
             "items": [
                 {"label": "CANNED FISH", "value": 50.0, "secondary_label": "2/4"},
                 {"label": "CANNED & DRIED VEGETABLES", "value": 44.44, "secondary_label": "4/9"},
@@ -362,12 +362,7 @@ MARKDOWN_OVERRIDE_EXPECTED = {
 }
 
 
-@pytest.mark.skip(reason="widget shapes pending Imran/Cornelious approval")
 def test_markdown_override_presentation():
-    from store_insight.pipeline.presentation.builders.markdown_override import (
-        build_markdown_override_presentation,
-    )
-
     pres = build_markdown_override_presentation(MARKDOWN_OVERRIDE_SIGNAL, {})
     assert json.loads(pres.model_dump_json()) == MARKDOWN_OVERRIDE_EXPECTED
 
@@ -403,7 +398,7 @@ MARKDOWN_SKU_EXPECTED = {
         {
             "type": "stat",
             "id": "markdown_request_count",
-            "title": "Markdown requests (last 4 weeks)",
+            "title": "Markdown requests (last 5 weeks)",
             "value": 14,
             "format": "number",
         },
@@ -411,6 +406,7 @@ MARKDOWN_SKU_EXPECTED = {
             "type": "line_chart",
             "id": "request_history",
             "title": "Weekly markdown requests",
+            "subtitle": None,
             "categories": [
                 {"label": "2026-08-24", "date": "2026-08-24"},
                 {"label": "2026-08-31", "date": "2026-08-31"},
@@ -425,6 +421,7 @@ MARKDOWN_SKU_EXPECTED = {
             "type": "line_chart",
             "id": "avg_markdown_history",
             "title": "Weekly average markdown depth",
+            "subtitle": None,
             "categories": [
                 {"label": "2026-08-24", "date": "2026-08-24"},
                 {"label": "2026-08-31", "date": "2026-08-31"},
@@ -439,11 +436,6 @@ MARKDOWN_SKU_EXPECTED = {
 }
 
 
-@pytest.mark.skip(reason="widget shapes pending Imran/Cornelious approval")
 def test_markdown_sku_presentation():
-    from store_insight.pipeline.presentation.builders.markdown_sku import (
-        build_markdown_sku_presentation,
-    )
-
     pres = build_markdown_sku_presentation(MARKDOWN_SKU_SIGNAL, {})
     assert json.loads(pres.model_dump_json()) == MARKDOWN_SKU_EXPECTED
