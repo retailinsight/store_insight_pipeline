@@ -86,6 +86,7 @@ def test_trend_gatherer_builds_panels(local_session):
     assert facts['panel_c_departments'][0]['department'] == 'BAKERY'
     assert facts['panel_c_departments'][0]['waste_value'] == 75  # 7*10 + 5 duplicate bonus
     assert facts['panel_d_items'][0]['item_description'] == 'White Bloomer'
+    assert facts['panel_d_items'][0]['upc'] == 'UPC1'
 
 
 def test_trend_gatherer_omits_prompted_panel_when_no_data(local_session):
@@ -130,3 +131,4 @@ def test_spike_gatherer_flags_today_bar(local_session):
     assert all(p.get('is_today') is not True for p in panel_a[:-1])
     assert result[100]['panel_c_departments'][0]['department'] == 'BAKERY'
     assert result[100]['panel_d_items'][0]['item_description'] == 'White Bloomer'
+    assert result[100]['panel_d_items'][0]['upc'] == 'UPC1'

@@ -88,7 +88,11 @@ def build_binned_waste_trend_presentation(signal: dict, narrative: dict) -> Aler
                 title='By item',
                 subtitle='Waste value by item',
                 items=[
-                    RankedListItem(label=str(row['item_description']), value=float(row['waste_value']))
+                    RankedListItem(
+                        label=str(row['item_description']),
+                        value=float(row['waste_value']),
+                        secondary_label=row.get('upc'),
+                    )
                     for row in panel_d
                 ],
                 format='currency',

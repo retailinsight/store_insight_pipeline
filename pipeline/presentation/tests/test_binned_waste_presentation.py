@@ -26,7 +26,7 @@ def _trend_signal():
                 {'department': 'BAKERY', 'waste_value': 50.0},
             ],
             'panel_d_items': [
-                {'item_description': 'White Bloomer', 'waste_value': 25.0},
+                {'item_description': 'White Bloomer', 'waste_value': 25.0, 'upc': 'UPC1'},
             ],
         },
     }
@@ -49,7 +49,7 @@ def _spike_signal():
                 {'department': 'BAKERY', 'waste_value': 100.0},
             ],
             'panel_d_items': [
-                {'item_description': 'White Bloomer', 'waste_value': 100.0},
+                {'item_description': 'White Bloomer', 'waste_value': 100.0, 'upc': 'UPC1'},
             ],
         },
     }
@@ -81,3 +81,19 @@ def test_spike_presentation_flags_today_bar():
         {'label': 'Sunday', 'date': '2026-10-04'},
         {'label': 'Monday', 'date': '2026-10-05'},
     ]
+
+
+def test_item_ranked_list_includes_upc_as_secondary_label():
+    presentation = build_binned_waste_presentation(_trend_signal(), {})
+    data = json.loads(presentation.model_dump_json())
+    item_list = next(w for w in data['widgets'] if w['id'] == 'items')
+    assert item_list['items'][0]['secondary_label'] == 'UPC1'
+
+
+def test_item_ranked_list_secondary_label_is_null_when_upc_missing():
+    signal = _trend_signal()
+    del signal['facts']['panel_d_items'][0]['upc']
+    presentation = build_binned_waste_presentation(signal, {})
+    data = json.loads(presentation.model_dump_json())
+    item_list = next(w for w in data['widgets'] if w['id'] == 'items')
+    assert item_list['items'][0]['secondary_label'] is None
