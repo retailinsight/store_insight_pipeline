@@ -12,6 +12,7 @@ from store_insight.pipeline.presentation.builders.osa_store_actionable import (
 )
 from store_insight.pipeline.presentation.models import (
     AlertPresentation,
+    LineChartWidget,
     MatrixWidget,
     RankedListWidget,
     StatWidget,
@@ -38,6 +39,20 @@ def test_osa_store_actionable_includes_osa_stat_and_matrix():
                     "total_osa_pct": 95.0,
                 },
             ],
+            "ppg_lsv_changes": [
+                {
+                    "ppg": "LAGER PREM CANS",
+                    "latest_week_lsv": {"store_controlled": 104.6},
+                },
+            ],
+            "item_lsv_changes": [
+                {
+                    "item_name": "STELLA ARTOIS CANS",
+                    "eans": ["5014379012866"],
+                    "upcs": [],
+                    "latest_week_lsv": {"store_controlled": 75.44},
+                },
+            ],
         },
     }
     pres = build_osa_store_actionable_presentation(signal, {})
@@ -46,9 +61,14 @@ def test_osa_store_actionable_includes_osa_stat_and_matrix():
     matrix = next(w for w in pres.widgets if isinstance(w, MatrixWidget))
     assert matrix.id == "day_period_grid"
     assert matrix.rows[0].label == "Friday"
+    assert matrix.rows[0].date == "2026-09-18"
+    ranked = [w for w in pres.widgets if isinstance(w, RankedListWidget)]
+    assert [w.id for w in ranked] == ["ppg_lsv_changes", "item_lsv_changes"]
+    assert ranked[0].items[0].value == 104.6
+    assert ranked[1].items[0].secondary_label == "5014379012866"
 
 
-def test_compliance_includes_stat_matrix_and_ranked_list():
+def test_compliance_includes_stat_line_chart_and_ranked_list():
     signal = {
         "signal_type": "COMPLIANCE",
         "facts": {
@@ -67,7 +87,12 @@ def test_compliance_includes_stat_matrix_and_ranked_list():
     }
     pres = build_compliance_presentation(signal, {})
     assert any(w.id == "latest_compliance_rate" for w in pres.widgets if isinstance(w, StatWidget))
-    assert any(w.id == "trailing_7d_tf" for w in pres.widgets if isinstance(w, MatrixWidget))
+    chart = next(w for w in pres.widgets if isinstance(w, LineChartWidget))
+    assert chart.id == "trailing_7d_tf"
+    assert chart.categories[0].label == "Friday"
+    assert chart.categories[0].date == "2026-09-18"
+    assert len(chart.series) == 1
+    assert chart.series[0].data == [10.0, 4.0]
     ranked = next(w for w in pres.widgets if isinstance(w, RankedListWidget))
     assert ranked.id == "tf_rate_by_alert_type"
 

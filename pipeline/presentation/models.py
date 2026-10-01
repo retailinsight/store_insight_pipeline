@@ -25,6 +25,7 @@ class MatrixColumn(BaseModel):
 
 class MatrixRow(BaseModel):
     label: str
+    date: str | None = None
     values: dict[str, float]
 
 
@@ -41,6 +42,7 @@ class MatrixWidget(BaseModel):
 class RankedListItem(BaseModel):
     label: str
     value: float
+    secondary_label: str | None = None
 
 
 class RankedListWidget(BaseModel):
@@ -50,6 +52,11 @@ class RankedListWidget(BaseModel):
     subtitle: str | None = None
     items: list[RankedListItem]
     format: Literal["currency", "percentage", "number"]
+
+
+class ChartCategory(BaseModel):
+    label: str
+    date: str | None = None
 
 
 class ChartSeries(BaseModel):
@@ -62,7 +69,7 @@ class BarChartWidget(BaseModel):
     id: str
     title: str
     subtitle: str | None = None
-    categories: list[str]
+    categories: list[ChartCategory]
     series: list[ChartSeries]
     format: Literal["currency", "percentage", "number"]
     highlighted_index: int | None = None
@@ -73,7 +80,7 @@ class LineChartWidget(BaseModel):
     id: str
     title: str
     subtitle: str | None = None
-    categories: list[str]
+    categories: list[ChartCategory]
     series: list[ChartSeries]
     format: Literal["currency", "percentage", "number"]
 

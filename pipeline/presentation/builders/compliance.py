@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from store_insight.pipeline.presentation.models import (
     AlertPresentation,
-    MatrixColumn,
-    MatrixRow,
-    MatrixWidget,
+    ChartCategory,
+    ChartSeries,
+    LineChartWidget,
     RankedListItem,
     RankedListWidget,
     StatWidget,
@@ -36,26 +36,23 @@ def build_compliance_presentation(signal: dict, narrative: dict) -> AlertPresent
     # Trailing 7-day worked/generated matrix
     trailing = facts.get("trailing_7d_tf", [])
     if trailing:
-        columns = [
-            MatrixColumn(key="worked", label="Alerts worked"),
-            MatrixColumn(key="generated", label="Alerts generated"),
-        ]
-        rows = [
-            MatrixRow(
-                label=f"{day.get('day')} {day.get('date')}",
-                values={
-                    "worked": float(day.get("worked", 0)),
-                    "generated": float(day.get("tf_count", day.get("generated", 0))),
-                },
-            )
-            for day in trailing
-        ]
         widgets.append(
-            MatrixWidget(
+            LineChartWidget(
                 id="trailing_7d_tf",
-                title="Tick & flick over the last 7 days",
-                columns=columns,
-                rows=rows,
+                title="Alerts completed in less than 10 seconds — last 7 days",
+                categories=[
+                    ChartCategory(label=str(day.get("day", "")), date=day.get("date"))
+                    for day in trailing
+                ],
+                series=[
+                    ChartSeries(
+                        name="Alerts completed in less than 10 seconds",
+                        data=[
+                            float(day.get("tf_count", day.get("generated", 0)))
+                            for day in trailing
+                        ],
+                    )
+                ],
                 format="number",
             )
         )
