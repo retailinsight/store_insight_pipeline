@@ -55,10 +55,12 @@ def build_markdown_override_presentation(signal: dict, narrative: dict) -> Alert
 
     scored = sorted(scored, key=lambda r: r["risk_score"], reverse=True)
     if scored:
+        top = scored[0]
         widgets.append(
             RankedListWidget(
                 id="override_departments",
                 title="Worst performing departments",
+                subtitle=f"{top['dept']}: {top['compliant']} of {top['total']} compliant ({top['compliance_pct']:.1f}%)",
                 items=[
                     RankedListItem(
                         label=str(row["dept"]),
