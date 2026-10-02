@@ -59,11 +59,10 @@ def test_osa_store_actionable_includes_lost_sales_stat_and_matrix():
     pres = build_osa_store_actionable_presentation(signal, {})
     assert pres.schema_version == 1
     stats = {w.id: w for w in pres.widgets if isinstance(w, StatWidget)}
+    assert len(stats) == 1
     assert stats["store_controlled_lost_sales"].value == 216.83
     assert stats["store_controlled_lost_sales"].format == "currency"
     assert stats["store_controlled_lost_sales"].title == "Lost sales in BEER/LAGER & CIDER in the last 7 days"
-    assert stats["lost_sales_vs_last_week"].value == -84.28
-    assert stats["lost_sales_vs_last_week"].format == "currency"
     matrix = next(w for w in pres.widgets if isinstance(w, MatrixWidget))
     assert matrix.id == "day_period_grid"
     assert matrix.title == "Lost sales in BEER/LAGER & CIDER by time of day"

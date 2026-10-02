@@ -31,18 +31,6 @@ def build_osa_store_actionable_presentation(signal: dict, narrative: dict) -> Al
         )
     )
 
-    # Week-on-week movement in store-controlled lost sales
-    lsv_change = signal.get("lsv_change") or {}
-    store_lsv_change = float(lsv_change.get("store_controlled") or 0)
-    widgets.append(
-        StatWidget(
-            id="lost_sales_vs_last_week",
-            title="vs last week",
-            value=round(store_lsv_change, 2),
-            format="currency",
-        )
-    )
-
     # Day/period grid: rows are days, columns are morning/afternoon/evening,
     # values are store-controlled lost sales
     grid = facts.get("day_period_grid", [])
