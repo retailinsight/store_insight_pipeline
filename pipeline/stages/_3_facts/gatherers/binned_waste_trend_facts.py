@@ -73,15 +73,22 @@ def _store_day_totals(wastage, store_ids):
 
 
 def _build_panel_a(rows, store_id: int, start: str, end: str) -> list[dict]:
-    points = []
+    by_date: dict[str, float] = {}
     for r in rows:
         if int(r['STORE_ID']) != store_id:
             continue
         d = _iso(r['DATE'])
         if start <= d <= end:
-            points.append({'date': d, 'day': _day_name(d), 'waste_value': round(float(r['WASTE_VALUE'] or 0), 2)})
-    # Sort chronologically; days with data only.
-    points = sorted(points, key=lambda x: x['date'])
+            by_date[d] = round(float(r['WASTE_VALUE'] or 0), 2)
+
+    start_date = dt.date.fromisoformat(start)
+    end_date = dt.date.fromisoformat(end)
+    points = []
+    current = start_date
+    while current <= end_date:
+        d = current.isoformat()
+        points.append({'date': d, 'day': _day_name(d), 'waste_value': by_date.get(d, 0.0)})
+        current += dt.timedelta(days=1)
     return points
 
 
@@ -97,10 +104,17 @@ def _build_panel_b(prompted_rows, store_id: int, start: str, end: str) -> list[d
             by_date[d]['actioned'] += int(bool(compliant is True or compliant == 1 or str(compliant).lower() == 'true'))
     if not by_date:
         return []
-    return [
-        {'date': d, 'day': _day_name(d), 'checks_due': data['due'], 'actioned_on_time': data['actioned']}
-        for d, data in sorted(by_date.items())
-    ]
+
+    start_date = dt.date.fromisoformat(start)
+    end_date = dt.date.fromisoformat(end)
+    points = []
+    current = start_date
+    while current <= end_date:
+        d = current.isoformat()
+        data = by_date.get(d, {'due': 0, 'actioned': 0})
+        points.append({'date': d, 'day': _day_name(d), 'checks_due': data['due'], 'actioned_on_time': data['actioned']})
+        current += dt.timedelta(days=1)
+    return points
 
 
 def _department_breakdown(wastage, item_hierarchy, store_ids, start: str, end: str, top_n: int):

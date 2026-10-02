@@ -69,19 +69,27 @@ def _store_day_totals(wastage, store_ids):
 def _build_panel_a(rows, store_id: int, analysis_date: dt.date) -> list[dict]:
     end = analysis_date.isoformat()
     start = (analysis_date - dt.timedelta(days=6)).isoformat()
-    points = []
+    by_date: dict[str, float] = {}
     for r in rows:
         if int(r['STORE_ID']) != store_id:
             continue
         d = _iso(r['DATE'])
         if start <= d <= end:
-            points.append({
-                'date': d,
-                'day': _day_name(d),
-                'waste_value': round(float(r['WASTE_VALUE'] or 0), 2),
-                'is_today': d == end,
-            })
-    return sorted(points, key=lambda x: x['date'])
+            by_date[d] = round(float(r['WASTE_VALUE'] or 0), 2)
+
+    points = []
+    current = dt.date.fromisoformat(start)
+    end_date = dt.date.fromisoformat(end)
+    while current <= end_date:
+        d = current.isoformat()
+        points.append({
+            'date': d,
+            'day': _day_name(d),
+            'waste_value': by_date.get(d, 0.0),
+            'is_today': d == end,
+        })
+        current += dt.timedelta(days=1)
+    return points
 
 
 def _build_panel_b(prompted_rows, store_id: int, analysis_date: dt.date) -> list[dict]:
@@ -98,10 +106,16 @@ def _build_panel_b(prompted_rows, store_id: int, analysis_date: dt.date) -> list
             by_date[d]['actioned'] += int(bool(compliant is True or compliant == 1 or str(compliant).lower() == 'true'))
     if not by_date:
         return []
-    return [
-        {'date': d, 'day': _day_name(d), 'checks_due': data['due'], 'actioned_on_time': data['actioned']}
-        for d, data in sorted(by_date.items())
-    ]
+
+    points = []
+    current = dt.date.fromisoformat(start)
+    end_date = dt.date.fromisoformat(end)
+    while current <= end_date:
+        d = current.isoformat()
+        data = by_date.get(d, {'due': 0, 'actioned': 0})
+        points.append({'date': d, 'day': _day_name(d), 'checks_due': data['due'], 'actioned_on_time': data['actioned']})
+        current += dt.timedelta(days=1)
+    return points
 
 
 def _department_breakdown(wastage, item_hierarchy, store_ids, analysis_date: dt.date, top_n: int):
