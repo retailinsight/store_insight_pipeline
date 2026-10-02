@@ -160,20 +160,6 @@ OSA_BIG_DROP_EXPECTED = {
     "schema_version": 1,
     "widgets": [
         {
-            "type": "stat",
-            "id": "this_week_osa",
-            "title": "OSA on drop day",
-            "value": 89.14,
-            "format": "percentage",
-        },
-        {
-            "type": "stat",
-            "id": "osa_drop_pp",
-            "title": "OSA drop",
-            "value": -10.86,
-            "format": "number",
-        },
-        {
             "type": "matrix",
             "id": "day_period_grid",
             "title": "Lost sales by day and period",

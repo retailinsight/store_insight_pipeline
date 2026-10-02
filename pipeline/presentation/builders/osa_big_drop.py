@@ -8,7 +8,6 @@ from store_insight.pipeline.presentation.models import (
     MatrixWidget,
     RankedListItem,
     RankedListWidget,
-    StatWidget,
 )
 
 
@@ -16,28 +15,6 @@ def build_osa_big_drop_presentation(signal: dict, narrative: dict) -> AlertPrese
     """Build the widget list for an OSA_BIG_DROP alert card."""
     facts = signal.get("facts", {})
     widgets = []
-
-    this_week = signal.get("this_week_osa") or facts.get("this_week_osa")
-    if this_week is not None:
-        widgets.append(
-            StatWidget(
-                id="this_week_osa",
-                title="OSA on drop day",
-                value=float(this_week),
-                format="percentage",
-            )
-        )
-
-    wow = signal.get("wow_drift_pp") or facts.get("wow_drift_pp")
-    if wow is not None:
-        widgets.append(
-            StatWidget(
-                id="osa_drop_pp",
-                title="OSA drop",
-                value=float(wow),
-                format="number",
-            )
-        )
 
     grid = facts.get("day_period_grid", [])
     if grid:
