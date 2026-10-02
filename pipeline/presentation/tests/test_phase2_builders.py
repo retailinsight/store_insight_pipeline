@@ -52,24 +52,10 @@ PROMPTED_MARKDOWN_COMPLIANCE_EXPECTED = {
     "schema_version": 1,
     "widgets": [
         {
-            "type": "stat",
-            "id": "this_week_compliance_rate",
-            "title": "On-time compliance",
-            "value": 73.41,
-            "format": "percentage",
-        },
-        {
-            "type": "stat",
-            "id": "wow_change_pp",
-            "title": "Change vs last week",
-            "value": -1.4,
-            "format": "number",
-        },
-        {
-            "type": "line_chart",
-            "id": "daily_compliance",
-            "title": "On-time compliance by day",
-            "subtitle": "Last 7 days",
+            "type": "bar_chart",
+            "id": "daily_compliance_bar",
+            "title": "Compliance % — last 7 days",
+            "subtitle": "Performance by day — last 7 days",
             "categories": [
                 {"label": "Monday", "date": "2026-09-21"},
                 {"label": "Tuesday", "date": "2026-09-22"},
@@ -81,23 +67,38 @@ PROMPTED_MARKDOWN_COMPLIANCE_EXPECTED = {
             ],
             "series": [
                 {
-                    "name": "On-time compliance %",
+                    "name": "Compliance %",
                     "data": [65.17, 82.2, 44.49, 74.48, 75.33, 100.0, 90.95],
                 }
             ],
             "format": "percentage",
+            "highlighted_index": None,
         },
         {
-            "type": "ranked_list",
-            "id": "worst_departments",
-            "title": "Worst departments",
-            "subtitle": "By on-time compliance %",
-            "items": [
-                {"label": "MEAT PRODUCTS", "value": 20.0, "secondary_label": "1/5"},
-                {"label": "BREAKFAST CEREALS", "value": 22.22, "secondary_label": "10/45"},
-                {"label": "BEER/LAGER & CIDER", "value": 24.14, "secondary_label": "21/87"},
+            "type": "line_chart",
+            "id": "checks_due_vs_actioned",
+            "title": "Checks due vs actioned on time — last 7 days",
+            "subtitle": "Performance by day — last 7 days",
+            "categories": [
+                {"label": "Monday", "date": "2026-09-21"},
+                {"label": "Tuesday", "date": "2026-09-22"},
+                {"label": "Wednesday", "date": "2026-09-23"},
+                {"label": "Thursday", "date": "2026-09-24"},
+                {"label": "Friday", "date": "2026-09-25"},
+                {"label": "Saturday", "date": "2026-09-26"},
+                {"label": "Sunday", "date": "2026-09-27"},
             ],
-            "format": "percentage",
+            "series": [
+                {
+                    "name": "Checks due",
+                    "data": [290.0, 309.0, 472.0, 482.0, 300.0, 329.0, 199.0],
+                },
+                {
+                    "name": "Actioned on time",
+                    "data": [189.0, 254.0, 210.0, 359.0, 226.0, 329.0, 181.0],
+                },
+            ],
+            "format": "number",
         },
     ],
 }

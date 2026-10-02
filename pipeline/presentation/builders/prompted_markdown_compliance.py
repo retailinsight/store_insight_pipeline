@@ -3,12 +3,10 @@ from __future__ import annotations
 
 from store_insight.pipeline.presentation.models import (
     AlertPresentation,
+    BarChartWidget,
     ChartCategory,
     ChartSeries,
     LineChartWidget,
-    RankedListItem,
-    RankedListWidget,
-    StatWidget,
 )
 
 
@@ -17,65 +15,44 @@ def build_prompted_markdown_compliance_presentation(signal: dict, narrative: dic
     facts = signal.get("facts", {})
     widgets = []
 
-    this_week = signal.get("this_week_compliance_rate") or facts.get("this_week_compliance_rate")
-    if this_week is not None:
-        widgets.append(
-            StatWidget(
-                id="this_week_compliance_rate",
-                title="On-time compliance",
-                value=float(this_week),
-                format="percentage",
-            )
-        )
-
-    wow = signal.get("wow_change_pp") or facts.get("wow_change_pp")
-    if wow is not None:
-        widgets.append(
-            StatWidget(
-                id="wow_change_pp",
-                title="Change vs last week",
-                value=float(wow),
-                format="number",
-            )
-        )
-
     daily = facts.get("daily_performance_last_7d", [])
     if daily:
+        categories = [
+            ChartCategory(label=str(day.get("day", "")), date=day.get("date"))
+            for day in daily
+        ]
         widgets.append(
-            LineChartWidget(
-                id="daily_compliance",
-                title="On-time compliance by day",
-                subtitle="Last 7 days",
-                categories=[
-                    ChartCategory(label=str(day.get("day", "")), date=day.get("date"))
-                    for day in daily
-                ],
+            BarChartWidget(
+                id="daily_compliance_bar",
+                title="Compliance % — last 7 days",
+                subtitle="Performance by day — last 7 days",
+                categories=categories,
                 series=[
                     ChartSeries(
-                        name="On-time compliance %",
+                        name="Compliance %",
                         data=[float(day.get("compliance_pct", 0)) for day in daily],
                     )
                 ],
                 format="percentage",
             )
         )
-
-    worst = facts.get("worst_departments_top3", [])
-    if worst:
         widgets.append(
-            RankedListWidget(
-                id="worst_departments",
-                title="Worst departments",
-                subtitle="By on-time compliance %",
-                items=[
-                    RankedListItem(
-                        label=str(dept.get("dept", "Unknown")),
-                        value=float(dept.get("compliance_pct", 0)),
-                        secondary_label=f"{dept.get('actioned_on_time', 0)}/{dept.get('prompts', 0)}",
-                    )
-                    for dept in worst
+            LineChartWidget(
+                id="checks_due_vs_actioned",
+                title="Checks due vs actioned on time — last 7 days",
+                subtitle="Performance by day — last 7 days",
+                categories=categories,
+                series=[
+                    ChartSeries(
+                        name="Checks due",
+                        data=[float(day.get("checks_due", 0)) for day in daily],
+                    ),
+                    ChartSeries(
+                        name="Actioned on time",
+                        data=[float(day.get("actioned_on_time", 0)) for day in daily],
+                    ),
                 ],
-                format="percentage",
+                format="number",
             )
         )
 
