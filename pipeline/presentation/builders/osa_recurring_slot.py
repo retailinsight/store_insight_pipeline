@@ -32,6 +32,10 @@ def build_osa_recurring_slot_presentation(signal: dict, narrative: dict) -> Aler
 
     slot_history = facts.get("slot_history", [])
     if slot_history:
+        dow_name = str(signal.get("dow_name") or "Slot").capitalize()
+        period = str(signal.get("period_label") or "").split("(")[0].strip().lower()
+        slot_desc = f"{dow_name} {period}".strip() if period else dow_name
+
         def _week_start(year: int, week: int) -> str:
             # ISO week date: %G = ISO year, %V = ISO week, %u = Monday
             return dt.datetime.strptime(f"{year}-W{week:02d}-1", "%G-W%V-%u").date().isoformat()
@@ -46,7 +50,7 @@ def build_osa_recurring_slot_presentation(signal: dict, narrative: dict) -> Aler
         widgets.append(
             LineChartWidget(
                 id="slot_lsv_history",
-                title="Slot lost sales history",
+                title=f"{slot_desc} lost sales",
                 subtitle="Last 10 weeks",
                 categories=categories,
                 series=[
@@ -61,7 +65,7 @@ def build_osa_recurring_slot_presentation(signal: dict, narrative: dict) -> Aler
         widgets.append(
             LineChartWidget(
                 id="slot_osa_history",
-                title="Slot OSA history",
+                title=f"{slot_desc} OSA",
                 subtitle="Last 10 weeks",
                 categories=categories,
                 series=[

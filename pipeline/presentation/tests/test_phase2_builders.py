@@ -227,7 +227,8 @@ def test_osa_big_drop_presentation():
 OSA_RECURRING_SLOT_SIGNAL = {
     "signal_type": "OSA_RECURRING_SLOT",
     "total_lsv": 94.01,
-    "avg_weekly_lsv": 16.79,
+    "dow_name": "Wednesday",
+    "period_label": "Evening (6pm-12am)",
     "repeat_item_details": [
         {"item_code": "29355", "item_description": "CP WHITE PARISIAN", "repeat_weeks": 8, "total_lsv": 35.17, "avg_weekly_lsv": 4.4},
         {"item_code": "29810", "item_description": "CP SAUSAGE ROLLS", "repeat_weeks": 4, "total_lsv": 31.05, "avg_weekly_lsv": 7.76},
@@ -257,7 +258,7 @@ OSA_RECURRING_SLOT_EXPECTED = {
         {
             "type": "line_chart",
             "id": "slot_lsv_history",
-            "title": "Slot lost sales history",
+            "title": "Wednesday evening lost sales",
             "subtitle": "Last 10 weeks",
             "categories": [
                 {"label": "W35", "date": "2026-08-24"},
@@ -272,7 +273,7 @@ OSA_RECURRING_SLOT_EXPECTED = {
         {
             "type": "line_chart",
             "id": "slot_osa_history",
-            "title": "Slot OSA history",
+            "title": "Wednesday evening OSA",
             "subtitle": "Last 10 weeks",
             "categories": [
                 {"label": "W35", "date": "2026-08-24"},
