@@ -1224,7 +1224,7 @@ def _generate_binned_waste(signal: dict) -> dict:
         recommended_parts.append(
             f"Binned Waste has risen {pct_change}% in the last 7 days from £{prior} to £{current}"
         )
-        issue = "Coach the team on the Markdown process and timings"
+        issue = "Coach the team on the Binned Waste process and timings"
 
     if 'SPIKE' in triggers:
         today_value = int(round(signal.get('today_value', 0)))

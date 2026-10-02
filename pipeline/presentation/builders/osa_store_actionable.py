@@ -17,31 +17,22 @@ def build_osa_store_actionable_presentation(signal: dict, narrative: dict) -> Al
 
     widgets = []
 
-    # Top-line stat: this week's total OSA for the store
-    this_week = facts.get("chain_store_this_week_osa")
-    if this_week is not None:
-        widgets.append(
-            StatWidget(
-                id="total_osa",
-                title="OSA",
-                value=float(this_week),
-                format="percentage",
-            )
-        )
+    dept = signal.get("department", "")
 
-    # Week-on-week movement
-    last_week = facts.get("chain_store_last_week_osa")
-    if last_week is not None and this_week is not None:
-        widgets.append(
-            StatWidget(
-                id="osa_wow_change",
-                title="OSA vs last week",
-                value=round(float(this_week) - float(last_week), 2),
-                format="percentage",
-            )
+    # Top-line stat: store-controlled lost sales this week
+    lsv = signal.get("this_week_lsv") or {}
+    store_lsv = float(lsv.get("store_controlled") or 0)
+    widgets.append(
+        StatWidget(
+            id="store_controlled_lost_sales",
+            title=f"Lost sales in {dept} in the last 7 days" if dept else "Lost sales in the last 7 days",
+            value=store_lsv,
+            format="currency",
         )
+    )
 
-    # Day/period grid: rows are days, columns are morning/afternoon/evening
+    # Day/period grid: rows are days, columns are morning/afternoon/evening,
+    # values are store-controlled lost sales
     grid = facts.get("day_period_grid", [])
     if grid:
         columns = [
@@ -63,7 +54,9 @@ def build_osa_store_actionable_presentation(signal: dict, narrative: dict) -> Al
                 key = "evening"
             else:
                 continue
-            rows_by_day.setdefault(label, {})[key] = float(entry.get("total_osa_pct", 0))
+            rows_by_day.setdefault(label, {})[key] = float(
+                (entry.get("lsv") or {}).get("store_controlled", 0)
+            )
 
         rows = [
             MatrixRow(label=day, date=dates_by_day[day], values=values)
@@ -73,10 +66,10 @@ def build_osa_store_actionable_presentation(signal: dict, narrative: dict) -> Al
             widgets.append(
                 MatrixWidget(
                     id="day_period_grid",
-                    title="OSA by day and period",
+                    title=f"Lost sales in {dept} by time of day" if dept else "Lost sales by time of day",
                     columns=columns,
                     rows=rows,
-                    format="percentage",
+                    format="currency",
                 )
             )
 
