@@ -26,11 +26,21 @@ def build_binned_waste_trend_presentation(signal: dict, narrative: dict) -> Aler
             for p in panel_a
         ]
         values = [float(p['waste_value']) for p in panel_a]
+        current = float(signal.get('current_7d_waste_value', 0) or 0)
+        prior = float(signal.get('prior_7d_waste_value', 0) or 0)
+        pct = float(signal.get('pct_change', 0) or 0)
+        if current or prior:
+            subtitle = (
+                f"£{current:.0f} this week vs £{prior:.0f} previous 7 days "
+                f"({'+' if pct >= 0 else ''}{pct:.0f}%)"
+            )
+        else:
+            subtitle = "Waste value by day"
         widgets.append(
             BarChartWidget(
                 id='waste_by_day',
                 title='Binned waste — last 7 days',
-                subtitle='Waste value by day',
+                subtitle=subtitle,
                 categories=categories,
                 series=[ChartSeries(name='Waste value', data=values)],
                 format='currency',
