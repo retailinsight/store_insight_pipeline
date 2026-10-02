@@ -337,12 +337,12 @@ MARKDOWN_OVERRIDE_EXPECTED = {
         {
             "type": "ranked_list",
             "id": "override_departments",
-            "title": "Departments by override rate",
+            "title": "Worst performing departments",
             "subtitle": None,
             "items": [
-                {"label": "CANNED FISH", "value": 50.0, "secondary_label": "2/4"},
-                {"label": "CANNED & DRIED VEGETABLES", "value": 44.44, "secondary_label": "4/9"},
-                {"label": "INTERNATIONAL", "value": 40.0, "secondary_label": "6/15"},
+                {"label": "INTERNATIONAL", "value": 60.0, "secondary_label": "9 out of 15 compliant"},
+                {"label": "CANNED & DRIED VEGETABLES", "value": 55.56, "secondary_label": "5 out of 9 compliant"},
+                {"label": "CANNED FISH", "value": 50.0, "secondary_label": "2 out of 4 compliant"},
             ],
             "format": "percentage",
         },

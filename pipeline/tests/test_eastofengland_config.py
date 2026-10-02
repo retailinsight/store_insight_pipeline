@@ -98,8 +98,8 @@ class TestEastOfEnglandEffectiveThresholds:
         cfg = _load()
         det_cfg = DetectorConfig.from_config(cfg.detector_config.model_dump())
 
-        assert det_cfg.min_override_chain_gap == 0.01
-        assert det_cfg.min_override_wow_increase == 0.01
+        assert det_cfg.min_override_chain_gap == 0.05
+        assert det_cfg.min_override_wow_increase == 0.05
         assert det_cfg.min_total_markdowns == 2
 
     def test_markdown_sku_effective_thresholds(self):
