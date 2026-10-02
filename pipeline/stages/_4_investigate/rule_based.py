@@ -202,9 +202,11 @@ def _generate_markdown_override(signal: dict) -> dict:
 
     if dept_bdwn:
         top = dept_bdwn[0]
+        top_compliance_pct = 100.0 - float(top.get("override_rate_pct", 0) or 0)
         issue = f'Coach your team on override decisions in {top["dept"]}.'
         action = (
             f'{top["overrides"]} of {overrides} overrides this week came from this department'
+            f' ({top_compliance_pct:.1f}% compliant)'
             + (f', against a chain average override rate of {chain_str}.' if chain_str else '.')
         )
     else:
