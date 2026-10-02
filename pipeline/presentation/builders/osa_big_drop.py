@@ -8,6 +8,7 @@ from store_insight.pipeline.presentation.models import (
     MatrixWidget,
     RankedListItem,
     RankedListWidget,
+    StatWidget,
 )
 
 
@@ -15,6 +16,18 @@ def build_osa_big_drop_presentation(signal: dict, narrative: dict) -> AlertPrese
     """Build the widget list for an OSA_BIG_DROP alert card."""
     facts = signal.get("facts", {})
     widgets = []
+
+    lsv = signal.get("this_week_lsv") or facts.get("this_week_lsv") or {}
+    drop_day = signal.get("latest_day") or "drop day"
+    if lsv:
+        widgets.append(
+            StatWidget(
+                id="lost_sales_on_drop_day",
+                title=f"Lost sales on {drop_day}",
+                value=float(lsv.get("store_controlled", 0)),
+                format="currency",
+            )
+        )
 
     grid = facts.get("day_period_grid", [])
     if grid:
