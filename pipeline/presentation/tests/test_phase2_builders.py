@@ -344,7 +344,7 @@ MARKDOWN_OVERRIDE_EXPECTED = {
             "type": "ranked_list",
             "id": "override_departments",
             "title": "Worst performing departments",
-            "subtitle": "INTERNATIONAL: 9 of 15 compliant (60.0%)",
+            "subtitle": "% of compliant alerts",
             "items": [
                 {"label": "INTERNATIONAL", "value": 60.0, "secondary_label": "9 out of 15 compliant"},
                 {"label": "CANNED & DRIED VEGETABLES", "value": 55.56, "secondary_label": "5 out of 9 compliant"},
