@@ -231,6 +231,11 @@ OSA_RECURRING_SLOT_SIGNAL = {
         {"item_code": "29348", "item_description": "CP CHEESE TWIST", "repeat_weeks": 6, "total_lsv": 27.79, "avg_weekly_lsv": 4.63},
     ],
     "facts": {
+        "item_identifiers": {
+            "29355": {"upc": "5000000000001", "ean": None},
+            "29810": {"upc": "5000000000002", "ean": None},
+            "29348": {"upc": "5000000000003", "ean": None},
+        },
         "slot_history": [
             {"year": 2026, "week": 35, "sales": 51.0, "lsv_vol": 4.0033, "lsv": 7.25, "osa_pct": 92.72},
             {"year": 2026, "week": 36, "sales": 51.0, "lsv_vol": 10.7321, "lsv": 13.0, "osa_pct": 82.62},
@@ -287,9 +292,9 @@ OSA_RECURRING_SLOT_EXPECTED = {
             "title": "Recurring items",
             "subtitle": "Lost sales over repeated weeks",
             "items": [
-                {"label": "CP WHITE PARISIAN", "value": 35.17, "secondary_label": "29355"},
-                {"label": "CP SAUSAGE ROLLS", "value": 31.05, "secondary_label": "29810"},
-                {"label": "CP CHEESE TWIST", "value": 27.79, "secondary_label": "29348"},
+                {"label": "CP WHITE PARISIAN", "value": 35.17, "secondary_label": "5000000000001"},
+                {"label": "CP SAUSAGE ROLLS", "value": 31.05, "secondary_label": "5000000000002"},
+                {"label": "CP CHEESE TWIST", "value": 27.79, "secondary_label": "5000000000003"},
             ],
             "format": "currency",
         },

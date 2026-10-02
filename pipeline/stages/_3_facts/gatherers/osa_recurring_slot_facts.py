@@ -50,6 +50,7 @@ def gather(
     lookback_start,
     lookback_end,
     section='ITEM_HIERARCHY_2',
+    item_hierarchy=None,
 ):
     """
     Gather facts for OSA_RECURRING_SLOT signals.
@@ -84,6 +85,51 @@ def gather(
         ))
 
     stores = list({k[0] for k in slot_keys})
+
+    # Map recurring item codes to UPC/EAN so the UI can show scannable barcodes.
+    item_codes = set()
+    for sig in signals:
+        for item in sig.get('repeat_item_details', []):
+            code = str(item.get('item_code') or '')
+            if code:
+                item_codes.add(code)
+
+    item_identifiers = {}
+    if (
+        item_hierarchy is not None
+        and item_codes
+        and {'OSA_ITEM_CODE', 'UPC'}.issubset(set(item_hierarchy.columns))
+    ):
+        hierarchy_cols = set(item_hierarchy.columns)
+        id_rows = (
+            item_hierarchy
+            .filter(F.col('OSA_ITEM_CODE').isin(list(item_codes)))
+            .select(
+                F.to_varchar(F.col('OSA_ITEM_CODE')).alias('ITEM_CODE'),
+                F.to_varchar(F.col('UPC')).alias('UPC'),
+                F.to_varchar(F.col('EAN')).alias('EAN')
+                if 'EAN' in hierarchy_cols
+                else F.lit(None).alias('EAN'),
+            )
+            .distinct()
+            .collect()
+        )
+        grouped_ids = defaultdict(lambda: {'upcs': set(), 'eans': set()})
+        for row in id_rows:
+            code = str(row['ITEM_CODE'])
+            upc = str(row['UPC']) if row['UPC'] is not None else None
+            ean = str(row['EAN']) if row['EAN'] is not None else None
+            if upc:
+                grouped_ids[code]['upcs'].add(upc)
+            if ean:
+                grouped_ids[code]['eans'].add(ean)
+        for code, ids in grouped_ids.items():
+            upcs = sorted(ids['upcs'])
+            eans = sorted(ids['eans'])
+            item_identifiers[code] = {
+                'upc': upcs[0] if upcs else None,
+                'ean': eans[0] if eans else None,
+            }
 
     # Slot-level aggregates
     slot_rows = (
@@ -164,6 +210,7 @@ def gather(
                 round(slot_total_lsv / dept_total * 100, 2) if dept_total else None
             ),
             'slot_trend': trend,
+            'item_identifiers': item_identifiers,
         }
 
     return result
@@ -176,4 +223,5 @@ def extract_facts(signal, raw_result):
         'recurring_slot_share_pct': None,
         'slot_share_of_dept_total_pct': None,
         'slot_trend': 'flat',
+        'item_identifiers': {},
     })

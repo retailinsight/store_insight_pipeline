@@ -83,6 +83,7 @@ def build_osa_recurring_slot_presentation(signal: dict, narrative: dict) -> Aler
         key=lambda item: float(item.get("total_lsv", 0) or 0),
         reverse=True,
     )
+    item_identifiers = facts.get("item_identifiers", {})
     if repeat_items:
         widgets.append(
             RankedListWidget(
@@ -93,7 +94,7 @@ def build_osa_recurring_slot_presentation(signal: dict, narrative: dict) -> Aler
                     RankedListItem(
                         label=str(item.get("item_description") or item.get("item_code") or "Unknown"),
                         value=float(item.get("total_lsv", 0)),
-                        secondary_label=str(item.get("item_code")) or None,
+                        secondary_label=item_identifiers.get(str(item.get("item_code")), {}).get("upc"),
                     )
                     for item in repeat_items
                 ],
