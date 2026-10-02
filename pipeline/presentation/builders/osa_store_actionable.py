@@ -17,29 +17,29 @@ def build_osa_store_actionable_presentation(signal: dict, narrative: dict) -> Al
 
     widgets = []
 
-    # Top-line stat: this week's total OSA for the store
-    this_week = facts.get("chain_store_this_week_osa")
-    if this_week is not None:
-        widgets.append(
-            StatWidget(
-                id="total_osa",
-                title="OSA",
-                value=float(this_week),
-                format="percentage",
-            )
+    # Top-line stat: store-controlled lost sales this week
+    lsv = signal.get("this_week_lsv") or {}
+    store_lsv = float(lsv.get("store_controlled") or 0)
+    widgets.append(
+        StatWidget(
+            id="store_controlled_lost_sales",
+            title="Store-controlled lost sales",
+            value=store_lsv,
+            format="currency",
         )
+    )
 
-    # Week-on-week movement
-    last_week = facts.get("chain_store_last_week_osa")
-    if last_week is not None and this_week is not None:
-        widgets.append(
-            StatWidget(
-                id="osa_wow_change",
-                title="OSA vs last week",
-                value=round(float(this_week) - float(last_week), 2),
-                format="percentage",
-            )
+    # Week-on-week movement in store-controlled lost sales
+    lsv_change = signal.get("lsv_change") or {}
+    store_lsv_change = float(lsv_change.get("store_controlled") or 0)
+    widgets.append(
+        StatWidget(
+            id="lost_sales_vs_last_week",
+            title="vs last week",
+            value=round(store_lsv_change, 2),
+            format="currency",
         )
+    )
 
     # Day/period grid: rows are days, columns are morning/afternoon/evening
     grid = facts.get("day_period_grid", [])

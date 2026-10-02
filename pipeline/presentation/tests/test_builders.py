@@ -19,12 +19,12 @@ from store_insight.pipeline.presentation.models import (
 )
 
 
-def test_osa_store_actionable_includes_osa_stat_and_matrix():
+def test_osa_store_actionable_includes_lost_sales_stat_and_matrix():
     signal = {
         "signal_type": "OSA_STORE_ACTIONABLE",
+        "this_week_lsv": {"store_controlled": 216.83, "upstream": 46.46, "unknown": 0.0, "total": 263.29},
+        "lsv_change": {"store_controlled": -84.28, "upstream": -32.22, "unknown": 0.0, "total": -116.5},
         "facts": {
-            "chain_store_this_week_osa": 94.0,
-            "chain_store_last_week_osa": 93.5,
             "day_period_grid": [
                 {
                     "date": "2026-09-18",
@@ -57,7 +57,11 @@ def test_osa_store_actionable_includes_osa_stat_and_matrix():
     }
     pres = build_osa_store_actionable_presentation(signal, {})
     assert pres.schema_version == 1
-    assert any(w.id == "total_osa" for w in pres.widgets if isinstance(w, StatWidget))
+    stats = {w.id: w for w in pres.widgets if isinstance(w, StatWidget)}
+    assert stats["store_controlled_lost_sales"].value == 216.83
+    assert stats["store_controlled_lost_sales"].format == "currency"
+    assert stats["lost_sales_vs_last_week"].value == -84.28
+    assert stats["lost_sales_vs_last_week"].format == "currency"
     matrix = next(w for w in pres.widgets if isinstance(w, MatrixWidget))
     assert matrix.id == "day_period_grid"
     assert matrix.rows[0].label == "Friday"
