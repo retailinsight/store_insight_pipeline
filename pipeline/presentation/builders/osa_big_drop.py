@@ -17,25 +17,15 @@ def build_osa_big_drop_presentation(signal: dict, narrative: dict) -> AlertPrese
     facts = signal.get("facts", {})
     widgets = []
 
-    this_week = signal.get("this_week_osa") or facts.get("this_week_osa")
-    if this_week is not None:
+    lsv = signal.get("this_week_lsv") or facts.get("this_week_lsv") or {}
+    drop_day = signal.get("latest_day") or "drop day"
+    if lsv:
         widgets.append(
             StatWidget(
-                id="this_week_osa",
-                title="OSA on drop day",
-                value=float(this_week),
-                format="percentage",
-            )
-        )
-
-    wow = signal.get("wow_drift_pp") or facts.get("wow_drift_pp")
-    if wow is not None:
-        widgets.append(
-            StatWidget(
-                id="osa_drop_pp",
-                title="OSA drop",
-                value=float(wow),
-                format="number",
+                id="lost_sales_on_drop_day",
+                title=f"Lost sales on {drop_day}",
+                value=float(lsv.get("store_controlled", 0)),
+                format="currency",
             )
         )
 
