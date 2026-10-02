@@ -339,7 +339,7 @@ def test_markdown_override_top_department_added():
     out = generate(sig)
     assert out["issue"] == 'Coach your team on override decisions in BAKERY.'
     assert out["recommended_action"] == (
-        '5 of 10 overrides this week came from this department, '
+        '5 of 10 overrides this week came from this department (50.0% compliant), '
         'against a chain average override rate of 10.0%.'
     )
     assert "BAKERY" in out["explanation"]
