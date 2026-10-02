@@ -113,6 +113,8 @@ def test_prompted_markdown_compliance_presentation():
 # -----------------------------------------------------------------------------
 OSA_BIG_DROP_SIGNAL = {
     "signal_type": "OSA_BIG_DROP",
+    "latest_day": "Thursday",
+    "this_week_lsv": {"total": 28.97, "store_controlled": 28.97, "upstream": 0.0, "unknown": 0.0},
     "this_week_osa": 89.14,
     "wow_drift_pp": -10.86,
     "facts": {
@@ -161,17 +163,10 @@ OSA_BIG_DROP_EXPECTED = {
     "widgets": [
         {
             "type": "stat",
-            "id": "this_week_osa",
-            "title": "OSA on drop day",
-            "value": 89.14,
-            "format": "percentage",
-        },
-        {
-            "type": "stat",
-            "id": "osa_drop_pp",
-            "title": "OSA drop",
-            "value": -10.86,
-            "format": "number",
+            "id": "lost_sales_on_drop_day",
+            "title": "Lost sales on Thursday",
+            "value": 28.97,
+            "format": "currency",
         },
         {
             "type": "matrix",
