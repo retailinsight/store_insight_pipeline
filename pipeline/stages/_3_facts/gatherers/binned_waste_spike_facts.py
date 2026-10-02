@@ -144,13 +144,12 @@ def _item_breakdown(wastage, item_hierarchy, store_ids, analysis_date: dt.date, 
         .group_by('STORE_ID', 'UPC')
         .agg(F.sum(F.col('WASTE_QUANTITY') * F.col('ORIGINAL_PRICE')).alias('WASTE_VALUE'))
         .join(items, on='UPC', how='left')
-        .group_by('STORE_ID', 'ITEM_DESCRIPTION')
-        .agg(F.sum('WASTE_VALUE').alias('WASTE_VALUE'))
         .collect()
     )
     grouped: dict[int, list[dict]] = defaultdict(list)
     for r in rows:
         grouped[int(r['STORE_ID'])].append({
+            'upc': str(r['UPC']),
             'item_description': str(r['ITEM_DESCRIPTION'] or 'Unknown').strip(),
             'waste_value': round(float(r['WASTE_VALUE'] or 0), 2),
         })
