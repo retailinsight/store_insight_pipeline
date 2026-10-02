@@ -42,7 +42,7 @@ def spike_signal():
 
 def test_trend_title_and_subtitle(trend_signal):
     narrative = rule_based.generate(trend_signal)
-    assert narrative['issue'] == 'Coach the team on the Markdown process and timings'
+    assert narrative['issue'] == 'Coach the team on the Binned Waste process and timings'
     assert narrative['recommended_action'] == 'Binned Waste has risen 10% in the last 7 days from £70 to £77'
     assert 'Estimated waste cost: £310 projected over 4 weeks' in narrative['cost_if_not_fixed']
     assert 'Based on the last 7 days of waste data. Actual costs may vary.' in narrative['cost_if_not_fixed']
