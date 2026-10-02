@@ -229,8 +229,15 @@ def _generate_markdown_override(signal: dict) -> dict:
         )
     if dept_bdwn:
         top = dept_bdwn[0]
+        total_top = int(top.get('total_markdowns', 0) or 0)
+        overrides_top = int(top.get('overrides', 0) or 0)
+        compliant_top = total_top - overrides_top
+        compliance_pct_top = round((compliant_top / total_top) * 100, 1) if total_top > 0 else 0.0
         explanation_lines.append(
             f"Top department: {top['dept']} ({top['overrides']} overrides, {top['override_rate_pct']:.1f}%)."
+        )
+        explanation_lines.append(
+            f"{top['dept']} was {compliance_pct_top:.1f}% compliant ({top['overrides']} out of {total_top} overrides from this department)."
         )
 
     cost = (
