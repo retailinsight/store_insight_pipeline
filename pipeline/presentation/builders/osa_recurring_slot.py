@@ -1,6 +1,8 @@
 """Presentation builder for OSA_RECURRING_SLOT smart-action cards."""
 from __future__ import annotations
 
+import datetime as dt
+
 from store_insight.pipeline.presentation.models import (
     AlertPresentation,
     ChartCategory,
@@ -22,27 +24,23 @@ def build_osa_recurring_slot_presentation(signal: dict, narrative: dict) -> Aler
         widgets.append(
             StatWidget(
                 id="total_lsv",
-                title="Total lost sales (10 weeks)",
+                title="Total lost sales",
                 value=float(total_lsv),
-                format="currency",
-            )
-        )
-
-    avg_weekly = signal.get("avg_weekly_lsv") or facts.get("avg_weekly_lsv")
-    if avg_weekly is not None:
-        widgets.append(
-            StatWidget(
-                id="avg_weekly_lsv",
-                title="Average weekly lost sales",
-                value=float(avg_weekly),
                 format="currency",
             )
         )
 
     slot_history = facts.get("slot_history", [])
     if slot_history:
+        def _week_start(year: int, week: int) -> str:
+            # ISO week date: %G = ISO year, %V = ISO week, %u = Monday
+            return dt.datetime.strptime(f"{year}-W{week:02d}-1", "%G-W%V-%u").date().isoformat()
+
         categories = [
-            ChartCategory(label=f"{row.get('year')}-W{int(row.get('week', 0)):02d}")
+            ChartCategory(
+                label=f"W{int(row.get('week', 0)):02d}",
+                date=_week_start(int(row.get('year')), int(row.get('week', 0))),
+            )
             for row in slot_history
         ]
         widgets.append(
