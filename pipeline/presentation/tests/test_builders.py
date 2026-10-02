@@ -22,6 +22,7 @@ from store_insight.pipeline.presentation.models import (
 def test_osa_store_actionable_includes_lost_sales_stat_and_matrix():
     signal = {
         "signal_type": "OSA_STORE_ACTIONABLE",
+        "department": "BEER/LAGER & CIDER",
         "this_week_lsv": {"store_controlled": 216.83, "upstream": 46.46, "unknown": 0.0, "total": 263.29},
         "lsv_change": {"store_controlled": -84.28, "upstream": -32.22, "unknown": 0.0, "total": -116.5},
         "facts": {
@@ -30,13 +31,13 @@ def test_osa_store_actionable_includes_lost_sales_stat_and_matrix():
                     "date": "2026-09-18",
                     "day": "Friday",
                     "period_label": "Morning (Open-12pm)",
-                    "total_osa_pct": 90.0,
+                    "lsv": {"store_controlled": 10.5, "upstream": 2.0, "unknown": 0.0, "total": 12.5},
                 },
                 {
                     "date": "2026-09-18",
                     "day": "Friday",
                     "period_label": "Afternoon (12pm-6pm)",
-                    "total_osa_pct": 95.0,
+                    "lsv": {"store_controlled": 20.25, "upstream": 0.0, "unknown": 0.0, "total": 20.25},
                 },
             ],
             "ppg_lsv_changes": [
@@ -60,12 +61,17 @@ def test_osa_store_actionable_includes_lost_sales_stat_and_matrix():
     stats = {w.id: w for w in pres.widgets if isinstance(w, StatWidget)}
     assert stats["store_controlled_lost_sales"].value == 216.83
     assert stats["store_controlled_lost_sales"].format == "currency"
+    assert stats["store_controlled_lost_sales"].title == "Lost sales in BEER/LAGER & CIDER in the last 7 days"
     assert stats["lost_sales_vs_last_week"].value == -84.28
     assert stats["lost_sales_vs_last_week"].format == "currency"
     matrix = next(w for w in pres.widgets if isinstance(w, MatrixWidget))
     assert matrix.id == "day_period_grid"
+    assert matrix.title == "Lost sales in BEER/LAGER & CIDER by time of day"
+    assert matrix.format == "currency"
     assert matrix.rows[0].label == "Friday"
     assert matrix.rows[0].date == "2026-09-18"
+    assert matrix.rows[0].values["morning"] == 10.5
+    assert matrix.rows[0].values["afternoon"] == 20.25
     ranked = [w for w in pres.widgets if isinstance(w, RankedListWidget)]
     assert [w.id for w in ranked] == ["ppg_lsv_changes", "item_lsv_changes"]
     assert ranked[0].items[0].value == 104.6
