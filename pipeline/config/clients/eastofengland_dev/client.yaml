@@ -60,8 +60,8 @@ detector_config:
       min_alerts_worked:         3
 
     MARKDOWN_OVERRIDE:
-      min_override_chain_gap:    0.01
-      min_override_wow_increase: 0.01
+      min_override_chain_gap:    0.05
+      min_override_wow_increase: 0.05
       min_total_markdowns:       2
 
     MARKDOWN_SKU:

@@ -36,23 +36,36 @@ def build_markdown_override_presentation(signal: dict, narrative: dict) -> Alert
             )
         )
 
-    departments = sorted(
-        facts.get("override_dept_breakdown", []),
-        key=lambda row: float(row.get("override_rate_pct", 0) or 0),
-        reverse=True,
-    )
-    if departments:
+    departments = facts.get("override_dept_breakdown", [])
+    scored = []
+    for row in departments:
+        total = int(row.get("total_markdowns", 0) or 0)
+        overrides = int(row.get("overrides", 0) or 0)
+        compliant = total - overrides
+        compliance_pct = round((compliant / total) * 100, 2) if total > 0 else 0.0
+        # Risk score = alerts due × (1 − compliance rate) = total × override rate
+        risk_score = round(total * (1 - compliance_pct / 100), 2) if total > 0 else 0.0
+        scored.append({
+            "dept": row.get("dept", "Unknown"),
+            "total": total,
+            "compliant": compliant,
+            "compliance_pct": compliance_pct,
+            "risk_score": risk_score,
+        })
+
+    scored = sorted(scored, key=lambda r: r["risk_score"], reverse=True)
+    if scored:
         widgets.append(
             RankedListWidget(
                 id="override_departments",
-                title="Departments by override rate",
+                title="Worst performing departments",
                 items=[
                     RankedListItem(
-                        label=str(row.get("dept") or "Unknown"),
-                        value=float(row.get("override_rate_pct", 0)),
-                        secondary_label=f"{row.get('overrides', 0)}/{row.get('total_markdowns', 0)}",
+                        label=str(row["dept"]),
+                        value=float(row["compliance_pct"]),
+                        secondary_label=f"{row['compliant']} out of {row['total']} compliant",
                     )
-                    for row in departments
+                    for row in scored
                 ],
                 format="percentage",
             )
