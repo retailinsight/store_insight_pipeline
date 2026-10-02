@@ -67,7 +67,7 @@ def test_big_drop_compliance_narratives(signal_type, due_key, completed_key, lab
     assert '35.0pp below' in out['explanation']
     assert 'PRODUCE (25.0%)' in out['explanation']
     if signal_type == 'BIG_DROP_MARKDOWN_COMPLIANCE':
-        assert '£125.50' in out['cost_if_not_fixed']
+        assert out['cost_if_not_fixed'] == 'If compliance continues to fall, straight-to-bin waste is likely to increase.'
     elif signal_type == 'BIG_DROP_PROMPTED_MARKDOWN_COMPLIANCE':
         assert out['cost_if_not_fixed'] == 'If compliance continues to fall, straight-to-bin waste is likely to increase.'
     elif signal_type == 'BIG_DROP_EXPIRY_DATE_COMPLIANCE':
@@ -827,8 +827,8 @@ def test_osa_big_drop_narrative_names_trading_days():
     assert 'upstream context' not in out['explanation']
     assert 'On Sunday the leading PPG was Vodka (£120.00 store-controlled lost sales).' in out['explanation']
     assert out['cost_if_not_fixed'] == (
-        "If this continues, the store could lose approximately "
-        "£14,000.00 in lost sales in the next 4 weeks."
+        "If Sunday's rate continued, the store could lose approximately "
+        "£14,000.00 in sales over the next 4 weeks."
     )
     assert out['recommended_action'] == (
         'The top contributing PPGs were Vodka, Gin and Whisky.'
@@ -862,7 +862,7 @@ def test_osa_big_drop_without_day_names_falls_back():
         'Investigate why store-controlled OSCA dropped in SPIRITS from 95% to 88%.'
     )
     assert 'Store-controlled OSCA in SPIRITS dropped 7.0pp in a single day — from 95.0% to 88.0%.' in out['explanation']
-    assert out['cost_if_not_fixed'].startswith("If this continues, the store could lose approximately")
+    assert out['cost_if_not_fixed'].startswith("If that day's rate continued, the store could lose approximately")
 
 
 # ---------------------------------------------------------------------------
@@ -916,8 +916,8 @@ def test_markdown_compliance_workload_narrative_matches_example():
     out = generate(_markdown_compliance())
     _assert_card_keys(out)
     assert 'Manningtree' in out['issue']
-    assert '£547.72' in out['cost_if_not_fixed']
-    assert 'over the next 4 weeks' in out['cost_if_not_fixed']
+    # TODO: restore £ assertions once the markdown-compliance cost source is validated.
+    assert out['cost_if_not_fixed'] == 'If compliance continues to fall, straight-to-bin waste is likely to increase.'
     assert 'up 37%' in out['recommended_action']
     assert 'fallen 14pp' in out['recommended_action']
     assert 'PRODUCE, CHILLED CONVENIENCE, IN-STORE BAKERY' in out['recommended_action']
@@ -1168,3 +1168,73 @@ def test_prompted_markdown_compliance_vs_chain_only_does_not_claim_week_on_week_
 def test_defaults_do_not_raise(builder):
     out = generate(builder())
     _assert_card_keys(out)
+
+
+# ---------------------------------------------------------------------------
+# Zero / missing cost fallbacks — cards must never show £0.00
+# ---------------------------------------------------------------------------
+
+_ZERO_LSV = {'total': 0.0, 'store_controlled': 0.0, 'upstream': 0.0, 'unknown': 0.0}
+
+_ZERO_COST_CASES = [
+    (
+        _compliance,
+        {'projected_cost': 0.0},
+        'Alerts closed without investigation risk leaving real availability issues unresolved.',
+    ),
+    (
+        _waste,
+        {'this_week_waste_value': 0.0},
+        'Wasted items may have been recoverable through earlier markdown action.',
+    ),
+    (
+        _waste_trim,
+        {'projected_cost': 0.0},
+        'If this item continues to rely on markdown clearance, it risks losing '
+        'full-price sales potential each week.',
+    ),
+    (
+        _waste_trim,
+        {'projected_cost': None},
+        'If this item continues to rely on markdown clearance, it risks losing '
+        'full-price sales potential each week.',
+    ),
+    (
+        _osa_store_actionable,
+        {'this_week_lsv': _ZERO_LSV, 'facts': {}},
+        'If this continues, the store risks further lost sales over the coming weeks.',
+    ),
+    (
+        _osa_big_drop,
+        {'this_week_lsv': _ZERO_LSV},
+        "If Sunday's rate continued, the store would keep losing sales.",
+    ),
+    (
+        _osa_recurring_slot,
+        {'projected_cost': 0.0, 'avg_weekly_lsv': 0.0},
+        'If these lines keep running short in this slot, the store will continue to lose sales.',
+    ),
+    (
+        _osa,
+        {'facts': {
+            'cost_projection': 0.0,
+            'projection_weeks': 4,
+            'subclass_contributors': [],
+            'subclass_changes': [],
+            'dow_pattern': [],
+            'worst_day': None,
+            'chain_drift_pp': None,
+            'chain_this_week_osa': None,
+        }},
+        'If this continues at the same rate, the store will continue to lose sales '
+        'over the coming weeks.',
+    ),
+]
+
+
+@pytest.mark.parametrize(('builder', 'overrides', 'expected'), _ZERO_COST_CASES)
+def test_zero_cost_never_shows_pounds(builder, overrides, expected):
+    out = generate(builder(**overrides))
+    _assert_card_keys(out)
+    assert '£' not in out['cost_if_not_fixed']
+    assert out['cost_if_not_fixed'] == expected

@@ -70,3 +70,10 @@ def test_merged_trend_and_spike_narrative(trend_signal, spike_signal):
     assert narrative['issue'] == 'Investigate Binned Waste trend and recent spike'
     assert 'Binned-waste value increased by 10%' in narrative['explanation']
     assert '£100 on Friday' in narrative['explanation']
+
+
+def test_zero_projected_cost_uses_text_fallback(trend_signal):
+    trend_signal['projected_4w_waste_cost'] = 0
+    narrative = rule_based.generate(trend_signal)
+    assert '£' not in narrative['cost_if_not_fixed']
+    assert narrative['cost_if_not_fixed'] == 'If this continues, binned waste will keep accumulating.'

@@ -142,6 +142,15 @@ class TestCostTemplate:
         )
 
 
+    def test_zero_cost_uses_text_fallback(self):
+        signal = _make_signal(stb_value=0.0, stb_items=0, projected_cost=0.0)
+        result = generate(signal)
+        assert '£' not in result['cost_if_not_fixed']
+        assert result['cost_if_not_fixed'] == (
+            'Without markdown action, the store will continue to miss recovery opportunities.'
+        )
+
+
 # ---------------------------------------------------------------------------
 # Narrative completeness
 # ---------------------------------------------------------------------------

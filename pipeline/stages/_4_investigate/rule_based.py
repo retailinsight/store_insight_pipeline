@@ -110,6 +110,18 @@ def _fmt_lsv_composition_lines(composition):
     return [f"The lost sales are driven by {', '.join(parts)}."]
 
 
+def _cost_or_fallback(amount, cost_text: str, fallback: str) -> str:
+    """Return ``cost_text`` when ``amount`` is a positive number, else ``fallback``.
+
+    Cards must never show £0.00 — a zero, negative or missing cost renders as
+    the qualitative risk sentence instead.
+    """
+    try:
+        return cost_text if float(amount) > 0 else fallback
+    except (TypeError, ValueError):
+        return fallback
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -154,9 +166,12 @@ def _generate_tick_and_flick(signal: dict) -> dict:
         )
 
     four_week_cost = projected_cost * 4
-    cost_if_not_fixed = (
+    cost_if_not_fixed = _cost_or_fallback(
+        four_week_cost,
         f"If this continues, there is a risk that the store could lose "
-        f"\u00a3{four_week_cost:,.2f} in lost sales in the next 4 weeks."
+        f"\u00a3{four_week_cost:,.2f} in lost sales in the next 4 weeks.",
+        "Alerts closed without investigation risk leaving real availability "
+        "issues unresolved.",
     )
 
     if "WOW" in triggers or "TICK_AND_FLICK" in triggers:
@@ -275,7 +290,7 @@ def _generate_waste(signal: dict) -> dict:
     chain_rate  = signal.get('chain_stb_rate')
     above_chain = signal.get('above_chain_pp')
     waste_qty   = signal.get('this_week_waste_qty', 0)
-    waste_val   = signal.get('this_week_waste_value', 0.0)
+    waste_val   = signal.get('this_week_waste_value', 0.0) or 0.0
 
     facts = signal.get("facts", {})
     dept_bdwn = [
@@ -315,9 +330,11 @@ def _generate_waste(signal: dict) -> dict:
         'Assess markdown timing, markdown depth, ordering, and operational handling to identify opportunities to reduce waste.'
     )
 
-    cost = (
+    cost = _cost_or_fallback(
+        waste_val,
         f'Items worth approximately \u00a3{waste_val:,.2f} at original price were wasted this week. '
-        'Review whether some could have been recovered through earlier markdown action.'
+        'Review whether some could have been recovered through earlier markdown action.',
+        'Wasted items may have been recoverable through earlier markdown action.',
     )
 
     return {
@@ -475,7 +492,7 @@ def _generate_osa_recurring_slot(signal: dict) -> dict:
     period_label   = signal.get('period_label', 'Unknown period')
     n_items        = signal.get('repeat_item_count', 0)
     total_lsv      = signal.get('total_lsv', 0.0)
-    avg_weekly_lsv = signal.get('avg_weekly_lsv', 0.0)
+    avg_weekly_lsv = signal.get('avg_weekly_lsv', 0.0) or 0.0
     item_details   = signal.get('repeat_item_details', [])
 
     facts = signal.get('facts', {})
@@ -558,9 +575,11 @@ def _generate_osa_recurring_slot(signal: dict) -> dict:
         or round(avg_weekly_lsv * projection_weeks, 2)
     )
 
-    cost = (
+    cost = _cost_or_fallback(
+        cost_projection,
         f'If these lines keep running short in this slot, the store could lose approximately '
-        f'\u00a3{cost_projection:,.2f} over the next {projection_weeks} weeks.'
+        f'\u00a3{cost_projection:,.2f} over the next {projection_weeks} weeks.',
+        'If these lines keep running short in this slot, the store will continue to lose sales.',
     )
 
     noun = 'line has' if n_items == 1 else 'lines have'
@@ -591,6 +610,8 @@ def _generate_waste_trim(signal: dict) -> dict:
     markdown_ratio   = signal.get('markdown_ratio', 0.0)
     markdown_value   = signal.get('markdown_value', 0.0)
     projected_cost   = signal.get('projected_cost', markdown_value)
+    if projected_cost is None:
+        projected_cost = 0.0
 
     facts = signal.get('facts', {})
     chain_ratio = facts.get('chain_markdown_ratio')
@@ -625,9 +646,12 @@ def _generate_waste_trim(signal: dict) -> dict:
                 f'({week["ratio"]:.1%})'
             )
 
-    cost = (
+    cost = _cost_or_fallback(
+        projected_cost,
         f'If this item continues to rely on markdown clearance, it risks losing '
-        f'approximately £{projected_cost:,.2f} in full-price sales potential each week.'
+        f'approximately £{projected_cost:,.2f} in full-price sales potential each week.',
+        'If this item continues to rely on markdown clearance, it risks losing '
+        'full-price sales potential each week.',
     )
 
     action = (
@@ -681,9 +705,11 @@ def _osa_actionable_cost(facts: dict, store_lsv: float) -> str:
     projection = facts.get('cost_projection') or {}
     weeks = int(projection.get('projection_weeks') or facts.get('projection_weeks') or 4)
     cost = float(projection.get('store_controlled_cost_of_inaction') or store_lsv * weeks)
-    return (
+    return _cost_or_fallback(
+        cost,
         f'If this continues, the store could lose approximately '
-        f'£{cost:,.2f} in lost sales in the next {weeks} weeks.'
+        f'£{cost:,.2f} in lost sales in the next {weeks} weeks.',
+        'If this continues, the store risks further lost sales over the coming weeks.',
     )
 
 
@@ -819,9 +845,11 @@ def _generate_osa_big_drop(signal: dict) -> dict:
 
     weeks = 4
     cost = round(store_lsv * 7 * weeks, 2)
-    cost_text = (
-        f"If this continues, the store could lose approximately "
-        f"£{cost:,.2f} in lost sales in the next {weeks} weeks."
+    cost_text = _cost_or_fallback(
+        cost,
+        f"If {day_word}'s rate continued, the store could lose approximately "
+        f"£{cost:,.2f} in sales over the next {weeks} weeks.",
+        f"If {day_word}'s rate continued, the store would keep losing sales.",
     )
 
     ppg_names = [ppg['ppg'] for ppg in ppgs[:3] if ppg.get('ppg')]
@@ -922,14 +950,10 @@ def _generate_markdown_compliance(signal: dict) -> dict:
             f"focusing on {focus}. Review in 7 days against a target of {target}."
         )
 
-    if projected_cost:
-        four_week_cost = projected_cost * 4
-        cost_if_not_fixed = (
-            f"If this continues, the store could lose approximately "
-            f"£{four_week_cost:,.2f} over the next 4 weeks."
-        )
-    else:
-        cost_if_not_fixed = "If compliance continues to fall, waste is likely to increase."
+    # TODO: projected_cost source data for MARKDOWN_COMPLIANCE is currently
+    # invalid — restore the £ projection once the data PR lands and the
+    # source is validated.
+    cost_if_not_fixed = "If compliance continues to fall, straight-to-bin waste is likely to increase."
 
     return {
         "issue": issue,
@@ -1147,11 +1171,17 @@ def _generate_big_drop_prompted_markdown_compliance(signal: dict) -> dict:
 
 
 def _generate_big_drop_markdown_compliance(signal: dict) -> dict:
-    return _generate_big_drop_compliance(
+    result = _generate_big_drop_compliance(
         signal, 'markdown compliance', 'this_day_markdowns_due',
         'this_day_completed_on_time', 'markdowns were completed on time',
         'markdown routine', 'Markdown',
     )
+    # TODO: this_day_at_risk_value source data is currently invalid — restore
+    # the £ at-risk figure once the data PR lands and the source is validated.
+    result["cost_if_not_fixed"] = (
+        "If compliance continues to fall, straight-to-bin waste is likely to increase."
+    )
+    return result
 
 
 def _generate_big_drop_expiry_date_compliance(signal: dict) -> dict:
@@ -1170,12 +1200,14 @@ def _generate_big_drop_expiry_date_compliance(signal: dict) -> dict:
 def _generate_straight_to_bin(signal: dict) -> dict:
     """Generate narrative for a STRAIGHT_TO_BIN alert."""
     site_name = signal.get('site_name') or f"Store {signal['store_id']}"
-    stb_value = signal.get('last_week_stb_value', 0.0)
+    stb_value = signal.get('last_week_stb_value', 0.0) or 0.0
     stb_items = signal.get('last_week_stb_items', 0)
     chain_avg = signal.get('chain_avg_stb_value_per_store', 0.0)
     multiple = signal.get('vs_chain_multiple', 0.0)
     threshold = signal.get('threshold_value', 100.0)
     projected_cost = signal.get('projected_cost', stb_value)
+    if projected_cost is None:
+        projected_cost = 0.0
 
     facts = signal.get('facts', {})
     daily = facts.get('stb_by_day_last_week', [])
@@ -1217,9 +1249,11 @@ def _generate_straight_to_bin(signal: dict) -> dict:
         explanation_lines.append(f"Worst departments: {dept_list}.")
 
     four_week_cost = projected_cost * 4
-    cost_if_not_fixed = (
+    cost_if_not_fixed = _cost_or_fallback(
+        four_week_cost,
         f"If this continues, the store could lose approximately "
-        f"\u00a3{four_week_cost:,.2f} to straight-to-bin waste over the next 4 weeks."
+        f"\u00a3{four_week_cost:,.2f} to straight-to-bin waste over the next 4 weeks.",
+        "Without markdown action, the store will continue to miss recovery opportunities.",
     )
 
     if is_high:
@@ -1250,7 +1284,7 @@ def _generate_straight_to_bin(signal: dict) -> dict:
 def _generate_binned_waste(signal: dict) -> dict:
     """Generate narrative for a BINNED_WASTE alert (TREND and/or SPIKE triggers)."""
     triggers = set(signal.get('trigger_types', []))
-    projected_cost = int(round(signal.get('projected_4w_waste_cost', 0)))
+    projected_cost = int(round(signal.get('projected_4w_waste_cost', 0) or 0))
 
     explanation_parts = []
     recommended_parts = []
@@ -1289,9 +1323,11 @@ def _generate_binned_waste(signal: dict) -> dict:
 
     recommended_action = recommended_parts[0] if recommended_parts else "Review binned-waste data for this store."
     explanation = " ".join(explanation_parts)
-    cost_if_not_fixed = (
+    cost_if_not_fixed = _cost_or_fallback(
+        projected_cost,
         f"Estimated waste cost: £{projected_cost} projected over 4 weeks\n"
-        f"Based on the last 7 days of waste data. Actual costs may vary."
+        f"Based on the last 7 days of waste data. Actual costs may vary.",
+        "If this continues, binned waste will keep accumulating.",
     )
 
     return {
@@ -1381,7 +1417,7 @@ def generate(signal: dict) -> dict:
     chain_osa = facts.get("chain_this_week_osa") or signal.get("chain_this_week_osa")
     chain_gap = signal.get("chain_gap_pp")
     chain_drift = facts.get("chain_drift_pp")
-    cost_projection = facts["cost_projection"]
+    cost_projection = facts["cost_projection"] or 0.0
     proj_weeks = facts["projection_weeks"]
 
     issue = _trigger_summary(triggers, dept, signal)
@@ -1426,9 +1462,12 @@ def generate(signal: dict) -> dict:
 
     explanation = "\n".join(explanation_lines)
 
-    cost_if_not_fixed = (
+    cost_if_not_fixed = _cost_or_fallback(
+        cost_projection,
         f"If this continues at the same rate, the store could lose approximately "
-        f"\u00a3{cost_projection:,.2f} in the next {proj_weeks} weeks."
+        f"\u00a3{cost_projection:,.2f} in the next {proj_weeks} weeks.",
+        "If this continues at the same rate, the store will continue to lose sales "
+        "over the coming weeks.",
     )
 
     action_parts = [f"Review availability in {dept} daily."]
