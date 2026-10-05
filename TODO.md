@@ -1,6 +1,27 @@
 # Store Insight — TODO
 
-Last updated: 2026-10-01
+Last updated: 2026-10-05
+
+## Current status — 2026-10-03
+
+- [x] PR #119 merged & deployed: OSA lost-sales currency stat; BINNED_WASTE wording fix.
+- [x] PR #120 merged & deployed: BINNED_WASTE 7-day chart alignment + comparison subtitle.
+- [x] PR #121 merged & deployed: OSA_RECURRING_SLOT dates, removed avg stat, slot-specific titles.
+- [x] PR #122 merged & deployed: OSA_BIG_DROP single drop-day lost-sales stat.
+- [x] PR #123 merged & deployed: MARKDOWN_OVERRIDE risk-score sort, clear counts, 5pp thresholds.
+- [x] PR #124 merged & deployed: PROMPTED_MARKDOWN_COMPLIANCE bar chart + two-series line chart.
+- [x] PR #125 merged & deployed: MARKDOWN_OVERRIDE compliant-% subtitle.
+- [x] PR #126 merged & deployed: OSA_RECURRING_SLOT recurring-item UPC barcodes (item_code → UPC mapping via item hierarchy).
+- [x] PR #127 merged & deployed: MARKDOWN_OVERRIDE widget subtitle + explanation compliant-% summary.
+- [x] PR #128 merged & deployed: MARKDOWN_OVERRIDE ranked-list subtitle changed to generic "% of compliant alerts" (Dan feedback).
+- [x] DEV fully regenerated 2 Oct 2026 with `main` `9ad7a21` — all PRs #119–#128 applied (358 cards / 121 stores).
+- [x] 3 Oct 06:00 CRT monitoring: C1 FAIL investigated. `markdown_sales` feed missing for 2026-10-01/02 (1 row on 2026-09-30 vs ~279k baseline) → `DETECTORS_SKIPPED`; `feedback` SUSPECT (~73% of baseline). `DATA_QUALITY_LOG` rows exist for run_date 2026-10-03. No pipeline bug; gate worked as intended. C10 KPI timing warning should be corrected by 11:45 refresh. Action: check `markdown_sales` source feed landing.
+- [x] Write and agree PRD for diary-view backend Snowflake/API changes. PRD: `prds/prd-diary-view-backend.md`. Dan approved scope 2 Oct 2026. Imran has the frontend branch. .NET API changes (`AddNotificationArgument`, `NotificationService`, new diary endpoint) to be done by Cornelious/Imran; Snowflake migration owned by Elaheh.
+- [x] Message Cornelious/Imran with diary-view backend field contract and API endpoint proposal (5 Oct 2026).
+- [ ] Implement diary-view backend: create/run `PUSH_NOTIFICATIONS` migration in CRT (DEV inherits via 07:00 clone); coordinate API endpoints with Cornelious/Imran.
+- [x] Clarify monitoring C1/C7 Slack message so source feed delays are not mistaken for pipeline errors. Weekend/Monday `markdown_sales`/`wastage` lag is the known pattern.
+- [ ] Push `SNOWFLAKE_CONTRACT_FOR_API_UI_V2.2.md` to git once final.
+- [ ] CRT `EXECUTE TASK` self-grant privilege gap remains tracked.
 
 ## Environment naming — READ FIRST (agreed with Dan and Dave, 13 Sep 21:09)
 

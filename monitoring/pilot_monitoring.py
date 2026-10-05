@@ -77,8 +77,9 @@ CHECK_DESCRIPTIONS = {
         'part': 'source feeds',
         'impact': ('The named source detail below says which output may be affected. '
                    'A feedback-only warning does not reduce current OSA actions.'),
-        'first_response': ('Check DATA_QUALITY_LOG for today. Probe MAX(DATE) on the named source view. '
-                           'If the feed is genuinely short, chase the feed-load owner. '
+        'first_response': ('Source feed delay, not a pipeline error. '
+                           'Check DATA_QUALITY_LOG for RUN_DATE today; the CHECK_DATE column is the source day being checked. '
+                           'If the feed is genuinely short or lands late (common over weekends), chase the feed-load owner. '
                            'If data has since landed, rerun the pipeline with overwrite.'),
     },
     'C2': {
@@ -465,6 +466,8 @@ SOURCE_IMPACTS = {
 def _source_quality_detail(row: dict) -> str:
     source = str(row['SOURCE_NAME'])
     status = str(row['STATUS']).upper()
+    check_date = row.get('CHECK_DATE')
+    check_date_text = f' (check_date={check_date})' if check_date else ''
     current = row.get('ROW_COUNT')
     baseline = row.get('BASELINE_ROWS')
     action = row.get('ACTION_TAKEN')
@@ -481,7 +484,7 @@ def _source_quality_detail(row: dict) -> str:
         volume = f': {int(current):,} rows; no usable baseline'
     impact = SOURCE_IMPACTS.get(source, 'Output depending on this source may be incomplete.')
     action_text = f'; gate action={action}' if action else ''
-    return f'{source} {status}{volume}{action_text}; impact: {impact}'
+    return f'{source} {status}{check_date_text}{volume}{action_text}; impact: {impact}'
 
 
 def classify_quality_log(rows: list[dict]) -> tuple[str, str]:
@@ -500,7 +503,7 @@ def classify_quality_log(rows: list[dict]) -> tuple[str, str]:
 
 def check_c1_source_quality(runner, data_db, business_date):
     rows = runner(
-        f"SELECT SOURCE_NAME, STATUS, ACTION_TAKEN, ROW_COUNT, BASELINE_ROWS "
+        f"SELECT SOURCE_NAME, STATUS, ACTION_TAKEN, CHECK_DATE, ROW_COUNT, BASELINE_ROWS "
         f"FROM {data_db}.PUBLIC.DATA_QUALITY_LOG "
         f"WHERE RUN_DATE = '{business_date}' "
         f"QUALIFY ROW_NUMBER() OVER (PARTITION BY SOURCE_NAME "
