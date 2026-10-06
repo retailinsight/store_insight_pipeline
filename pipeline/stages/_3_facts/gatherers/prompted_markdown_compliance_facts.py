@@ -7,8 +7,8 @@ evidence:
 - ``daily_performance_last_7d`` — up to 7 rows, one per day in the 7-day
   window ending at the latest day with data. Days with no prompts are
   omitted rather than zero-padded.
-- ``worst_departments_top3`` — the three departments with the lowest on-time
-  compliance rate this week.
+- ``worst_departments_top3`` — the three departments with the highest risk
+  score this week, where ``risk_score = prompts × (1 − compliance_rate)``.
 - ``driver_assessment`` — volume classification plus compliance direction used
   to choose the recommended action (workload vs. coaching).
 
@@ -34,7 +34,7 @@ METADATA = GathererInfo(
     facts_keys=['daily_performance_last_7d', 'worst_departments_top3', 'driver_assessment'],
     description=(
         'Daily on-time actioned breakdown for the current week, '
-        'worst three departments by compliance rate, and workload/coaching driver assessment.'
+        'worst three departments by risk score, and workload/coaching driver assessment.'
     ),
 )
 
@@ -109,13 +109,20 @@ def _build_worst_departments(rows: list[dict], store_id: int, week_start: str, w
     for dept, data in by_dept.items():
         due = data['due']
         completed = data['completed']
+        compliance_pct = round(completed / due * 100, 2) if due > 0 else 0.0
+        compliance_rate = completed / due if due > 0 else 0.0
+        risk_score = round(due * (1 - compliance_rate), 2)
         results.append({
             'dept': dept,
             'prompts': due,
             'actioned_on_time': completed,
-            'compliance_pct': round(completed / due * 100, 2) if due > 0 else 0.0,
+            'compliance_pct': compliance_pct,
+            'risk_score': risk_score,
         })
-    return sorted(results, key=lambda x: x['compliance_pct'])[:top_n]
+    results.sort(
+        key=lambda x: (-x['risk_score'], x['compliance_pct'], -x['prompts'], x['dept'])
+    )
+    return results[:top_n]
 
 
 def _build_driver_assessment(signal: dict) -> dict:

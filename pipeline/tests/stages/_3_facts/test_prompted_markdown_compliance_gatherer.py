@@ -130,7 +130,7 @@ def test_daily_performance_empty_when_no_data():
     assert result[1]['daily_performance_last_7d'] == []
 
 
-def test_worst_departments_are_sorted_and_limited():
+def test_worst_departments_are_sorted_by_risk_score_and_limited():
     rows = _fixture_rows()
     df = _FakeDF(rows)
     signals = [
@@ -141,10 +141,52 @@ def test_worst_departments_are_sorted_and_limited():
     )
     worst = result[1]['worst_departments_top3']
     assert len(worst) <= 2
-    assert worst[0]['compliance_pct'] <= worst[1]['compliance_pct']
+    assert worst[0]['risk_score'] >= worst[1]['risk_score']
     assert worst[0]['dept'] == 'DAIRY'
+    assert worst[1]['dept'] == 'PRODUCE'
     assert 'prompts' in worst[0]
     assert 'actioned_on_time' in worst[0]
+    assert 'risk_score' in worst[0]
+
+
+def test_worst_departments_tie_on_compliance_orders_higher_volume_first():
+    # Both departments are at 50% compliance, but EGGS has more absolute
+    # non-compliant alerts, so it should rank first under risk_score.
+    rows = [
+        {'ALERT_DATE': '2026-08-25', 'STORE_ID': 1, 'ITEM_HIERARCHY_2': 'EGGS', 'COMPLIANT': False},
+        {'ALERT_DATE': '2026-08-25', 'STORE_ID': 1, 'ITEM_HIERARCHY_2': 'EGGS', 'COMPLIANT': True},
+        {'ALERT_DATE': '2026-08-25', 'STORE_ID': 1, 'ITEM_HIERARCHY_2': 'EGGS', 'COMPLIANT': False},
+        {'ALERT_DATE': '2026-08-25', 'STORE_ID': 1, 'ITEM_HIERARCHY_2': 'EGGS', 'COMPLIANT': True},
+        {'ALERT_DATE': '2026-08-25', 'STORE_ID': 1, 'ITEM_HIERARCHY_2': 'EGGS', 'COMPLIANT': False},
+        {'ALERT_DATE': '2026-08-25', 'STORE_ID': 1, 'ITEM_HIERARCHY_2': 'EGGS', 'COMPLIANT': True},
+        {'ALERT_DATE': '2026-08-25', 'STORE_ID': 1, 'ITEM_HIERARCHY_2': 'EGGS', 'COMPLIANT': False},
+        {'ALERT_DATE': '2026-08-25', 'STORE_ID': 1, 'ITEM_HIERARCHY_2': 'EGGS', 'COMPLIANT': True},
+        {'ALERT_DATE': '2026-08-25', 'STORE_ID': 1, 'ITEM_HIERARCHY_2': 'EGGS', 'COMPLIANT': False},
+        {'ALERT_DATE': '2026-08-25', 'STORE_ID': 1, 'ITEM_HIERARCHY_2': 'EGGS', 'COMPLIANT': True},
+        {'ALERT_DATE': '2026-08-25', 'STORE_ID': 1, 'ITEM_HIERARCHY_2': 'CONFECTIONARY', 'COMPLIANT': False},
+        {'ALERT_DATE': '2026-08-25', 'STORE_ID': 1, 'ITEM_HIERARCHY_2': 'CONFECTIONARY', 'COMPLIANT': True},
+        {'ALERT_DATE': '2026-08-25', 'STORE_ID': 1, 'ITEM_HIERARCHY_2': 'CONFECTIONARY', 'COMPLIANT': False},
+        {'ALERT_DATE': '2026-08-25', 'STORE_ID': 1, 'ITEM_HIERARCHY_2': 'CONFECTIONARY', 'COMPLIANT': True},
+        {'ALERT_DATE': '2026-08-25', 'STORE_ID': 1, 'ITEM_HIERARCHY_2': 'CONFECTIONARY', 'COMPLIANT': False},
+        {'ALERT_DATE': '2026-08-25', 'STORE_ID': 1, 'ITEM_HIERARCHY_2': 'CONFECTIONARY', 'COMPLIANT': True},
+    ]
+    df = _FakeDF(rows)
+    signals = [
+        make_prompted_markdown_compliance_signal(store_id=1, trigger_types=['WOW']),
+    ]
+    result = prompted_markdown_compliance_facts.gather(
+        df, signals, '2026-08-25', '2026-08-31', top_n=3,
+    )
+    worst = result[1]['worst_departments_top3']
+    assert len(worst) == 2
+    assert worst[0]['dept'] == 'EGGS'
+    assert worst[0]['compliance_pct'] == 50.0
+    assert worst[0]['prompts'] == 10
+    assert worst[0]['risk_score'] == 5.0
+    assert worst[1]['dept'] == 'CONFECTIONARY'
+    assert worst[1]['compliance_pct'] == 50.0
+    assert worst[1]['prompts'] == 6
+    assert worst[1]['risk_score'] == 3.0
 
 
 def test_driver_assessment_workload_branch():
