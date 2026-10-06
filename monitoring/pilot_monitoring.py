@@ -400,10 +400,21 @@ def check_c4_volume_mix(runner, data_db, business_date):
 
 def check_c6_kpi_output(runner, data_db, business_date):
     table = f'{data_db}.PUBLIC.KPI_AVAILABILITY_SUMMARY'
+    # PR #103 added `by_division` as an additive sixth key; we now assert the
+    # five required keys are present rather than an exact key count.
+    required_keys = ["'OSCA'", "'STORE_CONTROLLABLE_OSCA'", "'actionability'", "'Alert_compliance'", "'tick_flick'"]
+    contains_checks = " AND ".join(
+        f"ARRAY_CONTAINS({k}::VARIANT, OBJECT_KEYS(PARSE_JSON(OSCA_DETAILS_JSON):performance_breakdown))"
+        for k in required_keys
+    )
+    store_contains_checks = " AND ".join(
+        f"ARRAY_CONTAINS({k}::VARIANT, OBJECT_KEYS(PARSE_JSON(STORE_CONTROLLABLE_OSCA_DETAILS_JSON):performance_breakdown))"
+        for k in required_keys
+    )
     rows = runner(
         f"SELECT COUNT(*) AS N, COUNT(DISTINCT STORE_ID) AS STORES, "
-        f"COUNT_IF(ARRAY_SIZE(OBJECT_KEYS(PARSE_JSON(OSCA_DETAILS_JSON):performance_breakdown)) = 5) AS OSCA_OK, "
-        f"COUNT_IF(ARRAY_SIZE(OBJECT_KEYS(PARSE_JSON(STORE_CONTROLLABLE_OSCA_DETAILS_JSON):performance_breakdown)) = 5) AS STORE_OSCA_OK "
+        f"COUNT_IF({contains_checks}) AS OSCA_OK, "
+        f"COUNT_IF({store_contains_checks}) AS STORE_OSCA_OK "
         f"FROM {table} WHERE RUN_DATE = '{business_date}'"
     )
     n = int(rows[0]['N']) if rows else 0
@@ -443,7 +454,7 @@ def check_c6_kpi_output(runner, data_db, business_date):
                    f'missing dates={missing_dates}')
     else:
         status = 'OK'
-        details = f'{n} rows/stores, exact OSCA contracts, {tod_entries} dated TOD entries'
+        details = f'{n} rows/stores, required OSCA contract keys present, {tod_entries} dated TOD entries'
     return _result('C6', status,
                    {'rows': n, 'stores': stores, 'columns': ncols, 'has_tod': has_tod,
                     'osca_contract_rows': osca_ok, 'store_osca_contract_rows': store_osca_ok,
