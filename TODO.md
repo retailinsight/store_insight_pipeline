@@ -1,9 +1,18 @@
 # Store Insight — TODO
 
-Last updated: 2026-10-05
+Last updated: 2026-10-08
 
-## Current status — 2026-10-03
+## Current status — 2026-10-06
 
+- [x] Dan approved read-only MCP source-data tools for our agents only. Branch `feat/agentic-mcp-prototype`: PRD updated, `mcp/app/source_data_repo.py` added with 6 read-only tools, registered in `mcp/app/server.py` behind DEV_MODE/MCP_SOURCE_DATA_ENABLED, unit tests pass.
+- [x] MCP source-data smoke test: ran read-only against Kroger Snowflake (`UUTQCJV-KRO`, role `SNOWFLAKE_DATASCIENCE`) via externalbrowser SSO. All 6 tools returned expected results from `ANALYSIS.GOLD.GLD_LSM_SHELF_DIMENSION` and `ANALYSIS.FINAL.SALES`. No writes/object changes.
+- [x] MCP chart-data prep: added `bay_sales_profile` tool returning chart-ready daily/hourly series; validated against scratchpad notebook totals (Aisle 1-L-18: 37 items / 10,511 units; Aisle 3-R-1: 54 items / 1,984 units).
+- [x] Detector PRD drafted for Kroger "shoppers as the clock" OOS trial (`prds/prd-kroger-shoppers-as-clock-detector.md`), mapping MCP Gate 2 checks and workflow gates.
+- [x] Detector code + card renderer built read-only in `research/kroger/`: `osa_detector.py`, `card_renderer.py`, `run_osa_trial.py`. Trial run on site 70300041, Aisle 1-L-18 produced 12 alerts; top items flagged include COKE ZERO, TEJAVA, COKE CHERRY. Output sample saved locally. No Snowflake writes.
+- [x] Snowflake investigation: `GLD_LSM_WALL2WALL_ENRICHED` is a scan-derived availability table; `GLD_LSM_INVENTORY` gives the zero-stock natural experiment and is the strongest ground truth.
+- [x] Replaced the consecutive-low heuristic with the notebook-style filtered beta-binomial HMM and noisy-OR bay aggregation. Fixed expected-share inflation by including zero-sale item-hours and normalized Kroger inventory IDs. Commit `2b8d1bc` pushed to `feat/agentic-mcp-prototype`; 5 tests and Ruff pass.
+- [ ] Latest read-only validation (site 70300041, 2026-08-31): 6 item alerts, 11 zero-stock items, item precision/recall 0%/0%. Both trial bays were flagged and both contained zero-stock items (2/2), but this is not conclusive because there were no negative bays. Broader multi-date/multi-bay validation is required.
+- [x] Dan chose option 2: add bay-level aggregation for slow movers and validate it against the available Kroger labels.
 - [x] PR #119 merged & deployed: OSA lost-sales currency stat; BINNED_WASTE wording fix.
 - [x] PR #120 merged & deployed: BINNED_WASTE 7-day chart alignment + comparison subtitle.
 - [x] PR #121 merged & deployed: OSA_RECURRING_SLOT dates, removed avg stat, slot-specific titles.
@@ -18,10 +27,67 @@ Last updated: 2026-10-05
 - [x] 3 Oct 06:00 CRT monitoring: C1 FAIL investigated. `markdown_sales` feed missing for 2026-10-01/02 (1 row on 2026-09-30 vs ~279k baseline) → `DETECTORS_SKIPPED`; `feedback` SUSPECT (~73% of baseline). `DATA_QUALITY_LOG` rows exist for run_date 2026-10-03. No pipeline bug; gate worked as intended. C10 KPI timing warning should be corrected by 11:45 refresh. Action: check `markdown_sales` source feed landing.
 - [x] Write and agree PRD for diary-view backend Snowflake/API changes. PRD: `prds/prd-diary-view-backend.md`. Dan approved scope 2 Oct 2026. Imran has the frontend branch. .NET API changes (`AddNotificationArgument`, `NotificationService`, new diary endpoint) to be done by Cornelious/Imran; Snowflake migration owned by Elaheh.
 - [x] Message Cornelious/Imran with diary-view backend field contract and API endpoint proposal (5 Oct 2026).
-- [ ] Implement diary-view backend: create/run `PUSH_NOTIFICATIONS` migration in CRT (DEV inherits via 07:00 clone); coordinate API endpoints with Cornelious/Imran.
+- [ ] Implement diary-view backend: create/run `PUSH_NOTIFICATIONS` migration in CRT + DEV directly (07:00 clone only copies `ALERTS_PIPELINE`/`KPI_AVAILABILITY_SUMMARY` — DEV does NOT inherit); coordinate API endpoints with Cornelious/Imran.
+  - [x] Migration file: `store_insight_api/add_diary_fields_push_notifications.sql` (nullable `ALERT_ID`/`ALERT_TYPE`/`USER_NAME`/`USER_NOTE`).
+  - [x] Applied to `STORE_INSIGHT_DEV.PUBLIC` 7 Oct — verified all 4 columns live.
+  - [x] Applied to `STORE_INSIGHT_DB.PUBLIC` 7 Oct — verified all 4 columns live; all 5 scheduled tasks unaffected.
+  - [x] Contract updated: `SNOWFLAKE_CONTRACT_FOR_API_UI_V2.3.md` now documents the new columns and the optional `ALERT_ID` link.
+  - [ ] Remaining: API changes (optional `alertId`/`alertType`/`userNote` on `POST /notifications`, `GET /notifications/diary/{storeId}`) — owned by Cornelious/Imran per PRD.
 - [x] Clarify monitoring C1/C7 Slack message so source feed delays are not mistaken for pipeline errors. Weekend/Monday `markdown_sales`/`wastage` lag is the known pattern.
 - [ ] Push `SNOWFLAKE_CONTRACT_FOR_API_UI_V2.2.md` to git once final.
 - [ ] CRT `EXECUTE TASK` self-grant privilege gap remains tracked.
+
+## Kroger shoppers-as-clock — bay-level ML trial (Dan chose option 2)
+
+**Safety/scope:** Kroger account `UUTQCJV-KRO`, external-browser SSO, role `SNOWFLAKE_DATASCIENCE`; read-only queries only. No Snowflake writes, DDL, grants, object changes, CRT/DEV changes, detector delivery work, or card work.
+
+- [x] Replace the consecutive-low-hours heuristic with filtered two-state beta-binomial HMM beliefs; include zero-sale item-hours when fitting expected share.
+- [x] Preserve per-item beliefs and add the notebook's bay aggregation: `P(any item out) = 1 - product(1 - P(item out))`.
+- [x] Add deterministic local tests and run one live read-only Kroger evaluation through external-browser SSO. No Snowflake writes or object changes.
+- [x] Dan confirmed measurement needs more thought and is not straightforward; pause delivery/card work and model tuning until the measurement design is agreed. Dave's view is still outstanding.
+- [x] Broader bounded read-only evaluation completed: site `70300041`, 6 bays / 380 mapped items, training from 2026-06-01, five August calibration dates and four September test dates. Fixed site/date/item-filtered Snowpark reads only; no writes or object changes.
+- [x] Built combined labels from inventory zero and confirmed unavailable wall-to-wall statuses. Across all evaluation dates: 630 inventory-zero item-days, 84 scan-unavailable item-days and 43 with both labels.
+- [x] Corrected the evaluation to positive-unlabelled. Absence from inventory-zero/W-2-W is not an available label; unmatched alerts are unverified. Removed precision, false-positive, F1 and threshold-selection claims.
+- [x] September descriptive results: at score >=0.5, 151 alerts matched 15/277 recorded-positive item-days (5.4% recorded-positive recall); 136 alerts are unverified. At >=0.7, 95 alerts matched 4/277 (1.4%); 91 are unverified. This does not estimate precision.
+- [x] Score enrichment check found the model ranking is inversely associated with the recorded-positive process in this sample: recorded-positive prevalence was 18.2% overall, 4.2% among >=0.7 scores (0.23x enrichment), and 4.5% among >0.9 scores. This is not proof the alerts are wrong, but it shows the score does not recover Kroger's recorded positives.
+- [x] Drafted the prospective measurement design in the detector PRD: independently sample high-, medium- and low-score items plus random controls; preserve inclusion probabilities; blind checks to score; capture exact score/check timestamps and explicit shelf outcomes; use sampling-weighted estimates and an untouched final period.
+- [x] Prepared the shareable Dan/Dave decision note: `prds/kroger-shoppers-as-clock-measurement-review.md`. It separates MCP findings from detector accuracy, summarises the positive-unlabelled evidence, defines the background test and lists exact approvals needed.
+- [x] Completed a bounded read-only measurement-data audit for site `70300041`, six bays and Aug-Sep 2026. Inventory had one row per item/day and same-day file dates, but covered only 54/380 mapped items and has no snapshot time. Seven negative-stock item-days all had sales, so negative stock is not a safe unavailable label without Kroger confirmation.
+- [x] Audited 268 wall-to-wall rows. All had same-day `CREATED_TM`; follow-up sales differed by status. Existing feedback had 1,008 selected-bay `Phantom` rows, all `ACCURATE_ALERT=false`, only two same-day item overlaps with scans and no accurate overlaps, so it is not independent proof for this model.
+- [x] Narrowed the suggested first check scope to Aisle 1-L-18 (37 fast-selling items) and Aisle 3-R-1 (56 mixed/slow items). A full sweep is 93 checks; recommend a smaller score-group sample rather than all six bays (380 checks).
+- [x] Built and ran a deterministic read-only dry-run sampler. It produced 32 unique items: 16 per bay, with four from each bay's low, middle and high score thirds plus four random items. Output includes score, selection chance and blank check-result fields. Historical score date 2026-09-28 means this tests the process only; it is not a completed shelf test.
+- [x] Tested sample stability on 7/14/21/28 Sep: 30, 30 and 31 of 32 sampled items repeated between consecutive dates, while 48, 55 and 42 of all 93 items changed score third. The list is stable but score groups move; use fresh groups for the real check.
+- [x] Added stale-sample/result validation and a score-blind checker CSV. Tests reject stale/future scores, invalid or late timestamps, duplicates, missing IDs and invalid outcomes. Fake outcomes confirm only `SHELF_GAP`/`AVAILABLE` enter yes/no analysis; unclear results remain excluded.
+- [x] Compared rankings on the same sampled items without making accuracy claims. HMM rank correlation: no-sales rule 0.52, sales-gap rule 0.45, inventory-zero 0.07; top-10 overlap was 1, 4 and 0. Previous low-hours scores were constant on the sample and shared 0 top-10 items.
+- [ ] Send the updated decision note to Dan and Dave. Approve the 32-check process test, outcome definitions, allowed check delay, capture route and owner. Then rerun with fresh scores immediately before physical checks. No MCP/Snowflake writes and no store action.
+- [ ] Compare against simple baselines in the same prospective sample: the previous consecutive-low heuristic, zero recent sales and inventory-zero-only.
+- [x] Investigated recorded-positive misses and unverified alerts before tuning. Recorded unavailable items are mostly slow/no-sale items: combined positives had median belief about 0.016; 571/678 recorded-positive diagnostic rows scored <=0.1. Of 84 scan-unavailable item-days, only 3 sold that day and only 1 sold at/after the scan hour, supporting the scan labels but confirming sparse evidence.
+- [x] Diagnosed unverified high-score cases: many are persistent HMM beliefs on items with no sale and near-zero/zero expected units; non-zero inventory does not establish that they were available. Bay noisy-OR combines these beliefs and saturates near 1. Inventory also contains negative quantities, whose semantics must be confirmed before treating only exact zero as unavailable.
+- [ ] Confirm with Dan/Kroger what inventory quantities below zero mean, whether `INVENTORY_DATE` is end-of-day, and whether all selected wall-to-wall statuses should be equal-strength labels.
+- [ ] Add an information/eligibility gate for zero-baseline and ultra-slow items, plus shopper-count proxy/capped-unit handling and expected-share shrinkage, only after label semantics are confirmed.
+- [ ] Produce shared chart-data functions for notebook and MCP use: bay posterior over time, top item contributors, observed versus expected share, labels and threshold crossings. Rendering remains outside MCP.
+- [ ] Review broader evidence with Dan/Dave before changing the PRD, scaling stores/bays, or doing delivery integration.
+
+**Immediate next step:** share the updated note and 32-check dry-run plan with Dan and Dave. Agree the checker, check time, maximum delay, result definitions and capture route. Once agreed, rerun the sampler with fresh data and complete the physical checks. Separately ask Kroger to confirm negative stock meaning, inventory snapshot time and whether all wall-to-wall statuses should carry equal weight.
+
+## Monitoring investigation — 2026-10-06
+
+- [x] Investigated the 2026-10-06 Slack FAIL (`C1`, `C6`, `C7`) on `STORE_INSIGHT_DB` via externalbrowser SSO (UKCOOP account, role `STORE_INSIGHT_ROLE`). All queries were read-only.
+- Findings:
+  - **C6 is a false alarm.** The latest KPI run (`RUN_DATE=2026-10-06`, `ANALYSIS_DATE=2026-10-05`) has 121 rows / 121 stores with healthy OSCA values (e.g. store 204: 94.3%). The C6 failure is because `monitoring/pilot_monitoring.py` asserts `ARRAY_SIZE(OBJECT_KEYS(...performance_breakdown)) = 5`, but PR #103 added `by_division`, so the object now has 6 keys. Monitoring reports `OSCA=0/121` while the data is fine.
+  - **C1 / C7 are caused by late WMD_SALES / WMD_WASTAGE feed delivery, confirmed by Bryan.** At 09:36 on 2026-10-06 the source views still only have data through 2026-10-02, while the 06:00 gate checked 2026-10-03.
+    - `WASTAGE_V1` max date = 2026-10-02, so 0 rows for 2026-10-03 → gate skipped wastage detectors.
+    - `MARKDOWN_SALES_V1` max date = 2026-10-02, so 0 rows for 2026-10-03 → gate skipped markdown detectors.
+    - `FEEDBACK_V1` max date = 2026-10-04, but 1,123 rows for 2026-10-03 vs 1,559 baseline (~72%) → SUSPECT/FLAGGED.
+    - `OSA_V1` max date = 2026-10-05 and `MARKDOWN_LOG_V1` max date = 2026-10-05 → OK.
+  - Bryan's timeline: the 30 Sep markdown-sales file never arrived; 1 Oct and 2 Oct files were missed; since 4 Oct files have landed at the normal 11am cadence but the pipeline is now ~2 days behind the expected 3-day lag. The 6am run therefore expects data that has not yet landed.
+  - Bryan created a ClickUp ticket for the data platform to investigate/backfill and flagged that the client may need to be asked about the data lag.
+  - All scheduled tasks (`RUN_ALERTS_PIPELINE_TASK`, `KPI_AVAILABILITY_BATCH_TASK`, `MONITORING_TASK`) on 2026-10-06 SUCCEEDED.
+- [x] Fixed `monitoring/pilot_monitoring.py` `check_c6_kpi_output` to assert the required 5 keys are present (additive `by_division` allowed) rather than an exact key count.
+- [x] Redeployed `SP_RUN_MONITORING` + `MONITORING_TASK` to CRT from `main` `bc7faf5`. Manual supervised run `MON_2026-10-06_52aeec13` now reports `C6=OK`. C1/C7 remain FAIL because of the late WMD_SALES / WMD_WASTAGE feeds; Slack alert updated automatically.
+- [x] **Feed resolved — confirmed 8 Oct.** `MARKDOWN_SALES_V1`/`WASTAGE_V1` complete through 2026-10-05 (7 Oct); the 8 Oct 07:00 monitoring run (`MON_2026-10-08_94a0911e`) reported **Recovered — all 8/8 checks green**, C1/C7 back to healthy. Client back on normal X+1 cadence. Data-platform ClickUp ticket closed by Bryan.
+  - **No CRT catch-up needed** (verified 7 Oct, agreed with Bryan): `BINNED_WASTE` TREND uses a rolling window (`analysis_date -7 to -1` vs `-14 to -8`), so the 8 Oct run absorbed the recovered 1–4 Oct data naturally. Only single-day SPIKEs on 1–4 Oct are permanently missed — low value (sustained spikes surface via TREND; reverted blips aren't actionable). Dan/Dave informed.
+  - [ ] **Remaining gap:** the 30 Sep `wmd_sales` file never arrived (1 row vs ~275k baseline) — client question via Dave/Victoria still open.
 
 ## Environment naming — READ FIRST (agreed with Dan and Dave, 13 Sep 21:09)
 
@@ -191,7 +257,7 @@ Dan asked Elaheh to **take charge of getting Store Insight items through** while
 3. **Bugs** — Trello board `actions-pipeline` right-hand bugs column (29 Sep triage):
    - **"Old style actions still showing text format"** — pipeline/DB side fixed by PR #112 and fully validated in DEV: typed stats/matrices/ranked lists/bar/line charts, structured dates, OSA PPG/items/barcodes. Remaining work is API/UI acceptance. Agreed contract: Snowflake stores JSON text; API deserializes once and returns an object or null without remapping/dropping fields; UI renders by `widget.type`; null presentation keeps the old fallback. Dan confirmation and Cornelious/Imran implementation/sign-off remain.
    - **"Barcode not showing in API for some OSA alerts"** — pipeline root cause fixed, merged (PR #109), and DEV-verified (30 Sep): standalone `OSA_BIG_DROP` gatherer now supplies `item_lsv_changes`; all 35 DEV BIG_DROP rows carry `upcs`/`eans`/`identifier_mapping_status` (store 638 spot-checked). **Not yet closed:** Cornelious/Imran must confirm the API returns these fields and the UI barcode displays in DEV; CRT deployment remains separate.
-   - **"Prompted compliance worst performing departments needs more context"** — not fixed by the current PRs; this is a separate feature requiring pipeline and API changes (risk score = alerts due × (1 − compliance rate); API needs compliance %, due count and compliant/actioned count). Dan assigned Bryan 28 Sep. Keep open until Bryan links a PR and DEV evidence confirms the added context.
+   - **"Prompted compliance worst performing departments needs more context"** — Bryan linked **PR #130** (8 Oct): `worst_departments_top3` gains `risk_score = prompts × (1 − compliance_rate)`, sorted desc; presentation re-adds a `worst_departments` `ranked_list` widget (compliance % + "X out of Y compliant", same convention as PR #123). **Reviewed and verified — recommend merge.** Still needed after merge: API/UI contract update (3rd widget), supervised DEV deploy, DEV evidence on live cards.
    - KPI NULL columns resolved by product decision: `PROMPTED_MARKDOWN_*` is fixed and DEV-verified for 121/121 stores; Waste has no KPI and stays hidden; generic Markdown stays null until Bryan's valid source-data PR.
 4. **Also on Dan's week plan:** cost of inaction deployed; OSA performance by category collapsed.
 
@@ -244,7 +310,7 @@ Dan asked Elaheh to **take charge of getting Store Insight items through** while
 - [x] Presentation pipeline PR #112 merged (`10dee55`), deployed to DEV and Snowflake-validated. Local verification before merge: 891 passed, 2 skipped; Ruff/diff/secret checks clean. DEV acceptance now waits only on API/UI rendering.
 - [x] Sync `sync/pipeline-osa-refactor` with `origin/main` (1 Oct). Branch now includes PR #112 and all related builder/test/model changes; `pipeline/presentation/models.py` now has `BarChartWidget`/`LineChartWidget`.
 - [ ] API presentation pass-through: Cornelious updated DEV API on 1 Oct to return parsed `presentationJson` object/null. Screenshot confirms object output and structured `{label,date}` categories. Final checks remain for line-chart `series`, ranked-list `items`, OSA item `secondary_label`, null fallback and stores 204/239. Nested presentation fields remain unchanged `snake_case` (`schema_version`, `highlighted_index`, `secondary_label`); V1.9 now states this explicitly. Imran UI sign-off and Dan's final contract confirmation remain.
-- [ ] PR #108 Cost if Not Actioned: request changes before merge—remove monetary Markdown Compliance claims until Bryan's valid source-data PR, preserve OSA_BIG_DROP's drop-day projection basis, add zero/unavailable-cost fallbacks, rebase onto `main`, and treat API/UI panel support as separate PRs. Review verification on rebased change: 83 focused tests passed; full suite 883 passed, 2 skipped, plus one worktree-name packaging artifact.
+- [ ] PR #108 Cost if Not Actioned: second review on `620ef04` (8 Oct). Bryan addressed points 1–4: markdown-compliance `cost_if_not_fixed` now qualitative + TODOs, `OSA_BIG_DROP` basis wording restored, `_cost_or_fallback` prevents £0.00 across all emitters, UI panel reverted. 96 focused tests pass. **Still open:** (a) `projected_cost` £ exposure still leaks into `explanation` in `_generate_markdown_compliance`/`_generate_prompted_markdown_compliance`; (b) rebase is one commit behind (`9ad7a21`, main is `bc7faf5`). Approval pending those two fixes; UI panel is a separate Imran/Cornelious PR.
 - [ ] Cornelious/Imran: validate OSA_STORE_ACTIONABLE, COMPLIANCE and BINNED_WASTE end to end in DEV against V1.9; use store 239 (SPIKE plus OSA lists/barcodes) and store 204 (combined SPIKE+TREND plus COMPLIANCE). Record API payload and UI screenshot for the same cards.
 - [x] Remaining builders Gate 2: read-only audit completed for PROMPTED_MARKDOWN_COMPLIANCE, OSA_BIG_DROP, OSA_RECURRING_SLOT, MARKDOWN_OVERRIDE and MARKDOWN_SKU. Exact UX/JSON widget proposals sent to Imran/Cornelious for approval. Audit script: `scripts/audit_remaining_presentations.py`.
 - [x] Remaining builders Gate 3: implementation plan and skipped acceptance tests prepared in branch `feat/presentation-phase2-remaining-builders`. Design doc: `docs/presentation-phase2-design.md`. Test fixtures: `pipeline/presentation/tests/test_phase2_builders.py`. Branch pushed; draft PR ready at https://github.com/dantretailinsight/store_insight/pull/new/feat/presentation-phase2-remaining-builders. Tests: 5 passed, 5 skipped.
