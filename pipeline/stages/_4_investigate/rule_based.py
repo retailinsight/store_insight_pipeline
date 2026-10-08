@@ -877,7 +877,6 @@ def _generate_markdown_compliance(signal: dict) -> dict:
     wow_change = signal.get("wow_change_pp")
     chain_rate = signal.get("chain_compliance_rate")
     below_chain = signal.get("below_chain_pp")
-    projected_cost = signal.get("projected_cost") or 0.0
 
     facts = signal.get("facts", {})
     driver = facts.get("driver_assessment") or {}
@@ -919,12 +918,6 @@ def _generate_markdown_compliance(signal: dict) -> dict:
             f"{row['dept']} ({row['compliance_pct']:.1f}%)" for row in worst_depts[:3]
         )
         explanation_lines.append(f"Worst departments: {dept_list}.")
-    if projected_cost:
-        explanation_lines.append(
-            f"At £{projected_cost:,.2f} per week, the four-week exposure is approximately "
-            f"£{projected_cost * 4:,.2f} if not fixed."
-        )
-
     dept_names = [row["dept"] for row in worst_depts[:3]]
     focus = ", ".join(dept_names) if dept_names else "the worst-performing departments"
     target = f"{last_rate:.1f}%" if last_rate is not None else "the prior week's rate"
@@ -951,7 +944,7 @@ def _generate_markdown_compliance(signal: dict) -> dict:
         )
 
     # TODO: projected_cost source data for MARKDOWN_COMPLIANCE is currently
-    # invalid — restore the £ projection once the data PR lands and the
+    # invalid — revisit the monetary narrative once the data PR lands and the
     # source is validated.
     cost_if_not_fixed = "If compliance continues to fall, straight-to-bin waste is likely to increase."
 
@@ -973,7 +966,6 @@ def _generate_prompted_markdown_compliance(signal: dict) -> dict:
     wow_change = signal.get("wow_change_pp")
     chain_rate = signal.get("chain_compliance_rate")
     below_chain = signal.get("below_chain_pp")
-    projected_cost = signal.get("projected_cost") or 0.0
 
     facts = signal.get("facts", {})
     driver = facts.get("driver_assessment") or {}
@@ -1020,12 +1012,6 @@ def _generate_prompted_markdown_compliance(signal: dict) -> dict:
         explanation_lines.append(
             f"Worst days for on-time actioning: {_join_names(worst_days)}."
         )
-    if projected_cost:
-        explanation_lines.append(
-            f"At £{projected_cost:,.2f} per week, the four-week exposure is approximately "
-            f"£{projected_cost * 4:,.2f} if not fixed."
-        )
-
     if "WOW" in triggers and last_rate is not None:
         if this_rate > last_rate:
             trend = (
@@ -1047,7 +1033,7 @@ def _generate_prompted_markdown_compliance(signal: dict) -> dict:
     else:
         action = trend + "."
 
-    # TODO: Interpolate £{last_7d_stb_value} once STB data is available on prompted compliance signals.
+    # TODO: Revisit the monetary narrative once STB data is available on prompted compliance signals.
     cost_if_not_fixed = "If compliance continues to fall, straight-to-bin waste is likely to increase."
 
     return {

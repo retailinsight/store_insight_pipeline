@@ -109,7 +109,7 @@ The measured result of a Commitment, written to `STORE_INSIGHT_OUTCOMES`. Histor
 The £ value attributed to a resolved Commitment. Equal to the `projected_cost` from the original alert card at the time the Commitment was made. Recorded as NULL if the signal was not resolved. Not a measurement of actual metric change — it is the pipeline's pre-existing estimate of what fixing the problem would be worth.
 
 ### Cost if Not Actioned
-The card-facing label for the `cost_if_not_fixed` narrative field on an alert card. Either a projected £ figure (typically a weekly or daily rate projected over 4 weeks) or, when no valid cost figure exists — including zero, missing, or invalid source data — a qualitative risk sentence. Cards never display £0.00. Distinct from Projected Cost: Projected Cost is the scorer-computed £ input to the composite score; Cost if Not Actioned is display text and may differ in wording or be text-only.
+The card-facing label for the `cost_if_not_fixed` narrative field on an alert card. Either a projected £ figure (typically a weekly or daily rate projected over 4 weeks) or, when no valid cost figure exists — including zero, missing, or invalid source data — a qualitative risk sentence. When an alert has no valid monetary basis, its card uses qualitative language and does not display unsupported currency values in any field. Cards never display £0.00. Distinct from Projected Cost: Projected Cost is the scorer-computed £ input to the composite score; Cost if Not Actioned is display text and may differ in wording or be text-only.
 
 ## Known Risks
 

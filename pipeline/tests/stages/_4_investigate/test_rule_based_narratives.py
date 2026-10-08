@@ -922,7 +922,7 @@ def test_markdown_compliance_workload_narrative_matches_example():
     assert 'fallen 14pp' in out['recommended_action']
     assert 'PRODUCE, CHILLED CONVENIENCE, IN-STORE BAKERY' in out['recommended_action']
     assert '83.4%' in out['recommended_action']
-    assert '£136.93' in out['explanation'] or '£547.72' in out['explanation']
+    assert all('£' not in value for value in out.values())
 
 
 def test_markdown_compliance_coaching_narrative():
@@ -1021,11 +1021,12 @@ def _prompted_markdown_compliance(**overrides):
 
 
 def test_prompted_markdown_compliance_workload_narrative_matches_example():
-    out = generate(_prompted_markdown_compliance())
+    out = generate(_prompted_markdown_compliance(projected_cost=136.93))
     _assert_card_keys(out)
     assert out['issue'] == 'Ensure the team are dedicating enough time to work the prompted alerts.'
     assert 'Compliance has dropped from 77.9% to 61.5% in the last 7 days' in out['recommended_action']
     assert 'alert volume rose above the weekly average' in out['recommended_action']
+    assert all('£' not in value for value in out.values())
 
 
 def test_prompted_markdown_compliance_coaching_narrative():
