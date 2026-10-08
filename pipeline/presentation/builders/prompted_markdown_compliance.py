@@ -7,6 +7,8 @@ from store_insight.pipeline.presentation.models import (
     ChartCategory,
     ChartSeries,
     LineChartWidget,
+    RankedListItem,
+    RankedListWidget,
 )
 
 
@@ -53,6 +55,25 @@ def build_prompted_markdown_compliance_presentation(signal: dict, narrative: dic
                     ),
                 ],
                 format="number",
+            )
+        )
+
+    worst = facts.get("worst_departments_top3", [])
+    if worst:
+        widgets.append(
+            RankedListWidget(
+                id="worst_departments",
+                title="Worst performing departments",
+                subtitle="% of compliant alerts",
+                items=[
+                    RankedListItem(
+                        label=str(row["dept"]),
+                        value=float(row["compliance_pct"]),
+                        secondary_label=f"{row['actioned_on_time']} out of {row['prompts']} compliant",
+                    )
+                    for row in worst
+                ],
+                format="percentage",
             )
         )
 

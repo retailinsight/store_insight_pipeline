@@ -41,9 +41,9 @@ PROMPTED_MARKDOWN_COMPLIANCE_SIGNAL = {
             {"date": "2026-09-27", "day": "Sunday", "compliance_pct": 90.95, "checks_due": 199, "actioned_on_time": 181},
         ],
         "worst_departments_top3": [
-            {"dept": "MEAT PRODUCTS", "prompts": 5, "actioned_on_time": 1, "compliance_pct": 20.0},
-            {"dept": "BREAKFAST CEREALS", "prompts": 45, "actioned_on_time": 10, "compliance_pct": 22.22},
-            {"dept": "BEER/LAGER & CIDER", "prompts": 87, "actioned_on_time": 21, "compliance_pct": 24.14},
+            {"dept": "BEER/LAGER & CIDER", "prompts": 87, "actioned_on_time": 21, "compliance_pct": 24.14, "risk_score": 66.0},
+            {"dept": "BREAKFAST CEREALS", "prompts": 45, "actioned_on_time": 10, "compliance_pct": 22.22, "risk_score": 35.0},
+            {"dept": "MEAT PRODUCTS", "prompts": 5, "actioned_on_time": 1, "compliance_pct": 20.0, "risk_score": 4.0},
         ],
     },
 }
@@ -99,6 +99,18 @@ PROMPTED_MARKDOWN_COMPLIANCE_EXPECTED = {
                 },
             ],
             "format": "number",
+        },
+        {
+            "type": "ranked_list",
+            "id": "worst_departments",
+            "title": "Worst performing departments",
+            "subtitle": "% of compliant alerts",
+            "items": [
+                {"label": "BEER/LAGER & CIDER", "value": 24.14, "secondary_label": "21 out of 87 compliant"},
+                {"label": "BREAKFAST CEREALS", "value": 22.22, "secondary_label": "10 out of 45 compliant"},
+                {"label": "MEAT PRODUCTS", "value": 20.0, "secondary_label": "1 out of 5 compliant"},
+            ],
+            "format": "percentage",
         },
     ],
 }
