@@ -78,7 +78,7 @@ def build_osa_store_actionable_presentation(signal: dict, narrative: dict) -> Al
         widgets.append(
             RankedListWidget(
                 id="ppg_lsv_changes",
-                title="Worst performing PPGs",
+                title="Worst performing Sub Departments",
                 subtitle="Store-controlled lost sales this week",
                 items=[
                     RankedListItem(

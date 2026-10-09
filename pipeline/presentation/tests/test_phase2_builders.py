@@ -205,7 +205,7 @@ OSA_BIG_DROP_EXPECTED = {
         {
             "type": "ranked_list",
             "id": "ppg_lsv",
-            "title": "Worst performing PPGs",
+            "title": "Worst performing Sub Departments",
             "subtitle": "Store-controlled lost sales this week",
             "items": [{"label": "HAND ROLLING TOBACCO", "value": 28.97, "secondary_label": None}],
             "format": "currency",
