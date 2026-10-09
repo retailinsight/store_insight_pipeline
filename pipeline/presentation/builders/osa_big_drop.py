@@ -75,7 +75,7 @@ def build_osa_big_drop_presentation(signal: dict, narrative: dict) -> AlertPrese
         widgets.append(
             RankedListWidget(
                 id="ppg_lsv",
-                title="Worst performing PPGs",
+                title="Worst performing Sub Departments",
                 subtitle="Store-controlled lost sales this week",
                 items=[
                     RankedListItem(
