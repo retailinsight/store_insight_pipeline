@@ -202,6 +202,37 @@ EXECUTE AS CALLER
         print(f"[deploy] Could not grant READ on stage ({exc})")
 
 
+def _validate_deployment_target(db: str, client: str | None, task_off: bool) -> None:
+    if db.upper() == "STORE_INSIGHT_DB" and not task_off and client != "eastofengland":
+        raise ValueError(
+            "Refusing CRT task deployment without --client eastofengland. "
+            "Use --task-off for an SP-only deployment."
+        )
+
+
+def _assert_registered_task(session, db: str, schema: str, cron: str, tz: str) -> None:
+    task_fqn = f"{db}.{schema}.RUN_ALERTS_PIPELINE_TASK"
+    rows = session.sql(f"SHOW TASKS LIKE 'RUN_ALERTS_PIPELINE_TASK' IN SCHEMA {db}.{schema}").collect()
+    matches = [
+        row.as_dict()
+        for row in rows
+        if row.as_dict().get("name", "").upper() == "RUN_ALERTS_PIPELINE_TASK"
+    ]
+    if len(matches) != 1:
+        raise RuntimeError(f"Expected one live task {task_fqn}, found {len(matches)}.")
+
+    task = matches[0]
+    expected_call = f"CALL {db}.{schema}.RUN_ALERTS_PIPELINE('eastofengland', NULL, FALSE, FALSE)"
+    expected_schedule = f"USING CRON {cron} {tz}"
+    if task.get("state", "").upper() != "STARTED":
+        raise RuntimeError(f"Post-deploy check failed: {task_fqn} is not STARTED.")
+    if task.get("definition", "").strip().rstrip(";") != expected_call:
+        raise RuntimeError(f"Post-deploy check failed: {task_fqn} has an unsafe definition.")
+    if task.get("schedule", "") != expected_schedule:
+        raise RuntimeError(f"Post-deploy check failed: {task_fqn} has an unexpected schedule.")
+    print(f"[deploy] Task verification passed: {task_fqn}")
+
+
 def _register_task(
     session, stage: str, warehouse: str, cron: str, tz: str, client: str = None
 ) -> None:
@@ -248,6 +279,25 @@ AS
             print(f'[deploy] Granted EXECUTE TASK on account to role {role}.')
         except Exception as exc:  # noqa: BLE001
             print(f'[deploy] Could not self-grant EXECUTE TASK ({exc}).')
+
+
+def _deploy_task(
+    session,
+    db: str,
+    schema: str,
+    stage: str,
+    warehouse: str,
+    cron: str,
+    tz: str,
+    client: str | None,
+    task_off: bool,
+) -> None:
+    if task_off:
+        print("[deploy] --task-off set: skipping Task registration.")
+        return
+    _register_task(session, stage, warehouse, cron, tz, client=client)
+    if db.upper() == "STORE_INSIGHT_DB":
+        _assert_registered_task(session, db, schema, cron, tz)
 
 
 # ---------------------------------------------------------------------------
@@ -314,6 +364,7 @@ def main():
     cron = args.cron or schedule.cron or "0 6 * * *"
     tz = args.tz or schedule.timezone or "Europe/London"
     stage = args.stage or f"{db}.{schema}.ALERTS_PIPELINE_STAGE"
+    _validate_deployment_target(db, args.client, args.task_off)
 
     print("[deploy] Connecting to Snowflake...")
     session = _create_session()
@@ -327,10 +378,9 @@ def main():
         _upload_zip(session, zip_path, stage)
         _register_sp(session, stage, warehouse)
 
-        if args.task_off:
-            print("[deploy] --task-off set: skipping Task registration.")
-        else:
-            _register_task(session, stage, warehouse, cron, tz, client=args.client)
+        _deploy_task(
+            session, db, schema, stage, warehouse, cron, tz, args.client, args.task_off
+        )
 
         print("[deploy] Done.")
 

@@ -13,17 +13,26 @@ from store_insight.pipeline.deploy.handler import (
 from store_insight.pipeline.pipeline import run_batch
 
 
+class FakeRow:
+    def __init__(self, **values):
+        self.values = values
+
+    def as_dict(self):
+        return self.values
+
+
 class FakeSession:
-    def __init__(self, database="STORE_INSIGHT_DB"):
+    def __init__(self, database="STORE_INSIGHT_DB", rows=None):
         self.statements = []
         self._database = database
+        self.rows = rows or []
 
     def sql(self, statement):
         self.statements.append(statement)
         return self
 
     def collect(self):
-        return []
+        return self.rows
 
     def get_current_database(self):
         return f'"{self._database}"'
@@ -286,6 +295,82 @@ def test_daily_task_explicitly_disables_cortex(monkeypatch):
         session.statements[1]
         == "ALTER TASK STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE_TASK RESUME"
     )
+
+
+def test_crt_task_deploy_requires_eastofengland_client():
+    with pytest.raises(ValueError, match="--client eastofengland"):
+        deploy._validate_deployment_target("STORE_INSIGHT_DB", None, task_off=False)
+
+
+def test_crt_task_deploy_accepts_eastofengland_client():
+    deploy._validate_deployment_target(
+        "STORE_INSIGHT_DB", "eastofengland", task_off=False
+    )
+
+
+def test_crt_sp_only_deploy_allows_missing_client():
+    deploy._validate_deployment_target("STORE_INSIGHT_DB", None, task_off=True)
+
+
+def test_task_off_does_not_alter_or_verify_task(monkeypatch):
+    session = FakeSession()
+    monkeypatch.setattr(
+        deploy,
+        "_register_task",
+        lambda *args, **kwargs: pytest.fail("task registration must be skipped"),
+    )
+    monkeypatch.setattr(
+        deploy,
+        "_assert_registered_task",
+        lambda *args, **kwargs: pytest.fail("task verification must be skipped"),
+    )
+
+    deploy._deploy_task(
+        session,
+        "STORE_INSIGHT_DB",
+        "PUBLIC",
+        "STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE_STAGE",
+        "STORE_INSIGHT_WH",
+        "0 6 * * *",
+        "Europe/London",
+        None,
+        task_off=True,
+    )
+
+    assert session.statements == []
+
+
+def test_crt_live_task_assertion_accepts_safe_definition():
+    session = FakeSession(rows=[FakeRow(
+        name="RUN_ALERTS_PIPELINE_TASK",
+        state="started",
+        definition=(
+            "CALL STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE"
+            "('eastofengland', NULL, FALSE, FALSE)"
+        ),
+        schedule="USING CRON 0 6 * * * Europe/London",
+    )])
+
+    deploy._assert_registered_task(
+        session, "STORE_INSIGHT_DB", "PUBLIC", "0 6 * * *", "Europe/London"
+    )
+
+
+def test_crt_live_task_assertion_rejects_null_client():
+    session = FakeSession(rows=[FakeRow(
+        name="RUN_ALERTS_PIPELINE_TASK",
+        state="started",
+        definition=(
+            "CALL STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE"
+            "(NULL, NULL, FALSE, FALSE)"
+        ),
+        schedule="USING CRON 0 6 * * * Europe/London",
+    )])
+
+    with pytest.raises(RuntimeError, match="unsafe definition"):
+        deploy._assert_registered_task(
+            session, "STORE_INSIGHT_DB", "PUBLIC", "0 6 * * *", "Europe/London"
+        )
 
 
 # ---------------------------------------------------------------------------

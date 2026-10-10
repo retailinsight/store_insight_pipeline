@@ -25,8 +25,10 @@ GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE <your_role>;
 Run once from the workspace root whenever pipeline code changes:
 
 ```bash
-python store_insight/pipeline/deploy/deploy.py
+python pipeline/deploy/deploy.py --client eastofengland
 ```
+
+CRT (`STORE_INSIGHT_DB`) deployments fail closed if task registration is requested without `--client eastofengland`. Use `--task-off` for an SP-only deployment that must leave the live task unchanged. After CRT task registration, the deploy verifies that the task is STARTED, uses the 06:00 Europe/London schedule, and calls the East of England client explicitly.
 
 This will:
 1. Zip the `store_insight/` package
@@ -38,13 +40,13 @@ This will:
 
 ```bash
 # Custom schedule
-python store_insight/pipeline/deploy/deploy.py --cron "0 4 * * SAT" --tz "UTC"
+python pipeline/deploy/deploy.py --client eastofengland --cron "0 4 * * SAT" --tz "UTC"
 
 # Different warehouse
-python store_insight/pipeline/deploy/deploy.py --warehouse MY_LARGE_WH
+python pipeline/deploy/deploy.py --client eastofengland --warehouse MY_LARGE_WH
 
-# Deploy SP only, no Task (useful for first-time setup before enabling the schedule)
-python store_insight/pipeline/deploy/deploy.py --task-off
+# Deploy SP only, leaving the existing Task unchanged
+python pipeline/deploy/deploy.py --client eastofengland --task-off
 ```
 
 ---
