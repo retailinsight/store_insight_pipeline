@@ -19,8 +19,10 @@ def build_osa_store_actionable_presentation(signal: dict, narrative: dict) -> Al
 
     dept = signal.get("department", "")
 
-    # Top-line stat: store-controlled lost sales this week
-    lsv = signal.get("this_week_lsv") or {}
+    # Top-line stat: store-controlled lost sales in the trailing 7 days.
+    # Use the gatherer's trailing-7-day total when available so the headline
+    # matches the heat-map window, which is anchored to the latest data day.
+    lsv = facts.get("trailing_7d_lsv") or signal.get("this_week_lsv") or {}
     store_lsv = float(lsv.get("store_controlled") or 0)
     widgets.append(
         StatWidget(
