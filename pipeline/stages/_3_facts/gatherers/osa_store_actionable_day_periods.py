@@ -43,8 +43,14 @@ def _latest_dates_by_key(data, dept_col):
 
 def _window_for_signal(signal, latest_by_key, this_week_end):
     key = (signal['store_id'], signal.get('department', ''))
-    fallback = this_week_end if isinstance(this_week_end, datetime.date) else datetime.date.fromisoformat(this_week_end)
-    end = datetime.date.fromisoformat(latest_by_key[key]) if key in latest_by_key else fallback
+    # str()[:10] normalises 'YYYY-MM-DD' strings, date and datetime alike —
+    # a datetime end would otherwise emit 'YYYY-MM-DDTHH:MM:SS' grid keys
+    # that never match the observed 'YYYY-MM-DD' cells.
+    end = (
+        datetime.date.fromisoformat(latest_by_key[key])
+        if key in latest_by_key
+        else datetime.date.fromisoformat(str(this_week_end)[:10])
+    )
     return end - datetime.timedelta(days=6), end
 
 
@@ -150,49 +156,60 @@ def gather(
 
     latest_by_key = _latest_dates_by_key(data, dept_col)
 
-    # Group signals by their per-store/dept 7-day trailing window so we only
-    # query Snowflake once for each distinct window.
-    by_window = defaultdict(list)
-    for signal in signals:
-        by_window[_window_for_signal(signal, latest_by_key, this_week_end)].append(signal)
+    windows = {
+        (signal['store_id'], signal.get('department', '')): _window_for_signal(
+            signal, latest_by_key, this_week_end
+        )
+        for signal in signals
+    }
+    min_start = min(start for start, _ in windows.values())
+    max_end = max(end for _, end in windows.values())
+
+    # One query over the union of all windows. Metrics rows are already at
+    # (store, dept, date, period) grain, so slicing each signal to its own
+    # window below is identical to querying that window — and keeps the
+    # query count constant on feed-lag days with mixed latest dates.
+    metrics = window_metrics(
+        data, min_start, max_end,
+        ['STORE_ID', dept_col, 'DATE', 'DOW', 'REPORTING_PERIOD_ID'], 'PERIOD',
+    )
+    grouped = _build_period_items(metrics.collect(), dept_col)
 
     result = {}
-    for (window_start, window_end), group in by_window.items():
-        metrics = window_metrics(
-            data, window_start, window_end,
-            ['STORE_ID', dept_col, 'DATE', 'DOW', 'REPORTING_PERIOD_ID'], 'PERIOD',
+    for signal in signals:
+        key = (signal['store_id'], signal.get('department', ''))
+        window_start, window_end = windows[key]
+        start_s, end_s = window_start.isoformat(), window_end.isoformat()
+        items = [
+            item for item in grouped.get(key, [])
+            if start_s <= item['date'] <= end_s
+        ]
+        _reconcile_to_window_total(items)
+        ordered = sorted(
+            items,
+            key=lambda item: (-item['lsv']['store_controlled'], item['dow_num'], item['period_id']),
         )
-        grouped = _build_period_items(metrics.collect(), dept_col)
+        grid = _build_grid(items, window_start, window_end)
+        observed_dates = {item['date'] for item in items}
+        dow_pattern, worst_day = _dow_pattern(grid, observed_dates)
 
-        for signal in group:
-            key = (signal['store_id'], signal.get('department', ''))
-            items = list(grouped.get(key, []))
-            _reconcile_to_window_total(items)
-            ordered = sorted(
-                items,
-                key=lambda item: (-item['lsv']['store_controlled'], item['dow_num'], item['period_id']),
-            )
-            grid = _build_grid(items, window_start, window_end)
-            observed_dates = {item['date'] for item in items}
-            dow_pattern, worst_day = _dow_pattern(grid, observed_dates)
+        trailing_7d_lsv = {
+            component: round(sum(item['lsv'][component] for item in grid), 2)
+            for component in ('store_controlled', 'upstream', 'unknown')
+        }
+        trailing_7d_lsv['total'] = round(sum(trailing_7d_lsv.values()), 2)
 
-            trailing_7d_lsv = {
-                component: round(sum(item['lsv'][component] for item in grid), 2)
-                for component in ('store_controlled', 'upstream', 'unknown')
-            }
-            trailing_7d_lsv['total'] = round(sum(trailing_7d_lsv.values()), 2)
-
-            result[key] = {
-                'day_period_pattern': ordered[:actionable_top_n],
-                'worst_day_period': ordered[0] if ordered else None,
-                'day_period_grid': grid,
-                'grid_scope': 'LATEST_7D',
-                'grid_start_date': window_start.isoformat(),
-                'grid_end_date': window_end.isoformat(),
-                'dow_pattern': dow_pattern,
-                'worst_day': worst_day,
-                'trailing_7d_lsv': trailing_7d_lsv,
-            }
+        result[key] = {
+            'day_period_pattern': ordered[:actionable_top_n],
+            'worst_day_period': ordered[0] if ordered else None,
+            'day_period_grid': grid,
+            'grid_scope': 'LATEST_7D',
+            'grid_start_date': window_start.isoformat(),
+            'grid_end_date': window_end.isoformat(),
+            'dow_pattern': dow_pattern,
+            'worst_day': worst_day,
+            'trailing_7d_lsv': trailing_7d_lsv,
+        }
     return result
 
 

@@ -90,3 +90,42 @@ def test_grid_falls_back_to_run_week_end_when_no_rows_for_pair(local_session):
     assert facts['grid_start_date'] == '2026-09-14'
     assert facts['grid_end_date'] == '2026-09-20'
     assert all(cell['data_status'] == 'no_source_data' for cell in facts['dow_pattern'])
+
+
+def test_signals_with_different_latest_dates_get_their_own_windows(local_session):
+    # Store 1's feed stops Sat 12 Sep; store 2's reaches Wed 16 Sep. On a
+    # mixed-lag day each card must still anchor to its own latest data day.
+    rows = [
+        (STORE, DEPT, datetime.date(2026, 9, 6) + datetime.timedelta(days=offset), 1,
+         10.0, 1.0, 10.0, 5.0)
+        for offset in range(7)
+    ] + [
+        (2, DEPT, datetime.date(2026, 9, 10) + datetime.timedelta(days=offset), 1,
+         10.0, 1.0, 10.0, 5.0)
+        for offset in range(7)
+    ]
+    osa = local_session.create_dataframe(rows, schema=SCHEMA)
+    signals = [{'store_id': STORE, 'department': DEPT}, {'store_id': 2, 'department': DEPT}]
+
+    result = periods_g.gather(
+        osa, signals,
+        this_week_start='2026-09-14', this_week_end='2026-09-20',
+    )
+
+    assert result[(STORE, DEPT)]['grid_start_date'] == '2026-09-06'
+    assert result[(STORE, DEPT)]['grid_end_date'] == '2026-09-12'
+    assert result[(2, DEPT)]['grid_start_date'] == '2026-09-10'
+    assert result[(2, DEPT)]['grid_end_date'] == '2026-09-16'
+    assert len(result[(STORE, DEPT)]['day_period_grid']) == 21
+    assert len(result[(2, DEPT)]['day_period_grid']) == 21
+
+
+def test_fallback_window_normalises_datetime_week_end(local_session):
+    # A datetime this_week_end must not leak 'YYYY-MM-DDTHH:MM:SS' grid keys.
+    start, end = periods_g._window_for_signal(
+        {'store_id': STORE, 'department': DEPT},
+        latest_by_key={},
+        this_week_end=datetime.datetime(2026, 9, 20, 6, 0, 0),
+    )
+    assert start == datetime.date(2026, 9, 14)
+    assert end == datetime.date(2026, 9, 20)
