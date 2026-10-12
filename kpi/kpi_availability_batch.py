@@ -1415,6 +1415,21 @@ def run_batch(
     session.sql(
         f"DELETE FROM {OUTPUT_TABLE} WHERE RUN_DATE = '{run_date_str}'"
     ).collect()
+    # save_as_table appends POSITIONALLY, not by column name. Columns added
+    # later via ALTER TABLE sit at the end of the table in whatever order the
+    # ALTERs ran, which can differ between DEV and CRT. Reorder the DataFrame
+    # to the table's physical column order so values land in the right column.
+    table_columns = [
+        row["column_name"].strip('"').upper()
+        for row in session.sql(f"SHOW COLUMNS IN TABLE {OUTPUT_TABLE}").collect()
+    ]
+    df_columns = {c.strip('"').upper() for c in df.columns}
+    missing = [c for c in table_columns if c not in df_columns]
+    if missing:
+        raise RuntimeError(
+            f"{OUTPUT_TABLE} has columns not produced by this batch: {missing}"
+        )
+    df = df.select([f'"{c}"' for c in table_columns])
     df.write.mode("append").save_as_table(OUTPUT_TABLE)
     print(f"Done. Written to {OUTPUT_TABLE} (delete-by-run-date + append).")
 
