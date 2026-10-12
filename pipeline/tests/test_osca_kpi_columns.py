@@ -103,10 +103,22 @@ def test_osca_schema_migration_is_additive_and_complete():
 
     deploy_kpi._ensure_osca_columns(session, "STORE_INSIGHT_DEV.PUBLIC.KPI_AVAILABILITY_SUMMARY")
 
-    assert len(session.statements) == 10
+    assert len(session.statements) == len(deploy_kpi.OSCA_COLUMNS)
     assert all("ADD COLUMN IF NOT EXISTS" in statement for statement in session.statements)
     assert {statement.split(" EXISTS ", 1)[1].split()[0] for statement in session.statements} == set(
         deploy_kpi.OSCA_COLUMNS
+    )
+
+
+def test_mission_schema_migration_is_additive_and_complete():
+    session = _Session()
+
+    deploy_kpi._ensure_mission_columns(session, "STORE_INSIGHT_DEV.PUBLIC.KPI_AVAILABILITY_SUMMARY")
+
+    assert len(session.statements) == len(deploy_kpi.MISSION_COLUMNS)
+    assert all("ADD COLUMN IF NOT EXISTS" in statement for statement in session.statements)
+    assert {statement.split(" EXISTS ", 1)[1].split()[0] for statement in session.statements} == set(
+        deploy_kpi.MISSION_COLUMNS
     )
 
 
@@ -243,14 +255,14 @@ def test_feedback_metrics_all_null_intervention_ids_means_zero_compliance(local_
 # Deterministic narrative
 # ---------------------------------------------------------------------------
 
-def test_render_summary_includes_the_society_average():
+def test_render_summary_includes_the_mission_average():
     summary = kb.render_summary(
         store_controllable=kb.OsaSnapshot(current_pct=97.0, previous_pct=96.5),
         overall=kb.OsaSnapshot(current_pct=95.0, previous_pct=94.9),
-        society_pct=93.9,
+        mission_pct=93.9,
     )
 
-    assert "society average" in summary
+    assert "mission average" in summary
 
 
 def test_rank_positive_candidate_selects_largest_improvement():
@@ -299,7 +311,7 @@ def test_build_narrative_returns_three_deterministic_sentences():
     sentences = kb.build_narrative(
         store_controllable=kb.OsaSnapshot(current_pct=97.0, previous_pct=96.5),
         overall=kb.OsaSnapshot(current_pct=95.0, previous_pct=94.9),
-        society_pct=93.9,
+        mission_pct=93.9,
         departments=departments,
         cfg=cfg,
     )
@@ -313,7 +325,7 @@ def test_build_narrative_falls_back_to_no_material_change_sentences():
     sentences = kb.build_narrative(
         store_controllable=kb.OsaSnapshot(current_pct=97.0, previous_pct=96.5),
         overall=kb.OsaSnapshot(current_pct=95.0, previous_pct=94.9),
-        society_pct=93.9,
+        mission_pct=93.9,
         departments=[],
     )
 
@@ -452,6 +464,49 @@ def test_prompted_compliance_society_rate_computes_chain_wide_rate(local_session
     )
     rate = kb._prompted_compliance_society_rate(pc, "2026-09-22", "2026-09-22")
     assert rate == pytest.approx(0.25)
+
+
+def test_mission_osa_aggregates_by_mission_segment(local_session):
+    osa = local_session.create_dataframe(
+        [
+            (1, "2026-09-08", 90.0, 10.0, 100.0, 5.0),
+            (2, "2026-09-08", 50.0, 50.0, 250.0, 25.0),
+            (3, "2026-09-08", 80.0, 20.0, 80.0, 10.0),
+        ],
+        schema=["STORE_ID", "ANALYSIS_DATE", "ACTUAL_SALES_VOLUME", "LOST_SALES_VOLUME", "LOST_SALES_VALUE", "INVENTORY_QTY"],
+    )
+    missions = local_session.create_dataframe(
+        [(1, "A"), (2, "A"), (3, "B")],
+        schema=["STORE_ID", "MISSION_SEGMENT"],
+    )
+    rows = {r["MISSION_SEGMENT"]: r for r in kb._mission_osa(osa, missions, "2026-09-08", "2026-09-08").collect()}
+    # Segment A: (90+50)/(90+10+50+50) = 140/200 = 0.70
+    assert float(rows["A"]["MISSION_OSA"]) == pytest.approx(0.70)
+    # Segment B: 80/(80+20) = 0.80
+    assert float(rows["B"]["MISSION_OSA"]) == pytest.approx(0.80)
+
+
+def test_prompted_compliance_mission_rate_aggregates_store_rates(local_session):
+    pc = local_session.create_dataframe(
+        [
+            (1, "2026-09-22", True),
+            (1, "2026-09-22", False),
+            (2, "2026-09-22", True),
+            (3, "2026-09-22", True),
+            (3, "2026-09-22", True),
+        ],
+        schema=["STORE_ID", "ALERT_DATE", "COMPLIANT"],
+    )
+    missions = local_session.create_dataframe(
+        [(1, "A"), (2, "A"), (3, "B")],
+        schema=["STORE_ID", "MISSION_SEGMENT"],
+    )
+    rows = {
+        r["MISSION_SEGMENT"]: r
+        for r in kb._prompted_compliance_mission_rates(pc, missions, "2026-09-22", "2026-09-22").collect()
+    }
+    assert float(rows["A"]["MISSION_PROMPTED_MARKDOWN_COMPLIANCE_RATE"]) == pytest.approx(2 / 3)
+    assert float(rows["B"]["MISSION_PROMPTED_MARKDOWN_COMPLIANCE_RATE"]) == pytest.approx(1.0)
 
 
 # ---------------------------------------------------------------------------

@@ -50,7 +50,7 @@ def _resolve_latest_row(
             "ANALYSIS_DATE",
             "TW_OSA_PCT",
             "LW_OSA_PCT",
-            "CLUSTER_OSA_PCT",
+            "MISSION_OSA_PCT",
             "WOW_CHANGE_PP",
             "TREND_DIRECTION",
             "OVERALL_DETAILS_JSON",
@@ -83,7 +83,7 @@ def get_kpis(
         )
 
     tw_osa       = float(row["TW_OSA_PCT"])
-    cluster_osa  = float(row["CLUSTER_OSA_PCT"])
+    mission_osa  = float(row["MISSION_OSA_PCT"])
     wow_pp       = float(row["WOW_CHANGE_PP"])
     trend_dir    = str(row["TREND_DIRECTION"])
 
@@ -96,7 +96,7 @@ def get_kpis(
         "value":           f"{tw_osa:.1f}%",
         "trend_direction": trend_dir,
         "trend":           f"{wow_pp:+.1f}pp vs LW",
-        "cluster_average": f"{cluster_osa:.1f}%",
+        "mission_average": f"{mission_osa:.1f}%",
         "details":         overall_details,
     }
 
@@ -106,7 +106,7 @@ def get_kpis(
         "value":           f"{tw_osa:.1f}%",
         "trend_direction": trend_dir,
         "trend":           f"{wow_pp:+.1f}pp vs LW",
-        "cluster_average": f"{cluster_osa:.1f}%",
+        "mission_average": f"{mission_osa:.1f}%",
         "details":         availability_details,
     }
 
