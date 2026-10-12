@@ -213,6 +213,7 @@ def run(
         item_hierarchy=sources["item_hierarchy"],
         store_hierarchy=sources["store_hierarchy"],
         prompted_compliance=sources["prompted_compliance"],
+        store_mission=sources["store_mission"],
         cfg=cfg,
         run_id=run_id,
         pipeline_version=pipeline_version,

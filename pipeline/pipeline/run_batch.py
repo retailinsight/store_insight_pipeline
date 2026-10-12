@@ -330,6 +330,14 @@ def load_sources(session, windows, cfg, capabilities=None, log_prefix="[load_sou
     )
     _count_or_skip("Prompted compliance rows", prompted_compliance)
 
+    store_mission_table = cfg.tables.store_mission if cfg else None
+    store_mission = (
+        session.table(store_mission_table).cache_result()
+        if store_mission_table
+        else None
+    )
+    _count_or_skip("Store mission    rows", store_mission)
+
     return {
         "osa": osa,
         "feedback": feedback,
@@ -339,6 +347,7 @@ def load_sources(session, windows, cfg, capabilities=None, log_prefix="[load_sou
         "item_hierarchy": wmd["item_hierarchy"],
         "store_hierarchy": wmd["store_hierarchy"],
         "prompted_compliance": prompted_compliance,
+        "store_mission": store_mission,
     }
 
 
@@ -483,6 +492,7 @@ def run_single_date(
         item_hierarchy=sources["item_hierarchy"],
         store_hierarchy=sources["store_hierarchy"],
         prompted_compliance=sources["prompted_compliance"],
+        store_mission=sources["store_mission"],
         cfg=cfg,
         return_intermediates=deterministic,
         run_id=run_id,

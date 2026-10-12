@@ -34,6 +34,16 @@ class FakeSession:
     def collect(self):
         return self.rows
 
+    def table(self, _name):
+        class _Frame:
+            def cache_result(self):
+                return self
+
+            def count(self):
+                return 0
+
+        return _Frame()
+
     def get_current_database(self):
         return f'"{self._database}"'
 
@@ -166,6 +176,7 @@ def test_handler_spreads_all_load_sources_keys_into_run_pipeline(monkeypatch):
         "item_hierarchy": "item_hierarchy_sentinel",
         "store_hierarchy": "store_hierarchy_sentinel",
         "prompted_compliance": "prompted_compliance_sentinel",
+        "store_mission": "store_mission_sentinel",
     }
 
     monkeypatch.setattr(handler, "_prepare_runtime", lambda: None)

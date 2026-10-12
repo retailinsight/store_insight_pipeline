@@ -11,6 +11,9 @@ connection:
   role:      STORE_INSIGHT_ROLE
   warehouse: STORE_INSIGHT_DEV_WH
 
+tables:
+  store_mission: "{database}.{schema}.STORE_MISSION_V1"
+
 output:
   emit_affected_products: true
   top_n_per_store: 3
