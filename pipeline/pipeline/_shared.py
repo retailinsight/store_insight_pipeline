@@ -148,6 +148,18 @@ def quality_reasons(quality: dict, min_positive_rows: int, max_unknown_row_pct: 
     return reasons
 
 
+def data_anchored_actionable_metrics(osa, key_cols, group_cols, window_days=7):
+    latest_dates = osa.group_by(*key_cols).agg(F.max('DATE').alias('WINDOW_END'))
+    windowed = osa.join(latest_dates, on=key_cols, how='inner')
+    latest_start = F.dateadd('day', F.lit(-(window_days - 1)), F.col('WINDOW_END'))
+    prior_end = F.dateadd('day', F.lit(-window_days), F.col('WINDOW_END'))
+    prior_start = F.dateadd('day', F.lit(-(window_days * 2 - 1)), F.col('WINDOW_END'))
+    return (
+        actionable_window_metrics(windowed, latest_start, F.col('WINDOW_END'), group_cols, 'LATEST'),
+        actionable_window_metrics(windowed, prior_start, prior_end, group_cols, 'PRIOR'),
+    )
+
+
 def actionable_window_metrics(osa, start, end, group_cols, prefix):
     positive = F.col('INVENTORY_QTY') > 0
     upstream = F.col('INVENTORY_QTY').is_not_null() & (F.col('INVENTORY_QTY') <= 0)

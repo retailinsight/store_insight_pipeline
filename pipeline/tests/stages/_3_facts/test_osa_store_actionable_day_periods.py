@@ -10,6 +10,12 @@ from snowflake.snowpark.types import LongType
 from store_insight.pipeline.stages._3_facts.gatherers import (
     osa_store_actionable_day_periods as periods_g,
 )
+from store_insight.pipeline.stages._3_facts.gatherers import (
+    osa_store_actionable_item_lsv_changes as item_g,
+)
+from store_insight.pipeline.stages._3_facts.gatherers import (
+    osa_store_actionable_ppg_drilldown as ppg_g,
+)
 
 
 # DAYOFWEEKISO is not implemented in Snowpark local testing; register a
@@ -129,3 +135,39 @@ def test_fallback_window_normalises_datetime_week_end(local_session):
     )
     assert start == datetime.date(2026, 9, 14)
     assert end == datetime.date(2026, 9, 20)
+
+
+def test_ppg_and_item_lists_use_same_latest_seven_days_as_grid(local_session):
+    schema = SCHEMA + ['ITEM_HIERARCHY_3', 'ITEM_CODE', 'ITEM_DESCRIPTION']
+    rows = [
+        (
+            STORE, DEPT, datetime.date(2026, 9, 3) + datetime.timedelta(days=offset), 1,
+            10.0, 1.0, 1.0 if offset < 7 else 10.0, 5.0,
+            'AMBIENT', '100', 'Product',
+        )
+        for offset in range(14)
+    ]
+    osa = local_session.create_dataframe(rows, schema=schema)
+    signals = [{'store_id': STORE, 'department': DEPT}]
+    kwargs = {
+        'osa': osa,
+        'signals': signals,
+        'last_week_start': datetime.date(2026, 9, 7),
+        'last_week_end': datetime.date(2026, 9, 13),
+        'this_week_start': datetime.date(2026, 9, 14),
+        'this_week_end': datetime.date(2026, 9, 20),
+    }
+
+    period_facts = periods_g.gather(
+        osa, signals, this_week_start=kwargs['this_week_start'], this_week_end=kwargs['this_week_end'],
+    )[(STORE, DEPT)]
+    ppg = ppg_g.gather(**kwargs)[(STORE, DEPT)][0]
+    item = item_g.gather(item_hierarchy=None, **kwargs)[(STORE, DEPT)][0]
+
+    assert period_facts['grid_start_date'] == '2026-09-10'
+    assert period_facts['grid_end_date'] == '2026-09-16'
+    assert period_facts['trailing_7d_lsv']['store_controlled'] == pytest.approx(70.0)
+    assert ppg['latest_week_lsv']['store_controlled'] == pytest.approx(70.0)
+    assert item['latest_week_lsv']['store_controlled'] == pytest.approx(70.0)
+    assert ppg['prior_week_lsv']['store_controlled'] == pytest.approx(7.0)
+    assert item['prior_week_lsv']['store_controlled'] == pytest.approx(7.0)

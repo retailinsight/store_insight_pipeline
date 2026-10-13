@@ -81,7 +81,7 @@ def build_osa_store_actionable_presentation(signal: dict, narrative: dict) -> Al
             RankedListWidget(
                 id="ppg_lsv_changes",
                 title="Worst performing Sub Departments",
-                subtitle="Store-controlled lost sales this week",
+                subtitle="Store-controlled lost sales in the last 7 days",
                 items=[
                     RankedListItem(
                         label=str(item.get("ppg") or "Unknown"),
@@ -101,7 +101,7 @@ def build_osa_store_actionable_presentation(signal: dict, narrative: dict) -> Al
             RankedListWidget(
                 id="item_lsv_changes",
                 title="Worst performing items",
-                subtitle="Store-controlled lost sales this week",
+                subtitle="Store-controlled lost sales in the last 7 days",
                 items=[
                     RankedListItem(
                         label=str(item.get("item_name") or item.get("item_code") or "Unknown"),
