@@ -5,11 +5,9 @@ from collections import defaultdict
 from snowflake.snowpark import functions as F
 
 from store_insight.pipeline.pipeline._shared import (
-    actionable_window_metrics as window_metrics,
-)
-from store_insight.pipeline.pipeline._shared import (
     attributed_values,
     build_store_dept_filter,
+    data_anchored_actionable_metrics,
     subtract_attributed,
 )
 from store_insight.pipeline.stages._3_facts.config import GathererInfo
@@ -18,7 +16,7 @@ METADATA = GathererInfo(
     name='osa_store_actionable_item_lsv_changes',
     signal_types=['OSA_STORE_ACTIONABLE'],
     facts_keys=['item_lsv_changes'],
-    description='Top latest-week item offenders with prior-week attributed LSV and UPC/EAN arrays.',
+    description='Top latest-seven-day item offenders with prior-period attributed LSV and UPC/EAN arrays.',
 )
 
 
@@ -38,8 +36,9 @@ def gather(
 
     filt = build_store_dept_filter(signals, dept_col)
     group_cols = ['STORE_ID', dept_col, 'ITEM_CODE', 'ITEM_DESCRIPTION', 'ITEM_HIERARCHY_3']
-    latest = window_metrics(osa.filter(filt), this_week_start, this_week_end, group_cols, 'LATEST')
-    prior = window_metrics(osa.filter(filt), last_week_start, last_week_end, group_cols, 'PRIOR')
+    latest, prior = data_anchored_actionable_metrics(
+        osa.filter(filt), ['STORE_ID', dept_col], group_cols,
+    )
     rows = (
         latest
         .join(prior, on=group_cols, how='left')

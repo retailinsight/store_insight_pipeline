@@ -19,8 +19,10 @@ def build_osa_store_actionable_presentation(signal: dict, narrative: dict) -> Al
 
     dept = signal.get("department", "")
 
-    # Top-line stat: store-controlled lost sales this week
-    lsv = signal.get("this_week_lsv") or {}
+    # Top-line stat: store-controlled lost sales in the trailing 7 days.
+    # Use the gatherer's trailing-7-day total when available so the headline
+    # matches the heat-map window, which is anchored to the latest data day.
+    lsv = facts.get("trailing_7d_lsv") or signal.get("this_week_lsv") or {}
     store_lsv = float(lsv.get("store_controlled") or 0)
     widgets.append(
         StatWidget(
@@ -79,7 +81,7 @@ def build_osa_store_actionable_presentation(signal: dict, narrative: dict) -> Al
             RankedListWidget(
                 id="ppg_lsv_changes",
                 title="Worst performing Sub Departments",
-                subtitle="Store-controlled lost sales this week",
+                subtitle="Store-controlled lost sales in the last 7 days",
                 items=[
                     RankedListItem(
                         label=str(item.get("ppg") or "Unknown"),
@@ -99,7 +101,7 @@ def build_osa_store_actionable_presentation(signal: dict, narrative: dict) -> Al
             RankedListWidget(
                 id="item_lsv_changes",
                 title="Worst performing items",
-                subtitle="Store-controlled lost sales this week",
+                subtitle="Store-controlled lost sales in the last 7 days",
                 items=[
                     RankedListItem(
                         label=str(item.get("item_name") or item.get("item_code") or "Unknown"),

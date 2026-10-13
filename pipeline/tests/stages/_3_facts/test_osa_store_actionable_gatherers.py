@@ -26,7 +26,7 @@ from store_insight.pipeline.stages._3_facts.gatherers import (
         (ppg_g, ['ppg_lsv_changes'], ['OSA_STORE_ACTIONABLE']),
         (item_g, ['item_lsv_changes'], ['OSA_STORE_ACTIONABLE']),
         (dow_g, ['dow_pattern', 'worst_day'], ['OSA_STORE_ACTIONABLE']),
-        (periods_g, ['day_period_pattern', 'worst_day_period', 'day_period_grid', 'grid_scope', 'grid_start_date', 'grid_end_date', 'dow_pattern', 'worst_day'], ['OSA_STORE_ACTIONABLE']),
+        (periods_g, ['day_period_pattern', 'worst_day_period', 'day_period_grid', 'grid_scope', 'grid_start_date', 'grid_end_date', 'dow_pattern', 'worst_day', 'trailing_7d_lsv'], ['OSA_STORE_ACTIONABLE']),
         (chain_g, ['chain_store_last_week_osa', 'chain_store_this_week_osa', 'chain_store_drift_pp', 'mission_store_this_week_osa'], ['OSA_STORE_ACTIONABLE']),
         (cost_g, ['cost_projection'], ['OSA_STORE_ACTIONABLE']),
     ],
@@ -46,6 +46,7 @@ def test_extract_defaults_are_empty():
         'day_period_grid': [], 'grid_scope': 'THIS_WEEK',
         'grid_start_date': None, 'grid_end_date': None,
         'dow_pattern': [], 'worst_day': None,
+        'trailing_7d_lsv': None,
     }
 
 
