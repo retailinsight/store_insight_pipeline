@@ -707,6 +707,23 @@ def test_osa_store_actionable_narrative_is_store_focused():
     assert 'repeat' not in ' '.join(out.values()).lower()
 
 
+def test_osa_store_actionable_prefers_mission_average():
+    out = generate(_osa_store_actionable(facts={
+        'mission_store_this_week_osa': 70.5,
+    }))
+    assert 'mission average of 70.5%' in out['explanation']
+    assert 'Society average' not in out['explanation']
+    assert '93.0%' not in out['explanation']
+
+
+def test_osa_store_actionable_falls_back_to_society_average():
+    out = generate(_osa_store_actionable(facts={
+        'mission_store_this_week_osa': None,
+    }))
+    assert 'Society average of 93.0%' in out['explanation']
+    assert 'mission average' not in out['explanation']
+
+
 def test_osa_store_actionable_title_uses_worst_day_period():
     out = generate(_osa_store_actionable(facts={
         'worst_day_period': {

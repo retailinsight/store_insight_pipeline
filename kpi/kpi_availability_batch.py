@@ -161,6 +161,13 @@ FEEDBACK_TABLE  = "ANALYSIS.FINAL.LSM_ALERT_FEEDBACK"
 PROMPTED_COMPLIANCE_TABLE = "STORE_INSIGHT_DB.PUBLIC.PROMPTED_COMPLIANCE_V1"
 OUTPUT_TABLE    = os.getenv("KPI_OUTPUT_TABLE", "STORE_INSIGHT_DB.PUBLIC.KPI_AVAILABILITY_SUMMARY")
 
+
+def _mission_table() -> str:
+    """Resolve the mission mapping table in the same database as OUTPUT_TABLE."""
+    parts = OUTPUT_TABLE.split(".")
+    db = parts[0] if len(parts) == 3 else "STORE_INSIGHT_DB"
+    return f"{db}.PUBLIC.STORE_MISSION_V1"
+
 # RAG threshold
 OSA_TARGET = 0.90
 
@@ -309,6 +316,14 @@ def _load_sites(session: Session):
     )
 
 
+def _load_missions(session: Session):
+    return (
+        session.table(_mission_table())
+        .select(F.col("STORE_ID"), F.col("MISSION_SEGMENT"))
+        .distinct()
+    )
+
+
 def _load_feedback(session: Session, week_start: str, week_end: str):
     return (
         session.table(FEEDBACK_TABLE)
@@ -362,6 +377,25 @@ def _cluster_osa(osa, sites, start: str, end: str):
         .with_column(
             "CLUSTER_STORE_CONTROLLABLE_OSCA",
             _osa_pct(F.col("CLUSTER_SALES"), F.col("CLUSTER_STORE_CONTROLLED_LSV")),
+        )
+    )
+
+
+def _mission_osa(osa, missions, start: str, end: str):
+    """OSA % per mission segment for a date window."""
+    store_scores = _store_osa(osa, start, end).join(missions, on=["STORE_ID"], how="left")
+    return (
+        store_scores
+        .group_by("MISSION_SEGMENT")
+        .agg(
+            F.sum("SALES").alias("MISSION_SALES"),
+            F.sum("LSV").alias("MISSION_LSV"),
+            F.sum("STORE_CONTROLLED_LSV").alias("MISSION_STORE_CONTROLLED_LSV"),
+        )
+        .with_column("MISSION_OSA", _osa_pct(F.col("MISSION_SALES"), F.col("MISSION_LSV")))
+        .with_column(
+            "MISSION_STORE_CONTROLLABLE_OSCA",
+            _osa_pct(F.col("MISSION_SALES"), F.col("MISSION_STORE_CONTROLLED_LSV")),
         )
     )
 
@@ -539,6 +573,26 @@ def _prompted_compliance_cluster_rates(pc, sites, start: str, end: str):
     )
 
 
+def _prompted_compliance_mission_rates(pc, missions, start: str, end: str):
+    """Prompted markdown compliance rate per mission segment for a date window."""
+    store_rates = _prompted_compliance_store_rates(pc, start, end)
+    return (
+        store_rates.join(missions, on=["STORE_ID"], how="left")
+        .group_by("MISSION_SEGMENT")
+        .agg(
+            F.sum("PROMPTS_ISSUED").alias("MISSION_PROMPTS_ISSUED"),
+            F.sum("PROMPTS_ACTIONED").alias("MISSION_PROMPTS_ACTIONED"),
+        )
+        .with_column(
+            "MISSION_PROMPTED_MARKDOWN_COMPLIANCE_RATE",
+            F.when(
+                F.col("MISSION_PROMPTS_ISSUED") > 0,
+                F.col("MISSION_PROMPTS_ACTIONED") / F.col("MISSION_PROMPTS_ISSUED"),
+            ).otherwise(F.lit(0.0)),
+        )
+    )
+
+
 def _prompted_compliance_society_rate(pc, start: str, end: str) -> float:
     """Chain-wide prompted markdown compliance rate for a date window."""
     row = (
@@ -661,13 +715,12 @@ def rank_negative_candidates(
 def render_summary(
     store_controllable: OsaSnapshot,
     overall: OsaSnapshot,
-    society_pct: float | None,
+    mission_pct: float | None,
 ) -> str:
     """Render sentence 1: the whole-store availability summary.
 
-    ``society_pct`` is the chain-wide OSA average across *every* store (see
-    ``_society_osa``), not the store's own cluster average — those are two
-    different numbers and the wording here must match whichever is passed in.
+    ``mission_pct`` is the OSA average across stores in the same mission segment
+    (see ``_mission_osa``), not the chain-wide society average.
     """
     sc_current = store_controllable.current_pct
     sc_previous = store_controllable.previous_pct
@@ -679,13 +732,13 @@ def render_summary(
 
     sc_verb = _choose_direction_verb(sc_current, sc_previous)
     ov_verb = _choose_direction_verb(ov_current, ov_previous)
-    society_text = f"{society_pct:.1f}%" if society_pct is not None else "not available"
+    mission_text = f"{mission_pct:.1f}%" if mission_pct is not None else "not available"
 
     return (
         f"Store-controllable availability {sc_verb} from {sc_previous:.1f}% last week "
         f"to {sc_current:.1f}% this week, while overall availability {ov_verb} "
-        f"from {ov_previous:.1f}% to {ov_current:.1f}%, compared with a society average "
-        f"of {society_text}."
+        f"from {ov_previous:.1f}% to {ov_current:.1f}%, compared with a mission average "
+        f"of {mission_text}."
     )
 
 
@@ -719,7 +772,7 @@ def render_negative(candidates: list[DepartmentCandidate]) -> str:
 def build_narrative(
     store_controllable: OsaSnapshot,
     overall: OsaSnapshot,
-    society_pct: float | None,
+    mission_pct: float | None,
     departments: list[DepartmentCandidate],
     cfg: NarrativeConfig | None = None,
 ) -> list[str]:
@@ -735,7 +788,7 @@ def build_narrative(
     negatives = rank_negative_candidates(departments, cfg)
 
     return [
-        render_summary(store_controllable, overall, society_pct),
+        render_summary(store_controllable, overall, mission_pct),
         render_positive(positive),
         render_negative(negatives),
     ]
@@ -825,6 +878,7 @@ def run_batch(
     print("Loading data...")
     osa      = _load_osa(session, lookback, tw_end)
     sites    = _load_sites(session)
+    missions = _load_missions(session)
     feedback = _load_feedback(session, tw_start, tw_end)
     prompted_compliance = _load_prompted_compliance(session, tw_start, tw_end, lw_start, lw_end)
 
@@ -835,7 +889,7 @@ def run_batch(
     y_store   = _store_osa(osa, y_start,  tw_end)
 
     tw_cluster = _cluster_osa(osa, sites, tw_start, tw_end)
-    society_osa = _society_osa(osa, tw_start, tw_end)
+    tw_mission = _mission_osa(osa, missions, tw_start, tw_end)
 
     tw_dept  = _dept_osa(osa, tw_start, tw_end)
     lw_dept  = _dept_osa(osa, lw_start, lw_end)
@@ -848,6 +902,7 @@ def run_batch(
     tw_store_pmd = _prompted_compliance_store_rates(prompted_compliance, tw_start, tw_end)
     lw_store_pmd = _prompted_compliance_store_rates(prompted_compliance, lw_start, lw_end)
     tw_cluster_pmd = _prompted_compliance_cluster_rates(prompted_compliance, sites, tw_start, tw_end)
+    tw_mission_pmd = _prompted_compliance_mission_rates(prompted_compliance, missions, tw_start, tw_end)
     society_pmd_rate = _prompted_compliance_society_rate(prompted_compliance, tw_start, tw_end)
 
     # Join store scores
@@ -869,6 +924,7 @@ def run_batch(
         .join(m_store.select( F.col("STORE_ID"), F.col("OSA").alias("M_OSA")),  on=["STORE_ID"], how="left")
         .join(y_store.select( F.col("STORE_ID"), F.col("OSA").alias("Y_OSA")),  on=["STORE_ID"], how="left")
         .join(sites,                                                              on=["STORE_ID"], how="left")
+        .join(missions,                                                           on=["STORE_ID"], how="left")
         .join(
             tw_cluster.select(
                 F.col("CLUSTER_ID"),
@@ -876,6 +932,15 @@ def run_batch(
                 F.col("CLUSTER_STORE_CONTROLLABLE_OSCA"),
             ),
             on=["CLUSTER_ID"],
+            how="left",
+        )
+        .join(
+            tw_mission.select(
+                F.col("MISSION_SEGMENT"),
+                F.col("MISSION_OSA"),
+                F.col("MISSION_STORE_CONTROLLABLE_OSCA"),
+            ),
+            on=["MISSION_SEGMENT"],
             how="left",
         )
         .join(fb_metrics.select(
@@ -908,6 +973,14 @@ def run_batch(
                 F.col("CLUSTER_PROMPTED_MARKDOWN_COMPLIANCE_RATE"),
             ),
             on=["CLUSTER_ID"],
+            how="left",
+        )
+        .join(
+            tw_mission_pmd.select(
+                F.col("MISSION_SEGMENT"),
+                F.col("MISSION_PROMPTED_MARKDOWN_COMPLIANCE_RATE"),
+            ),
+            on=["MISSION_SEGMENT"],
             how="left",
         )
     )
@@ -943,9 +1016,11 @@ def run_batch(
         m_osa   = float(row["M_OSA"]       or 0)
         y_osa   = float(row["Y_OSA"]       or 0)
         cl_osa  = float(row["CLUSTER_OSA"] or 0)
+        mission_osa = float(row["MISSION_OSA"] or 0)
         tw_store_osca = float(row["TW_STORE_CONTROLLABLE_OSCA"] or 0)
         lw_store_osca = float(row["LW_STORE_CONTROLLABLE_OSCA"] or 0)
         cl_store_osca = float(row["CLUSTER_STORE_CONTROLLABLE_OSCA"] or 0)
+        mission_store_osca = float(row["MISSION_STORE_CONTROLLABLE_OSCA"] or 0)
 
         wow_pp = (tw_osa - lw_osa) * 100
         store_osca_wow_pp = (tw_store_osca - lw_store_osca) * 100
@@ -958,6 +1033,7 @@ def run_batch(
         tw_pmd_rate = float(row["TW_PROMPTED_MARKDOWN_COMPLIANCE_RATE"] or 0)
         lw_pmd_rate = float(row["LW_PROMPTED_MARKDOWN_COMPLIANCE_RATE"] or 0)
         cl_pmd_rate = float(row["CLUSTER_PROMPTED_MARKDOWN_COMPLIANCE_RATE"] or 0)
+        mission_pmd_rate = float(row["MISSION_PROMPTED_MARKDOWN_COMPLIANCE_RATE"] or 0)
         tw_pmd_issued = int(row["TW_PROMPTS_ISSUED"] or 0)
         tw_pmd_actioned = int(row["TW_PROMPTS_ACTIONED"] or 0)
         lw_pmd_issued = int(row["LW_PROMPTS_ISSUED"] or 0)
@@ -1122,7 +1198,7 @@ def run_batch(
                 current_pct=tw_osa * 100,
                 previous_pct=lw_osa * 100,
             ),
-            society_pct=society_osa * 100,
+            mission_pct=mission_osa * 100,
             departments=department_candidates,
             cfg=narrative_cfg,
         )
@@ -1205,20 +1281,20 @@ def run_batch(
                 f"Prompted markdown compliance was {tw_pmd_rate*100:.1f}% this week "
                 f"({tw_pmd_issued} prompts issued, {tw_pmd_actioned} actioned on time), "
                 f"{pmd_trend} from {lw_pmd_rate*100:.1f}% last week. "
-                f"The cluster average was {cl_pmd_rate*100:.1f}%."
+                f"The mission average was {mission_pmd_rate*100:.1f}%."
             )
         else:
             pmd_summary = (
                 f"Prompted markdown compliance was {tw_pmd_rate*100:.1f}% this week "
                 f"({tw_pmd_issued} prompts issued, {tw_pmd_actioned} actioned on time). "
-                f"The cluster average was {cl_pmd_rate*100:.1f}%."
+                f"The mission average was {mission_pmd_rate*100:.1f}%."
             )
         prompted_markdown_details = {
             "summary": pmd_summary,
             "performance_breakdown": {
                 "current_week": f"{tw_pmd_rate*100:.1f}%",
                 "last_week": f"{lw_pmd_rate*100:.1f}%" if lw_pmd_issued > 0 else None,
-                "cluster_average": f"{cl_pmd_rate*100:.1f}%",
+                "mission_average": f"{mission_pmd_rate*100:.1f}%",
                 "society_average": f"{society_pmd_rate*100:.1f}%",
             },
             "prompt_volume": {
@@ -1272,6 +1348,10 @@ def run_batch(
             round(cl_store_osca * 100, 2),
             "up" if store_osca_wow_pp >= 0 else "down",
             json.dumps(store_osca_details),
+            round(mission_osa * 100, 2),
+            round(mission_osa * 100, 2),
+            round(mission_store_osca * 100, 2),
+            round(mission_pmd_rate * 100, 2),
         ))
 
     print(f"Writing {len(output_rows)} rows to {OUTPUT_TABLE}...")
@@ -1315,6 +1395,10 @@ def run_batch(
         StructField("STORE_CONTROLLABLE_OSCA_CLUSTER_PCT", FloatType()),
         StructField("STORE_CONTROLLABLE_OSCA_TREND_DIRECTION", StringType()),
         StructField("STORE_CONTROLLABLE_OSCA_DETAILS_JSON", StringType()),
+        StructField("MISSION_OSA_PCT",                    FloatType()),
+        StructField("OSCA_MISSION_PCT",                   FloatType()),
+        StructField("STORE_CONTROLLABLE_OSCA_MISSION_PCT", FloatType()),
+        StructField("PROMPTED_MARKDOWN_MISSION_PCT",      FloatType()),
     ])
 
     df = session.create_dataframe(output_rows, schema=schema)
@@ -1331,6 +1415,21 @@ def run_batch(
     session.sql(
         f"DELETE FROM {OUTPUT_TABLE} WHERE RUN_DATE = '{run_date_str}'"
     ).collect()
+    # save_as_table appends POSITIONALLY, not by column name. Columns added
+    # later via ALTER TABLE sit at the end of the table in whatever order the
+    # ALTERs ran, which can differ between DEV and CRT. Reorder the DataFrame
+    # to the table's physical column order so values land in the right column.
+    table_columns = [
+        row["column_name"].strip('"').upper()
+        for row in session.sql(f"SHOW COLUMNS IN TABLE {OUTPUT_TABLE}").collect()
+    ]
+    df_columns = {c.strip('"').upper() for c in df.columns}
+    missing = [c for c in table_columns if c not in df_columns]
+    if missing:
+        raise RuntimeError(
+            f"{OUTPUT_TABLE} has columns not produced by this batch: {missing}"
+        )
+    df = df.select([f'"{c}"' for c in table_columns])
     df.write.mode("append").save_as_table(OUTPUT_TABLE)
     print(f"Done. Written to {OUTPUT_TABLE} (delete-by-run-date + append).")
 

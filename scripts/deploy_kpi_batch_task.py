@@ -51,18 +51,32 @@ OSCA_COLUMNS = {
     "OSCA_PCT": "FLOAT",
     "OSCA_WOW_CHANGE_PP": "FLOAT",
     "OSCA_CLUSTER_PCT": "FLOAT",
+    "OSCA_MISSION_PCT": "FLOAT",
     "OSCA_TREND_DIRECTION": "VARCHAR",
     "OSCA_DETAILS_JSON": "VARCHAR",
     "STORE_CONTROLLABLE_OSCA_PCT": "FLOAT",
     "STORE_CONTROLLABLE_OSCA_WOW_CHANGE_PP": "FLOAT",
     "STORE_CONTROLLABLE_OSCA_CLUSTER_PCT": "FLOAT",
+    "STORE_CONTROLLABLE_OSCA_MISSION_PCT": "FLOAT",
     "STORE_CONTROLLABLE_OSCA_TREND_DIRECTION": "VARCHAR",
     "STORE_CONTROLLABLE_OSCA_DETAILS_JSON": "VARCHAR",
+}
+
+MISSION_COLUMNS = {
+    "MISSION_OSA_PCT": "FLOAT",
+    "PROMPTED_MARKDOWN_MISSION_PCT": "FLOAT",
 }
 
 
 def _ensure_osca_columns(session: Session, table: str) -> None:
     for name, data_type in OSCA_COLUMNS.items():
+        session.sql(
+            f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {data_type}"
+        ).collect()
+
+
+def _ensure_mission_columns(session: Session, table: str) -> None:
+    for name, data_type in MISSION_COLUMNS.items():
         session.sql(
             f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {data_type}"
         ).collect()
@@ -99,6 +113,9 @@ def main() -> None:
 
     print("  Ensuring additive OSCA columns exist...")
     _ensure_osca_columns(session, table)
+
+    print("  Ensuring additive mission columns exist...")
+    _ensure_mission_columns(session, table)
 
     print(f"  Creating stage {fq_stage} if missing...")
     session.sql(f"CREATE STAGE IF NOT EXISTS {fq_stage}").collect()
