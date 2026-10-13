@@ -64,6 +64,7 @@ def enrich_signals(
     straight_to_bin=None,
     item_hierarchy=None,
     prompted_compliance=None,
+    store_mission=None,
     cfg: dict = None,
 ):
     """
@@ -112,6 +113,7 @@ def enrich_signals(
         straight_to_bin=straight_to_bin,
         item_hierarchy=item_hierarchy,
         prompted_compliance=prompted_compliance,
+        store_mission=store_mission,
         last_week_start=last_week_start,
         last_week_end=last_week_end,
         this_week_start=this_week_start,

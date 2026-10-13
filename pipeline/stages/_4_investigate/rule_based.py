@@ -723,27 +723,36 @@ def _generate_osa_store_actionable(signal: dict) -> dict:
 
     this_osa = signal.get('this_week_osa')
     last_osa = signal.get('last_week_osa')
+    mission_osa = facts.get('mission_store_this_week_osa')
     chain_osa = signal.get('chain_this_week_osa')
     if chain_osa is None:
         chain_osa = facts.get('chain_store_this_week_osa')
+    # Mission-segment comparison is preferred when available; society is the
+    # fallback for runs/clients without a mission mapping.
+    if mission_osa is not None:
+        comparison = mission_osa
+        comparison_label = 'mission average'
+    else:
+        comparison = chain_osa
+        comparison_label = 'Society average'
 
     explanation = []
     dropped = last_osa is not None and this_osa is not None and this_osa < last_osa
-    if dropped and chain_osa is not None:
+    if dropped and comparison is not None:
         explanation.append(
             f'Store-controlled OSCA in {dept} has dropped to {this_osa:.1f}% in the '
             f'last 7 days compared with {last_osa:.1f}% in the week before, and a '
-            f'Society average of {chain_osa:.1f}%.'
+            f'{comparison_label} of {comparison:.1f}%.'
         )
     elif dropped:
         explanation.append(
             f'Store-controlled OSCA in {dept} has dropped to {this_osa:.1f}% in the '
             f'last 7 days compared with {last_osa:.1f}% in the week before.'
         )
-    elif this_osa is not None and chain_osa is not None:
+    elif this_osa is not None and comparison is not None:
         explanation.append(
             f'Store-controlled OSCA in {dept} was {this_osa:.1f}% in the last 7 days '
-            f'against a Society average of {chain_osa:.1f}%.'
+            f'against a {comparison_label} of {comparison:.1f}%.'
         )
     elif this_osa is not None:
         explanation.append(
