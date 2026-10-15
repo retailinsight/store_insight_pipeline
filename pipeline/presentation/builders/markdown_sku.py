@@ -6,6 +6,8 @@ from store_insight.pipeline.presentation.models import (
     ChartCategory,
     ChartSeries,
     LineChartWidget,
+    RankedListItem,
+    RankedListWidget,
     StatWidget,
 )
 
@@ -27,15 +29,24 @@ def build_markdown_sku_presentation(signal: dict, narrative: dict) -> AlertPrese
         )
 
     request_count = signal.get("markdown_request_count") or facts.get("markdown_request_count")
-    if request_count is not None:
+    item_id = signal.get("item_id")
+    if request_count is not None and item_id is not None:
         history = facts.get("sku_markdown_history", [])
         weeks = len(history)
-        title = f"Markdown requests (last {weeks} weeks)" if weeks else "Markdown requests"
+        subtitle = f"Markdown requests in the last {weeks} weeks" if weeks else "Markdown requests"
+        item_description = signal.get("item_description") or str(item_id)
         widgets.append(
-            StatWidget(
-                id="markdown_request_count",
-                title=title,
-                value=float(request_count),
+            RankedListWidget(
+                id="affected_product",
+                title="Affected product",
+                subtitle=subtitle,
+                items=[
+                    RankedListItem(
+                        label=str(item_description),
+                        value=float(request_count),
+                        secondary_label=str(item_id),
+                    )
+                ],
                 format="number",
             )
         )
