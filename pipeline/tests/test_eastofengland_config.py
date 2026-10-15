@@ -168,8 +168,10 @@ class TestEastOfEnglandOutputContract:
 
 class TestEastOfEnglandQueueSafeguard:
 
-    def test_queue_stays_disabled(self):
-        """queue.enabled must stay False for eastofengland until the client
-        is explicitly signed off to receive queued/suppressed alerts."""
-        cfg = _load()
-        assert cfg.queue.enabled is False
+    def test_queue_is_enabled_in_crt_and_dev(self):
+        assert load_config('eastofengland').queue.enabled is True
+        assert load_config('eastofengland_dev').queue.enabled is True
+
+    def test_queue_uses_approved_seven_day_window(self):
+        assert load_config('eastofengland').queue.suppression_days == 7
+        assert load_config('eastofengland_dev').queue.suppression_days == 7

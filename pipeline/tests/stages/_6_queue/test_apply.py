@@ -3,6 +3,7 @@
 import datetime
 from unittest.mock import MagicMock
 
+import pytest
 from store_insight.pipeline.stages._6_queue.apply import apply_workflow_suppression
 from store_insight.pipeline.stages._6_queue.state import (
     history_view_ddl,
@@ -39,6 +40,34 @@ def test_workflow_state_normalises_and_uses_updated_at_age():
     assert active == {'a'}
     assert resolved == {'b'}
     assert expired == [{'action_id': 'alert-c', 'issue_key': 'c'}]
+
+
+@pytest.mark.parametrize('outcome', ['completed', 'partial', 'couldnt_complete', 'expired'])
+def test_resolved_outcomes_are_suppressed_for_seven_days(outcome):
+    rows = [
+        _row(ALERT_ID='resolved-alert', SIGNAL_JSON='{"issue_key":"resolved"}',
+             STATUS='completed', OUTCOME=outcome, UPDATED_AT=datetime.datetime(2026, 9, 10)),
+    ]
+    active, resolved, expired = read_workflow_issue_state(
+        _session(rows), 'DB.PUBLIC.ALERTS_PIPELINE', 'DB.PUBLIC.ALERT_ACTION_STATUS',
+        '2026-09-16',
+    )
+    assert active == set()
+    assert resolved == {'resolved'}
+    assert expired == []
+
+
+def test_resolved_outcome_is_eligible_on_day_seven():
+    rows = [
+        _row(ALERT_ID='resolved-alert', SIGNAL_JSON='{"issue_key":"resolved"}',
+             STATUS='completed', OUTCOME='couldnt_complete',
+             UPDATED_AT=datetime.datetime(2026, 9, 9)),
+    ]
+    _, resolved, _ = read_workflow_issue_state(
+        _session(rows), 'DB.PUBLIC.ALERTS_PIPELINE', 'DB.PUBLIC.ALERT_ACTION_STATUS',
+        '2026-09-16',
+    )
+    assert resolved == set()
 
 
 def test_suppression_returns_eligible_candidates_only():
