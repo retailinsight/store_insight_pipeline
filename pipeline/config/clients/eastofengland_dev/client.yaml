@@ -19,6 +19,10 @@ output:
   top_n_per_store: 3
   max_per_type_per_store: 2
 
+queue:
+  enabled: true
+  suppression_days: 7
+
 detectors:
   enabled:
     - osa_store_actionable.wow
