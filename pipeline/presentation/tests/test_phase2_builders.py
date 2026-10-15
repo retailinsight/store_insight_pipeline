@@ -378,6 +378,8 @@ def test_markdown_override_presentation():
 # -----------------------------------------------------------------------------
 MARKDOWN_SKU_SIGNAL = {
     "signal_type": "MARKDOWN_SKU",
+    "item_id": 5000123456789,
+    "item_description": "SEEDED BATCH",
     "avg_markdown_pct": 29.64,
     "markdown_request_count": 14,
     "facts": {
@@ -402,10 +404,17 @@ MARKDOWN_SKU_EXPECTED = {
             "format": "percentage",
         },
         {
-            "type": "stat",
-            "id": "markdown_request_count",
-            "title": "Markdown requests (last 5 weeks)",
-            "value": 14,
+            "type": "ranked_list",
+            "id": "affected_product",
+            "title": "Affected product",
+            "subtitle": "Markdown requests in the last 5 weeks",
+            "items": [
+                {
+                    "label": "SEEDED BATCH",
+                    "value": 14,
+                    "secondary_label": "5000123456789",
+                }
+            ],
             "format": "number",
         },
         {
