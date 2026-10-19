@@ -34,11 +34,14 @@ METADATA = GathererInfo(
         'panel_b_prompted_checks',
         'panel_c_departments',
         'panel_d_items',
+        'chart_data_through',
     ],
     description=(
         'Seven-day waste-value series ending today (today flagged), '
         'prompted-markdown checks due vs actioned, and department/item '
-        'breakdowns for ANALYSIS_DATE only (SPIKE trigger).'
+        'breakdowns for the latest data date (SPIKE trigger). The shared '
+        'chart window ends on the latest date covered by the sources, so '
+        'days with not-yet-arrived data are not rendered as zeros.'
     ),
 )
 
@@ -51,6 +54,28 @@ def _iso(value: object) -> str:
 
 def _day_name(iso_date: str) -> str:
     return dt.date.fromisoformat(iso_date).strftime('%A')
+
+
+def _max_source_date(df, column: str):
+    """Latest date present in a source frame, or None when empty."""
+    row = df.agg(F.max(F.col(column)).alias('MX')).collect()
+    if not row or row[0]['MX'] is None:
+        return None
+    return dt.date.fromisoformat(_iso(row[0]['MX']))
+
+
+def _anchor_end(nominal_end: dt.date, *source_maxes) -> dt.date:
+    """End the shared chart window on the latest day covered by all sources.
+
+    Days beyond a source's coverage previously rendered as £0 / zero checks,
+    which looks like real zeros rather than not-yet-arrived data. Anchoring
+    both panels to the earliest source max keeps the same dates on every
+    chart while avoiding fake zeros.
+    """
+    available = [m for m in source_maxes if m is not None]
+    if not available:
+        return nominal_end
+    return min(nominal_end, *available)
 
 
 def _store_day_totals(wastage, store_ids):
@@ -66,9 +91,9 @@ def _store_day_totals(wastage, store_ids):
     )
 
 
-def _build_panel_a(rows, store_id: int, analysis_date: dt.date) -> list[dict]:
-    end = analysis_date.isoformat()
-    start = (analysis_date - dt.timedelta(days=6)).isoformat()
+def _build_panel_a(rows, store_id: int, analysis_date: dt.date, end_date: dt.date | None = None) -> list[dict]:
+    end = (end_date or analysis_date).isoformat()
+    start = ((end_date or analysis_date) - dt.timedelta(days=6)).isoformat()
     by_date: dict[str, float] = {}
     for r in rows:
         if int(r['STORE_ID']) != store_id:
@@ -86,15 +111,15 @@ def _build_panel_a(rows, store_id: int, analysis_date: dt.date) -> list[dict]:
             'date': d,
             'day': _day_name(d),
             'waste_value': by_date.get(d, 0.0),
-            'is_today': d == end,
+            'is_today': d == analysis_date.isoformat(),
         })
         current += dt.timedelta(days=1)
     return points
 
 
-def _build_panel_b(prompted_rows, store_id: int, analysis_date: dt.date) -> list[dict]:
-    end = analysis_date.isoformat()
-    start = (analysis_date - dt.timedelta(days=6)).isoformat()
+def _build_panel_b(prompted_rows, store_id: int, analysis_date: dt.date, end_date: dt.date | None = None) -> list[dict]:
+    end = (end_date or analysis_date).isoformat()
+    start = ((end_date or analysis_date) - dt.timedelta(days=6)).isoformat()
     by_date: dict[str, dict] = defaultdict(lambda: {'due': 0, 'actioned': 0})
     for r in prompted_rows:
         if int(r['STORE_ID']) != store_id:
@@ -213,8 +238,15 @@ def gather(
     if prompted_compliance is not None:
         prompted_rows = [r.as_dict() if hasattr(r, 'as_dict') else r for r in prompted_compliance.collect()]
 
-    dept_breakdown = _department_breakdown(wastage, item_hierarchy, store_ids, analysis_date, top_n)
-    item_breakdown = _item_breakdown(wastage, item_hierarchy, store_ids, analysis_date, top_n)
+    waste_max = _max_source_date(wastage, 'DATE')
+    compliance_max = max(
+        (dt.date.fromisoformat(_iso(r['ALERT_DATE'])) for r in prompted_rows),
+        default=None,
+    )
+    end_date = _anchor_end(analysis_date, waste_max, compliance_max)
+
+    dept_breakdown = _department_breakdown(wastage, item_hierarchy, store_ids, end_date, top_n)
+    item_breakdown = _item_breakdown(wastage, item_hierarchy, store_ids, end_date, top_n)
 
     result = {}
     for signal in signals:
@@ -222,10 +254,11 @@ def gather(
             continue
         sid = signal['store_id']
         result[sid] = {
-            'panel_a_waste_by_day': _build_panel_a(store_day_rows, sid, analysis_date),
-            'panel_b_prompted_checks': _build_panel_b(prompted_rows, sid, analysis_date),
+            'panel_a_waste_by_day': _build_panel_a(store_day_rows, sid, analysis_date, end_date),
+            'panel_b_prompted_checks': _build_panel_b(prompted_rows, sid, analysis_date, end_date),
             'panel_c_departments': dept_breakdown.get(sid, []),
             'panel_d_items': item_breakdown.get(sid, []),
+            'chart_data_through': end_date.isoformat(),
         }
     return result
 
@@ -240,4 +273,5 @@ def extract_facts(signal, raw_result):
         'panel_b_prompted_checks': store_data.get('panel_b_prompted_checks', []),
         'panel_c_departments': store_data.get('panel_c_departments', []),
         'panel_d_items': store_data.get('panel_d_items', []),
+        'chart_data_through': store_data.get('chart_data_through'),
     }
