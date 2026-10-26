@@ -13,6 +13,7 @@ connection:
 
 tables:
   store_mission: "{database}.{schema}.STORE_MISSION_V1"
+  ranging: "{database}.{schema}.RANGING_V1"
 
 output:
   emit_affected_products: true

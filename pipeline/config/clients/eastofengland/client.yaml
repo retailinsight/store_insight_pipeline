@@ -15,6 +15,9 @@ tables:
   # Store -> mission segment mapping used for mission-average comparisons in
   # narratives. Only exists for this client, so it is not in base/default.yaml.
   store_mission: "{database}.{schema}.STORE_MISSION_V1"
+  # Latest store x item range snapshot used to filter no-longer-ranged
+  # products out of OSA detection (Trello: ranging/delisting card).
+  ranging: "{database}.{schema}.RANGING_V1"
 
 output:
   emit_affected_products: true

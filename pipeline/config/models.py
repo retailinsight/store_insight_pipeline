@@ -14,9 +14,12 @@ from pydantic import BaseModel, field_validator, model_validator
 try:
     from enum import StrEnum
 except ImportError:
+
     class StrEnum(str, Enum):  # noqa: UP042
         """Fallback StrEnum for Python < 3.11."""
+
         pass
+
 
 # Import detector and gatherer registries for validation
 from store_insight.pipeline.stages._1_detect import registry as detector_registry
@@ -55,6 +58,7 @@ class TablesConfig(BaseModel):
     wmd_hierarchy: str
     prompted_compliance: str = "{database}.{schema}.PROMPTED_COMPLIANCE_V1"
     store_mission: str | None = None
+    ranging: str | None = None
 
     # Interpolation context - set during PipelineConfig validation
     _database: str = ""
@@ -106,9 +110,7 @@ class OutputConfig(BaseModel):
         """Resolve {database} and {schema} placeholders in table names."""
         if self._database and self._schema_name:
             if isinstance(self.alerts, str):
-                self.alerts = self.alerts.format(
-                    database=self._database, schema=self._schema_name
-                )
+                self.alerts = self.alerts.format(database=self._database, schema=self._schema_name)
         return self
 
 
@@ -172,7 +174,9 @@ class ThresholdsConfig(BaseModel):
             raise ValueError("OSA_STORE_ACTIONABLE.min_actionable_positive_rows must be positive")
         unknown_pct = v.get("max_actionable_unknown_row_pct", 0)
         if not 0.0 <= unknown_pct <= 100.0:
-            raise ValueError("OSA_STORE_ACTIONABLE.max_actionable_unknown_row_pct must be between 0 and 100")
+            raise ValueError(
+                "OSA_STORE_ACTIONABLE.max_actionable_unknown_row_pct must be between 0 and 100"
+            )
         return v
 
     @field_validator("COMPLIANCE")
@@ -193,9 +197,7 @@ class ThresholdsConfig(BaseModel):
 
     @field_validator("MARKDOWN_OVERRIDE")
     @classmethod
-    def validate_markdown_override_thresholds(
-        cls, v: dict[str, Any]
-    ) -> dict[str, Any]:
+    def validate_markdown_override_thresholds(cls, v: dict[str, Any]) -> dict[str, Any]:
         """Validate MARKDOWN_OVERRIDE threshold ranges."""
         if "min_override_chain_gap" in v:
             if not 0.0 <= v["min_override_chain_gap"] <= 1.0:
@@ -243,9 +245,7 @@ class ThresholdsConfig(BaseModel):
 
     @field_validator("MARKDOWN_SELLTHROUGH")
     @classmethod
-    def validate_markdown_sellthrough_thresholds(
-        cls, v: dict[str, Any]
-    ) -> dict[str, Any]:
+    def validate_markdown_sellthrough_thresholds(cls, v: dict[str, Any]) -> dict[str, Any]:
         """Validate MARKDOWN_SELLTHROUGH threshold ranges."""
         if "min_sellthrough_chain_gap" in v:
             if not 0.0 <= v["min_sellthrough_chain_gap"] <= 1.0:
@@ -319,9 +319,7 @@ class DetectorConfig(BaseModel):
     @classmethod
     def validate_detector_names(cls, v: list[str]) -> list[str]:
         """Validate that all detector names exist in the detector registry."""
-        known_detectors = {
-            _detector_module_name(mod) for mod in detector_registry.ALL_DETECTORS
-        }
+        known_detectors = {_detector_module_name(mod) for mod in detector_registry.ALL_DETECTORS}
         unknown = set(v) - known_detectors
         if unknown:
             raise ValueError(
@@ -350,8 +348,22 @@ class GatherersConfig(BaseModel):
     @classmethod
     def validate_gatherer_names(cls, v: list[str], info) -> list[str]:
         """Validate that all gatherer names exist in the gatherer registry."""
-        if info.field_name in ["OSA", "OSA_STORE_ACTIONABLE", "OSA_BIG_DROP", "OSA_RECURRING_SLOT", "COMPLIANCE", "MARKDOWN_OVERRIDE", "WASTE", "WASTE_TRIM", "MARKDOWN_SELLTHROUGH", "MARKDOWN_SKU", "STRAIGHT_TO_BIN"]:
-            known_gatherers = {mod.__name__.split(".")[-1] for mod in gatherer_registry.ALL_GATHERERS}
+        if info.field_name in [
+            "OSA",
+            "OSA_STORE_ACTIONABLE",
+            "OSA_BIG_DROP",
+            "OSA_RECURRING_SLOT",
+            "COMPLIANCE",
+            "MARKDOWN_OVERRIDE",
+            "WASTE",
+            "WASTE_TRIM",
+            "MARKDOWN_SELLTHROUGH",
+            "MARKDOWN_SKU",
+            "STRAIGHT_TO_BIN",
+        ]:
+            known_gatherers = {
+                mod.__name__.split(".")[-1] for mod in gatherer_registry.ALL_GATHERERS
+            }
             unknown = set(v) - known_gatherers
             if unknown:
                 raise ValueError(
