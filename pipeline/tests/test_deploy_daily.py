@@ -36,6 +36,20 @@ class FakeSession:
 
     def table(self, _name):
         class _Frame:
+            def select(self, *a, **k):
+                return self
+
+            def distinct(self):
+                return self
+
+            def agg(self, *a, **k):
+                class _Agg:
+                    # Empty max FILE_TIMESTAMP -> load_ranging fails open
+                    def collect(self):
+                        return [(None,)]
+
+                return _Agg()
+
             def cache_result(self):
                 return self
 
@@ -48,11 +62,14 @@ class FakeSession:
         return f'"{self._database}"'
 
 
-@pytest.mark.parametrize("session_db, output_table", [
-    ("STORE_INSIGHT_DB", "STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE"),
-    ("STORE_INSIGHT_DEV", "STORE_INSIGHT_DEV.PUBLIC.ALERTS_PIPELINE"),
-    ("STORE_INSIGHT_DEV", '"store_insight_dev".PUBLIC.ALERTS_PIPELINE'),
-])
+@pytest.mark.parametrize(
+    "session_db, output_table",
+    [
+        ("STORE_INSIGHT_DB", "STORE_INSIGHT_DB.PUBLIC.ALERTS_PIPELINE"),
+        ("STORE_INSIGHT_DEV", "STORE_INSIGHT_DEV.PUBLIC.ALERTS_PIPELINE"),
+        ("STORE_INSIGHT_DEV", '"store_insight_dev".PUBLIC.ALERTS_PIPELINE'),
+    ],
+)
 def test_environment_guard_allows_output_in_session_database(session_db, output_table):
     _assert_output_in_session_database(FakeSession(session_db), output_table)
 
@@ -151,8 +168,14 @@ def test_handler_and_run_batch_both_use_load_sources():
 def test_load_sources_returns_all_expected_keys():
     # load_sources must return every source key that run_pipeline accepts.
     expected = {
-        "osa", "feedback", "markdown_log", "markdown_sales", "wastage",
-        "item_hierarchy", "store_hierarchy", "prompted_compliance",
+        "osa",
+        "feedback",
+        "markdown_log",
+        "markdown_sales",
+        "wastage",
+        "item_hierarchy",
+        "store_hierarchy",
+        "prompted_compliance",
     }
     # Verify the function's return dict lists all keys.
     source = inspect.getsource(run_batch.load_sources)
@@ -187,6 +210,7 @@ def test_handler_spreads_all_load_sources_keys_into_run_pipeline(monkeypatch):
     )
     monkeypatch.setattr(run_batch, "load_sources", lambda *a, **k: fake_sources)
     monkeypatch.setattr(run_batch, "write_alerts_with_queue", lambda *a, **k: None)
+
     def capture_run_pipeline(*args, **kwargs):
         if args:
             received["osa"] = args[0]
@@ -214,25 +238,32 @@ def test_daily_handler_routes_writes_through_queue_wrapper():
     assert "trusted_scheduled_write=True" in source
     assert "write_alerts(session, cards" not in source
     assert "for _, type_config in cfg.investigation" in source
-    assert 'getattr(cfg.investigation, signal_type)' not in source
+    assert "getattr(cfg.investigation, signal_type)" not in source
 
 
 def test_queue_wrapper_uses_standard_writer_when_disabled(monkeypatch):
     calls = []
     cfg = type("Config", (), {"queue": type("Queue", (), {"enabled": False})()})()
-    monkeypatch.setattr(run_batch, "write_alerts", lambda *args, **kwargs: calls.append((args, kwargs)))
+    monkeypatch.setattr(
+        run_batch, "write_alerts", lambda *args, **kwargs: calls.append((args, kwargs))
+    )
 
     run_batch.write_alerts_with_queue("session", ["card"], "2026-09-09", cfg=cfg)
 
-    assert calls == [(("session", ["card"]), {
-        "run_date": "2026-09-09",
-        "overwrite": False,
-        "full_replace": False,
-        "target_table": None,
-        "cfg": cfg,
-        "trusted_scheduled_write": False,
-        "partial_store_run": False,
-    })]
+    assert calls == [
+        (
+            ("session", ["card"]),
+            {
+                "run_date": "2026-09-09",
+                "overwrite": False,
+                "full_replace": False,
+                "target_table": None,
+                "cfg": cfg,
+                "trusted_scheduled_write": False,
+                "partial_store_run": False,
+            },
+        )
+    ]
 
 
 def test_eastofengland_config_defaults_all_engines_to_rule_based():
@@ -314,9 +345,7 @@ def test_crt_task_deploy_requires_eastofengland_client():
 
 
 def test_crt_task_deploy_accepts_eastofengland_client():
-    deploy._validate_deployment_target(
-        "STORE_INSIGHT_DB", "eastofengland", task_off=False
-    )
+    deploy._validate_deployment_target("STORE_INSIGHT_DB", "eastofengland", task_off=False)
 
 
 def test_crt_sp_only_deploy_allows_missing_client():
@@ -352,15 +381,19 @@ def test_task_off_does_not_alter_or_verify_task(monkeypatch):
 
 
 def test_crt_live_task_assertion_accepts_safe_definition():
-    session = FakeSession(rows=[FakeRow(
-        name="RUN_ALERTS_PIPELINE_TASK",
-        state="started",
-        definition=(
-            "CALL STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE"
-            "('eastofengland', NULL, FALSE, FALSE)"
-        ),
-        schedule="USING CRON 0 6 * * * Europe/London",
-    )])
+    session = FakeSession(
+        rows=[
+            FakeRow(
+                name="RUN_ALERTS_PIPELINE_TASK",
+                state="started",
+                definition=(
+                    "CALL STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE"
+                    "('eastofengland', NULL, FALSE, FALSE)"
+                ),
+                schedule="USING CRON 0 6 * * * Europe/London",
+            )
+        ]
+    )
 
     deploy._assert_registered_task(
         session, "STORE_INSIGHT_DB", "PUBLIC", "0 6 * * *", "Europe/London"
@@ -368,15 +401,18 @@ def test_crt_live_task_assertion_accepts_safe_definition():
 
 
 def test_crt_live_task_assertion_rejects_null_client():
-    session = FakeSession(rows=[FakeRow(
-        name="RUN_ALERTS_PIPELINE_TASK",
-        state="started",
-        definition=(
-            "CALL STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE"
-            "(NULL, NULL, FALSE, FALSE)"
-        ),
-        schedule="USING CRON 0 6 * * * Europe/London",
-    )])
+    session = FakeSession(
+        rows=[
+            FakeRow(
+                name="RUN_ALERTS_PIPELINE_TASK",
+                state="started",
+                definition=(
+                    "CALL STORE_INSIGHT_DB.PUBLIC.RUN_ALERTS_PIPELINE(NULL, NULL, FALSE, FALSE)"
+                ),
+                schedule="USING CRON 0 6 * * * Europe/London",
+            )
+        ]
+    )
 
     with pytest.raises(RuntimeError, match="unsafe definition"):
         deploy._assert_registered_task(
@@ -404,7 +440,14 @@ def test_cli_write_secondary_requires_write_flag(monkeypatch):
     """--write-secondary-results without --write must be rejected."""
     monkeypatch.setattr(
         "sys.argv",
-        ["run_batch", "--client", "eastofengland", "--analysis-date", "2026-01-01", "--write-secondary-results"],
+        [
+            "run_batch",
+            "--client",
+            "eastofengland",
+            "--analysis-date",
+            "2026-01-01",
+            "--write-secondary-results",
+        ],
     )
     with pytest.raises(SystemExit) as exc_info:
         run_batch.main()
@@ -429,15 +472,23 @@ def test_run_single_date_dry_run_skips_write_and_dumps_json(monkeypatch, tmp_pat
     monkeypatch.setattr(run_batch, "load_osa", lambda *a, **k: Frame())
     monkeypatch.setattr(run_batch, "load_feedback", lambda *a, **k: Frame())
     monkeypatch.setattr(
-        run_batch, "load_wmd",
+        run_batch,
+        "load_wmd",
         lambda *a, **k: {
             k_: Frame()
-            for k_ in ("markdown_log", "markdown_sales", "wastage", "item_hierarchy", "store_hierarchy")
+            for k_ in (
+                "markdown_log",
+                "markdown_sales",
+                "wastage",
+                "item_hierarchy",
+                "store_hierarchy",
+            )
         },
     )
     monkeypatch.setattr(run_batch, "load_prompted_compliance", lambda *a, **k: Frame())
     monkeypatch.setattr(
-        run_batch, "write_alerts_with_queue",
+        run_batch,
+        "write_alerts_with_queue",
         lambda *a, **k: write_calls.append(("write", a, k)),
     )
     monkeypatch.setattr(run_batch, "run_pipeline", lambda *a, **k: fake_cards)
@@ -461,6 +512,7 @@ def test_run_single_date_dry_run_skips_write_and_dumps_json(monkeypatch, tmp_pat
 
     # JSON file must exist with the cards
     import json
+
     with open(json_path) as f:
         data = json.load(f)
     assert len(data["cards"]) == 2
@@ -482,15 +534,23 @@ def test_run_single_date_write_mode_calls_write(monkeypatch, tmp_path):
     monkeypatch.setattr(run_batch, "load_osa", lambda *a, **k: Frame())
     monkeypatch.setattr(run_batch, "load_feedback", lambda *a, **k: Frame())
     monkeypatch.setattr(
-        run_batch, "load_wmd",
+        run_batch,
+        "load_wmd",
         lambda *a, **k: {
             k_: Frame()
-            for k_ in ("markdown_log", "markdown_sales", "wastage", "item_hierarchy", "store_hierarchy")
+            for k_ in (
+                "markdown_log",
+                "markdown_sales",
+                "wastage",
+                "item_hierarchy",
+                "store_hierarchy",
+            )
         },
     )
     monkeypatch.setattr(run_batch, "load_prompted_compliance", lambda *a, **k: Frame())
     monkeypatch.setattr(
-        run_batch, "write_alerts_with_queue",
+        run_batch,
+        "write_alerts_with_queue",
         lambda *a, **k: write_calls.append(True),
     )
     monkeypatch.setattr(run_batch, "run_pipeline", lambda *a, **k: fake_cards)
@@ -514,6 +574,7 @@ def test_run_single_date_write_mode_calls_write(monkeypatch, tmp_path):
 
     # JSON file should also be written
     import json
+
     with open(json_path) as f:
         data = json.load(f)
     assert len(data["cards"]) == 1
@@ -522,6 +583,7 @@ def test_run_single_date_write_mode_calls_write(monkeypatch, tmp_path):
 def test_run_single_date_defaults_to_dry_run():
     """run_single_date must default to dry_run=True."""
     import inspect
+
     sig = inspect.signature(run_batch.run_single_date)
     assert sig.parameters["dry_run"].default is True
 
@@ -529,6 +591,7 @@ def test_run_single_date_defaults_to_dry_run():
 def test_handler_does_not_use_dry_run():
     """The scheduled SP handler must never reference dry_run — it always writes."""
     import inspect
+
     source = inspect.getsource(run)
     assert "dry_run" not in source
     # Handler writes via trusted_scheduled_write, not run_single_date

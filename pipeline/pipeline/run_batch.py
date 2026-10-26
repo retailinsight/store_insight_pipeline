@@ -174,7 +174,7 @@ def load_prompted_compliance(session, lookback_start, analysis_date, cfg=None, c
     )
 
 
-def load_osa(session, lookback_start, analysis_date, cfg=None):
+def load_osa(session, lookback_start, analysis_date, cfg=None, ranging=None):
     """
     Load and join OSA + item hierarchy data for the lookback window.
     Result is cached in Snowflake for fast repeated access during the pipeline.
@@ -183,6 +183,13 @@ def load_osa(session, lookback_start, analysis_date, cfg=None):
     concerns (we don't want to alert on items that have no department, since
     narrative output won't make sense), so they live here rather than in
     the SQL views.
+
+    When ``ranging`` is given (latest STORE_ID x ITEM_CODE snapshot), rows
+    for items that are no longer ranged are excluded at detection time —
+    agreed 26 Oct: "At the point of doing the detection, we filter out
+    anything that is no longer ranged." This removes delisted products
+    from OSA%, lost sales and card item lists alike. ``ranging=None``
+    leaves behaviour unchanged.
     """
     osa_raw = (
         session.table(cfg.tables.osa if cfg else "OSA_V1")
@@ -192,11 +199,67 @@ def load_osa(session, lookback_start, analysis_date, cfg=None):
 
     item = session.table(cfg.tables.hierarchy if cfg else "HIERARCHY_V1")
 
-    return (
-        osa_raw.join(item, on=["ITEM_CODE"], how="left")
-        .filter(F.col("ITEM_HIERARCHY_2").is_not_null())
-        .cache_result()
+    df = osa_raw.join(item, on=["ITEM_CODE"], how="left").filter(
+        F.col("ITEM_HIERARCHY_2").is_not_null()
     )
+    if ranging is not None:
+        df = filter_not_ranged(df, ranging)
+    return df.cache_result()
+
+
+def filter_not_ranged(osa_df, ranging_df):
+    """Drop OSA rows whose (STORE_ID, ITEM_CODE) is absent from the latest
+    ranging snapshot. Kept separate so the anti-join is unit-testable on a
+    local-testing session without touching Snowflake tables."""
+    return osa_df.join(ranging_df, on=["STORE_ID", "ITEM_CODE"], how="left_semi")
+
+
+# The ranging file lands daily ~00:55, so at the 06:00 run the latest file
+# should cover the previous day. Anything older is treated as a broken feed
+# and the pipeline fails open (runs unfiltered) rather than silently
+# dropping genuinely-ranged items on stale data.
+RANGING_MAX_STALENESS_DAYS = 2
+
+
+def load_ranging(session, this_week_end, cfg=None, capabilities=None, log_prefix="[load_sources]"):
+    """Latest store x item range snapshot for the OSA detection filter.
+
+    Returns a DataFrame of distinct (STORE_ID, ITEM_CODE), or None — in
+    which case the OSA load runs unfiltered (fail-open). None is returned
+    when the client has no ``tables.ranging`` configured, the capability is
+    absent, the view cannot be read, is empty, or its latest FILE_TIMESTAMP
+    is more than RANGING_MAX_STALENESS_DAYS behind ``this_week_end``.
+    """
+    if capabilities is not None and "ranging" not in capabilities:
+        return None
+    table = cfg.tables.ranging if cfg else None
+    if not table:
+        return None
+    try:
+        raw = session.table(table).select("STORE_ID", "ITEM_CODE", "FILE_TIMESTAMP")
+        max_ts = raw.agg(F.max("FILE_TIMESTAMP")).collect()[0][0]
+    except Exception as e:
+        print(
+            f"{log_prefix} ranging: could not read {table} ({type(e).__name__}) — running unfiltered"
+        )
+        return None
+    if max_ts is None:
+        print(f"{log_prefix} ranging: {table} is empty — running unfiltered")
+        return None
+    ts_date = max_ts.date() if hasattr(max_ts, "date") else max_ts
+    if not isinstance(ts_date, datetime.date):
+        print(
+            f"{log_prefix} ranging: unexpected FILE_TIMESTAMP type {type(max_ts).__name__} — running unfiltered"
+        )
+        return None
+    end = datetime.date.fromisoformat(str(this_week_end)[:10])
+    if (end - ts_date).days > RANGING_MAX_STALENESS_DAYS:
+        print(
+            f"{log_prefix} ranging: latest file {ts_date} is stale vs {end} "
+            f"— running unfiltered (fail-open on stale feed)"
+        )
+        return None
+    return raw.select("STORE_ID", "ITEM_CODE").distinct().cache_result()
 
 
 def load_wmd(session, wmd_lookback, analysis_date, cfg=None, capabilities=None):
@@ -304,8 +367,14 @@ def load_sources(session, windows, cfg, capabilities=None, log_prefix="[load_sou
 
     w = windows
 
+    print(f"{log_prefix} Loading ranging snapshot...")
+    ranging = load_ranging(
+        session, w["this_week_end"], cfg=cfg, capabilities=capabilities, log_prefix=log_prefix
+    )
+    _count_or_skip("Ranging    rows", ranging)
+
     print(f"{log_prefix} Loading OSA data...")
-    osa = load_osa(session, w["lookback_start"], w["this_week_end"], cfg=cfg)
+    osa = load_osa(session, w["lookback_start"], w["this_week_end"], cfg=cfg, ranging=ranging)
     _count_or_skip("OSA rows", osa)
 
     print(f"{log_prefix} Loading feedback data...")
@@ -332,9 +401,7 @@ def load_sources(session, windows, cfg, capabilities=None, log_prefix="[load_sou
 
     store_mission_table = cfg.tables.store_mission if cfg else None
     store_mission = (
-        session.table(store_mission_table).cache_result()
-        if store_mission_table
-        else None
+        session.table(store_mission_table).cache_result() if store_mission_table else None
     )
     _count_or_skip("Store mission    rows", store_mission)
 
@@ -471,9 +538,7 @@ def run_single_date(
 
     capabilities = discover_capabilities(client) if cfg else None
 
-    sources = load_sources(
-        session, w, cfg, capabilities=capabilities, log_prefix="[run_batch]"
-    )
+    sources = load_sources(session, w, cfg, capabilities=capabilities, log_prefix="[run_batch]")
 
     pipeline_result = run_pipeline(
         sources["osa"],
@@ -509,7 +574,9 @@ def run_single_date(
 
     # ── Summary ───────────────────────────────────────────────────────────
     signal_types = sorted({c.get("signal_type", "UNKNOWN") for c in cards}) if cards else []
-    stores = sorted({c.get("store_id") for c in cards if c.get("store_id") is not None}) if cards else []
+    stores = (
+        sorted({c.get("store_id") for c in cards if c.get("store_id") is not None}) if cards else []
+    )
     print(
         f"[run_batch] Pipeline produced {len(cards)} cards, "
         f"{len(stores)} stores, signal types: {signal_types}"
@@ -553,18 +620,18 @@ def run_single_date(
             print(f"[run_batch] --deterministic: golden snapshot created at {golden_path}")
 
     if not dry_run and write_secondary_results:
-        print('[run_batch] Measuring outcomes for eligible Commitments...')
+        print("[run_batch] Measuring outcomes for eligible Commitments...")
         outcomes = measure_outcomes(session, current_run_date=run_date, cfg=cfg)
         if outcomes:
             _write_outcomes(session, outcomes, cfg=cfg)
     elif not dry_run:
-        print('[run_batch] Secondary quality-log and outcome writes disabled.')
+        print("[run_batch] Secondary quality-log and outcome writes disabled.")
 
 
 def _outcomes_table(cfg) -> str:
-    if cfg and hasattr(cfg, 'output') and hasattr(cfg.output, 'outcomes'):
+    if cfg and hasattr(cfg, "output") and hasattr(cfg.output, "outcomes"):
         return cfg.output.outcomes
-    return 'STORE_INSIGHT_OUTCOMES'
+    return "STORE_INSIGHT_OUTCOMES"
 
 
 def _write_outcomes(session, outcomes: list[dict], cfg=None) -> None:
@@ -578,35 +645,37 @@ def _write_outcomes(session, outcomes: list[dict], cfg=None) -> None:
         StructType,
     )
 
-    schema = StructType([
-        StructField('ALERT_ID',                   StringType()),
-        StructField('STORE_ID',                   IntegerType()),
-        StructField('SIGNAL_TYPE',                StringType()),
-        StructField('SECTION',                    StringType()),
-        StructField('CARD_RUN_DATE',              StringType()),
-        StructField('OUTCOME_RUN_DATE',           StringType()),
-        StructField('SIGNAL_RESOLVED',            BooleanType()),
-        StructField('ESTIMATED_VALUE_RECOVERED',  FloatType()),
-    ])
+    schema = StructType(
+        [
+            StructField("ALERT_ID", StringType()),
+            StructField("STORE_ID", IntegerType()),
+            StructField("SIGNAL_TYPE", StringType()),
+            StructField("SECTION", StringType()),
+            StructField("CARD_RUN_DATE", StringType()),
+            StructField("OUTCOME_RUN_DATE", StringType()),
+            StructField("SIGNAL_RESOLVED", BooleanType()),
+            StructField("ESTIMATED_VALUE_RECOVERED", FloatType()),
+        ]
+    )
 
     rows = [
         (
-            o['alert_id'],
-            o['store_id'],
-            o['signal_type'],
-            o['section'],
-            o['card_run_date'],
-            o['outcome_run_date'],
-            o['signal_resolved'],
-            o['estimated_value_recovered'],
+            o["alert_id"],
+            o["store_id"],
+            o["signal_type"],
+            o["section"],
+            o["card_run_date"],
+            o["outcome_run_date"],
+            o["signal_resolved"],
+            o["estimated_value_recovered"],
         )
         for o in outcomes
     ]
 
     table = _outcomes_table(cfg)
     validate_alert_write_target(table)
-    session.create_dataframe(rows, schema=schema).write.mode('append').save_as_table(table)
-    print(f'[outcomes] → {table} ({len(rows)} rows appended)')
+    session.create_dataframe(rows, schema=schema).write.mode("append").save_as_table(table)
+    print(f"[outcomes] → {table} ({len(rows)} rows appended)")
 
 
 # ---------------------------------------------------------------------------
@@ -742,17 +811,16 @@ def main():
 
     if dry_run:
         print(
-            f"[run_batch] DRY RUN -- no Snowflake writes.  "
-            f"Results will be saved to {output_json}"
+            f"[run_batch] DRY RUN -- no Snowflake writes.  Results will be saved to {output_json}"
         )
     else:
         # ── Write-mode preflight ──────────────────────────────────────────
         effective_target = args.target_table or _output_table(cfg)
-        mode = 'overwrite_run_date' if args.overwrite else 'append'
-        scope = f'{len(args.store_id)} store(s)' if args.store_id else 'all stores'
+        mode = "overwrite_run_date" if args.overwrite else "append"
+        scope = f"{len(args.store_id)} store(s)" if args.store_id else "all stores"
         print(
-            f'[run_batch] write preflight: target={effective_target} mode={mode} '
-            f'run_date={run_date} analysis_date={analysis_date} scope={scope}'
+            f"[run_batch] write preflight: target={effective_target} mode={mode} "
+            f"run_date={run_date} analysis_date={analysis_date} scope={scope}"
         )
         validate_alert_write_target(
             effective_target,
@@ -760,13 +828,13 @@ def main():
         )
         if args.write_secondary_results:
             secondary_targets = [_outcomes_table(cfg)]
-            log_table = getattr(getattr(cfg, 'data_quality', None), 'log_table', None)
+            log_table = getattr(getattr(cfg, "data_quality", None), "log_table", None)
             if log_table:
                 secondary_targets.append(log_table)
             for secondary_target in secondary_targets:
                 validate_alert_write_target(secondary_target)
         else:
-            print('[run_batch] write preflight: secondary writes disabled')
+            print("[run_batch] write preflight: secondary writes disabled")
 
     # ── Capability validation: every enabled detector/gatherer must have
     #    its required contracts deployed for this client.  Fail fast here
