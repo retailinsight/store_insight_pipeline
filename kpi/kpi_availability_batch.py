@@ -168,6 +168,13 @@ def _mission_table() -> str:
     db = parts[0] if len(parts) == 3 else "STORE_INSIGHT_DB"
     return f"{db}.PUBLIC.STORE_MISSION_V1"
 
+
+def _ranging_table() -> str:
+    """Resolve the ranging snapshot view in the same database as OUTPUT_TABLE."""
+    parts = OUTPUT_TABLE.split(".")
+    db = parts[0] if len(parts) == 3 else "STORE_INSIGHT_DB"
+    return f"{db}.PUBLIC.RANGING_V1"
+
 # RAG threshold
 OSA_TARGET = 0.90
 
@@ -278,6 +285,52 @@ def _date_range(end_date: date, days: int):
     return str(start), str(end_date)
 
 
+# The ranging file lands daily ~00:55, so at the KPI batch run the latest
+# file should cover the previous day. Anything older is treated as a broken
+# feed and the batch fails open (runs unfiltered) rather than silently
+# dropping genuinely-ranged items on stale data. Same rule as the pipeline's
+# load_ranging in pipeline/pipeline/run_batch.py.
+RANGING_MAX_STALENESS_DAYS = 2
+
+
+def _load_ranging(session: Session, week_end: str):
+    """Latest store x item range snapshot for the OSA filter, or None.
+
+    Mirrors pipeline load_ranging: returns distinct (STORE_ID, ITEM_CODE)
+    from the RANGING_V1 adapter view, or None — in which case the OSA load
+    runs unfiltered (fail-open) when the view cannot be read, is empty, or
+    its latest FILE_TIMESTAMP is more than RANGING_MAX_STALENESS_DAYS behind
+    week_end.
+    """
+    table = _ranging_table()
+    try:
+        raw = session.table(table).select("STORE_ID", "ITEM_CODE", "FILE_TIMESTAMP")
+        max_ts = raw.agg(F.max("FILE_TIMESTAMP")).collect()[0][0]
+    except Exception as e:
+        print(f"  ranging: could not read {table} ({type(e).__name__}) — running unfiltered")
+        return None
+    if max_ts is None:
+        print(f"  ranging: {table} is empty — running unfiltered")
+        return None
+    ts_date = max_ts.date() if hasattr(max_ts, "date") else max_ts
+    if not isinstance(ts_date, date):
+        print(f"  ranging: unexpected FILE_TIMESTAMP type {type(max_ts).__name__} — running unfiltered")
+        return None
+    end = date.fromisoformat(str(week_end)[:10])
+    if (end - ts_date).days > RANGING_MAX_STALENESS_DAYS:
+        print(f"  ranging: latest file {ts_date} is stale vs week end {end} — running unfiltered")
+        return None
+    print(f"  ranging: filtering OSA on latest file {ts_date} from {table}")
+    # RANGING_V1.ITEM_CODE is TEXT (SUPER_SKU::varchar) while OSA ITEM_ID is
+    # NUMBER — cast on the ranging side. Non-numeric SUPER_SKUs can never
+    # match a numeric ITEM_ID, so TRY_TO_NUMBER losing them is harmless.
+    return (
+        raw.select("STORE_ID", F.expr("TRY_TO_NUMBER(ITEM_CODE)").alias("ITEM_CODE"))
+        .filter(F.col("ITEM_CODE").is_not_null())
+        .distinct()
+    )
+
+
 def _load_osa(session: Session, lookback_start: str, week_end: str):
     hier = (
         session.table(HIERARCHY_TABLE)
@@ -305,7 +358,11 @@ def _load_osa(session: Session, lookback_start: str, week_end: str):
             F.dayname(F.col("ANALYSIS_DATE")).alias("DAY_NAME"),
         )
     )
-    return raw.join(hier, on=["ITEM_CODE"], how="left").cache_result()
+    df = raw.join(hier, on=["ITEM_CODE"], how="left")
+    ranging = _load_ranging(session, week_end)
+    if ranging is not None:
+        df = df.join(ranging, on=["STORE_ID", "ITEM_CODE"], how="left_semi")
+    return df.cache_result()
 
 
 def _load_sites(session: Session):
