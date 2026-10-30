@@ -5,11 +5,9 @@ testpaths = ["pipeline/tests"]
 line-length = 100
 target-version = "py312"
 extend-exclude = [
-    "kpi",
     ".venv-store-insight",
     "venv_store_insight",
     "pipeline/qc",
-    "pipeline/monitoring",
     "**/*.ipynb",
 ]
 

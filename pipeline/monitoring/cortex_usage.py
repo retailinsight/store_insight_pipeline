@@ -25,7 +25,6 @@ import argparse
 
 from store_insight.api.app.snowflake_session import get_session
 
-
 _SQL = """
 SELECT
     function_name,

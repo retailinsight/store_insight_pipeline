@@ -1,0 +1,9 @@
+# Default owners for review. Requires branch protection to enforce.
+
+pipeline/     @dantretailinsight @Elaheh-Kalantari
+kpi/          @dantretailinsight @Elaheh-Kalantari
+monitoring/   @dantretailinsight @Elaheh-Kalantari
+scripts/      @dantretailinsight @Elaheh-Kalantari
+
+# Contract wording is store-facing — Dave should see changes.
+docs/contracts/ @dantretailinsight @Elaheh-Kalantari
