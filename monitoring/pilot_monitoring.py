@@ -15,6 +15,8 @@ Checks implemented (IDs from the PRD §7):
   C7  quality-gate result       — today's gate ACTION_TAKEN values
   C9  monitor heartbeat         — self-report row (external no-result query
                                   stays in scripts/check_morning_run.py)
+  C10 schedule integrity        — every expected prod task STARTED, child
+                                  tasks chained, each with a success in 24h
 
 C8 (production .NET probe) cannot run inside Snowflake and is owned outside
 this module.
@@ -41,6 +43,19 @@ EXCLUDED_MIX_TYPES = {'WASTE', 'WASTE_TRIM', 'MARKDOWN_SELLTHROUGH'}
 BASELINE_WEEKS = 4        # C4: trailing same-weekday weeks
 TASK_LOOKBACK_HOURS = 18  # C2/C5: how far back to look in TASK_HISTORY
 KPI_MIN_COLUMNS = 38      # C6: expected column count
+SCHED_SUCCESS_HOURS = 24  # C10: every expected task needs a success this recent
+
+# C10 expected production tasks (STORE_INSIGHT_DB.PUBLIC). 'after' records the
+# chaining contract: deploy_kpi_batch_task.py creates the KPI task
+# AFTER RUN_ALERTS_PIPELINE_TASK. A deploy that replaces a task can silently
+# leave it SUSPENDED — C10 makes that visible the same morning.
+EXPECTED_TASKS = {
+    'RUN_ALERTS_PIPELINE_TASK':    {'after': None},
+    'KPI_AVAILABILITY_BATCH_TASK': {'after': 'RUN_ALERTS_PIPELINE_TASK'},
+    'KPI_AVAILABILITY_REFRESH_TASK': {'after': None},
+    'SOURCE_VOLUME_CHECK_TASK':    {'after': None},
+    'MONITORING_TASK':             {'after': None},
+}
 
 # Slack notification integration (SD-67936). A message is sent every run:
 # problem blocks when a check is not OK, a recovery line when an open
@@ -56,6 +71,7 @@ OWNERS = {
     'C6': 'Elaheh',
     'C7': 'Dan',
     'C9': 'Elaheh',
+    'C10': 'Elaheh / Dan',
 }
 
 CHECK_COMPONENTS = {
@@ -67,6 +83,7 @@ CHECK_COMPONENTS = {
     'C6': 'kpi_batch',
     'C7': 'quality_gate',
     'C9': 'monitor',
+    'C10': 'schedule',
 }
 
 CHECK_DESCRIPTIONS = {
@@ -145,6 +162,18 @@ CHECK_DESCRIPTIONS = {
         'impact': 'If the monitor itself fails, no one is alerted to problems until they are noticed manually.',
         'first_response': ('Run scripts/run_monitoring_supervised.py manually to restore coverage, then check '
                            'TASK_HISTORY and redeploy the task if needed.'),
+    },
+    'C10': {
+        'title': 'Schedule integrity',
+        'description': ('Checks every expected production task exists and is STARTED, '
+                        'child tasks are chained (AFTER) as deployed, and each task has '
+                        'a successful run within the last 24h.'),
+        'part': 'task schedule',
+        'impact': ('A suspended or dropped task runs nothing — alerts, KPIs or the monitor '
+                   'itself silently stop until someone notices.'),
+        'first_response': ('SHOW TASKS IN SCHEMA STORE_INSIGHT_DB.PUBLIC and compare states. '
+                           'A suspended task usually means a deploy replaced it without '
+                           '--resume: ALTER TASK <name> RESUME, then check its children resumed too.'),
     },
 }
 
@@ -549,6 +578,63 @@ def check_c7_gate_result(runner, data_db, business_date):
                    {'actions': 'NONE/WARNED only'}, {}, details, business_date)
 
 
+def classify_schedule_integrity(show_tasks_rows: list[dict],
+                                success_names: set,
+                                expected: dict | None = None) -> tuple[str, str, dict]:
+    """C10 classification from SHOW TASKS rows + names of tasks with a
+    SUCCEEDED run in the last SCHED_SUCCESS_HOURS.
+
+    Missing or non-STARTED expected tasks are FAIL; broken AFTER chaining or a
+    stale last success is WARN (task exists and runs — timing may legitimately
+    vary on slow days).
+    """
+    expected = expected or EXPECTED_TASKS
+    by_name = {str(r.get('name', '')).upper(): r for r in show_tasks_rows}
+    observed: dict[str, str] = {}
+    fails, warns = [], []
+    for name, spec in expected.items():
+        task = by_name.get(name)
+        if task is None:
+            observed[name] = 'missing'
+            fails.append(f'{name} missing')
+            continue
+        state = str(task.get('state', '')).lower() or 'unknown'
+        observed[name] = state
+        if state != 'started':
+            fails.append(f'{name} is {state}')
+            continue  # a stopped task can't have fresh successes to judge
+        parent = spec.get('after')
+        if parent:
+            preds = {str(p).upper() for p in (task.get('predecessors') or [])}
+            if not any(parent in p for p in preds):
+                warns.append(f'{name} not chained AFTER {parent}')
+        if name not in success_names:
+            warns.append(f'{name} no success in {SCHED_SUCCESS_HOURS}h')
+    if fails:
+        return 'FAIL', '; '.join(fails + warns), observed
+    if warns:
+        return 'WARN', '; '.join(warns), observed
+    return 'OK', f'{len(observed)} expected tasks started and fresh', observed
+
+
+def check_c10_schedule_integrity(runner, data_db, business_date):
+    show_rows = runner(f"SHOW TASKS IN SCHEMA {data_db}.PUBLIC")
+    names = ', '.join(f"'{n}'" for n in EXPECTED_TASKS)
+    success_rows = runner(
+        f"SELECT DISTINCT NAME FROM TABLE({data_db}.INFORMATION_SCHEMA.TASK_HISTORY("
+        f"SCHEDULED_TIME_RANGE_START => DATEADD('hour', -{SCHED_SUCCESS_HOURS}, "
+        f"CURRENT_TIMESTAMP()))) "
+        f"WHERE NAME IN ({names}) AND STATE = 'SUCCEEDED'"
+    )
+    success_names = {str(r['NAME']).upper() for r in success_rows}
+    status, details, observed = classify_schedule_integrity(show_rows, success_names)
+    return _result('C10', status,
+                   {'tasks': observed, 'successes_24h': sorted(success_names)},
+                   {'tasks': 'all expected tasks STARTED, chained, fresh'},
+                   {'success_window_hours': SCHED_SUCCESS_HOURS},
+                   details, business_date)
+
+
 # ── Run orchestration ────────────────────────────────────────────────────────
 
 def overall_status(results: list[dict]) -> str:
@@ -740,13 +826,6 @@ def run_monitoring(session, monitor_db: str = 'STORE_INSIGHT_DEV',
           else datetime.date.today())
     run_id = f'MON_{bd}_{uuid.uuid4().hex[:8]}'
 
-    ensure_objects(runner, monitor_db)
-    runner(
-        f"INSERT INTO {monitor_db}.PUBLIC.MONITORING_RUN "
-        f"(MONITORING_RUN_ID, STARTED_AT, BUSINESS_DATE, CHECKS_EXPECTED) "
-        f"VALUES ('{run_id}', CURRENT_TIMESTAMP(), '{bd}', 8)"
-    )
-
     checks = [
         check_c1_source_quality,
         check_c2_alerts_task,
@@ -755,7 +834,15 @@ def run_monitoring(session, monitor_db: str = 'STORE_INSIGHT_DEV',
         check_c5_kpi_task,
         check_c6_kpi_output,
         check_c7_gate_result,
+        check_c10_schedule_integrity,
     ]
+
+    ensure_objects(runner, monitor_db)
+    runner(
+        f"INSERT INTO {monitor_db}.PUBLIC.MONITORING_RUN "
+        f"(MONITORING_RUN_ID, STARTED_AT, BUSINESS_DATE, CHECKS_EXPECTED) "
+        f"VALUES ('{run_id}', CURRENT_TIMESTAMP(), '{bd}', {len(checks) + 1})"
+    )
     results = []
     for fn in checks:
         try:
@@ -767,7 +854,7 @@ def run_monitoring(session, monitor_db: str = 'STORE_INSIGHT_DEV',
 
     # C9 heartbeat: self-report so LATEST_SYSTEM_HEALTH carries a monitor pulse
     results.append(_result(
-        'C9', 'OK', {'checks_run': len(results)}, {'checks_run': 7}, {},
+        'C9', 'OK', {'checks_run': len(results)}, {'checks_run': len(checks)}, {},
         f'monitor run {run_id} completed {len(results)} checks', bd))
 
     write_results(runner, monitor_db, run_id, results)
