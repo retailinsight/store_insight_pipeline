@@ -1,7 +1,7 @@
-mcp[cli]>=1.2.0
-uvicorn[standard]==0.29.0
-snowflake-snowpark-python==1.47.0
-python-dotenv==1.2.2
-cryptography>=42.0.0
-pyjwt[crypto]>=2.8.0
-psycopg[binary,pool]>=3.2
+mcp[cli]>=2.3.0
+uvicorn[standard]==0.54.0
+snowflake-snowpark-python==1.55.3
+python-dotenv==1.2.4
+cryptography>=50.0.2
+pyjwt[crypto]>=2.15.1
+psycopg[binary,pool]>=3.3.6
