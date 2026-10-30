@@ -17,10 +17,25 @@ from store_insight.pipeline.tools.source_volume_check import (
 MONDAY = datetime.date(2026, 8, 3)
 
 
-def _runner_with_counts(counts_by_date):
-    """Fake runner answering the volume query from a {date_str: count} dict."""
+def _runner_with_counts(counts_by_date, store_counts=None, item_counts=None):
+    """Fake runner answering the volume+shape query from {date_str: count} dicts.
+
+    store_counts / item_counts default to the row count (so shape metrics track
+    rows exactly and can't change the classification of row-count tests).
+    """
+    store_counts = store_counts or counts_by_date
+    item_counts = item_counts or counts_by_date
+
     def runner(sql):
-        return [{'DATE': d, 'ROW_COUNT': c} for d, c in counts_by_date.items()]
+        return [
+            {
+                'DATE': d,
+                'ROW_COUNT': c,
+                'STORE_COUNT': store_counts.get(d, c),
+                'ITEM_COUNT': item_counts.get(d, c),
+            }
+            for d, c in counts_by_date.items()
+        ]
     return runner
 
 
@@ -105,6 +120,50 @@ def test_baseline_is_median_of_available_weeks():
         counts[str(d)] = c
     result = check_source(_runner_with_counts(counts), 'osa', 'DB.S.OSA', MONDAY)
     assert result['baseline_rows'] == 100.0
+    assert result['status'] == 'OK'
+
+
+# ---------------------------------------------------------------------------
+# shape metrics (distinct store / item counts)
+# ---------------------------------------------------------------------------
+
+def test_item_count_drop_flags_suspect_when_rows_ok():
+    """The Databricks-migration case: PPG/items dropped while the day still
+    landed — rows alone may look fine, item count must catch it."""
+    counts = {str(MONDAY): 100}
+    for d in baseline_dates(MONDAY):
+        counts[str(d)] = 100
+    items = {str(MONDAY): 60}
+    for d in baseline_dates(MONDAY):
+        items[str(d)] = 100
+    result = check_source(_runner_with_counts(counts, item_counts=items),
+                          'osa', 'DB.S.OSA', MONDAY)
+    assert result['status'] == 'SUSPECT'
+    assert result['item_count'] == 60
+    assert result['baseline_items'] == 100.0
+    assert result['metric_status'] == {'rows': 'OK', 'stores': 'OK', 'items': 'SUSPECT'}
+
+
+def test_store_count_drop_flags_failed():
+    counts = {str(MONDAY): 100}
+    for d in baseline_dates(MONDAY):
+        counts[str(d)] = 100
+    stores = {str(MONDAY): 40}
+    for d in baseline_dates(MONDAY):
+        stores[str(d)] = 100
+    result = check_source(_runner_with_counts(counts, store_counts=stores),
+                          'wastage', 'DB.S.WASTAGE', MONDAY)
+    assert result['status'] == 'FAILED'
+    assert result['metric_status']['stores'] == 'FAILED'
+
+
+def test_shape_query_can_be_disabled_per_call():
+    counts = {str(MONDAY): 100}
+    for d in baseline_dates(MONDAY):
+        counts[str(d)] = 100
+    result = check_source(_runner_with_counts(counts), 'osa', 'DB.S.OSA', MONDAY,
+                          shape=(None, None))
+    assert 'store_count' not in result
     assert result['status'] == 'OK'
 
 
