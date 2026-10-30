@@ -1,4 +1,4 @@
-mcp[cli]>=1.2.0
+mcp[cli]>=1.2.0,<2  # 2.x removed mcp.server.fastmcp (FastMCP -> MCPServer); migrate deliberately, see py.sdk.modelcontextprotocol.io/migration
 uvicorn[standard]==0.29.0
 snowflake-snowpark-python==1.47.0
 python-dotenv==1.2.2
