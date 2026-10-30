@@ -137,7 +137,7 @@ def test_item_count_drop_flags_suspect_when_rows_ok():
     for d in baseline_dates(MONDAY):
         items[str(d)] = 100
     result = check_source(_runner_with_counts(counts, item_counts=items),
-                          'osa', 'DB.S.OSA', MONDAY)
+                          'osa', 'DB.S.OSA', MONDAY, include_shape=True)
     assert result['status'] == 'SUSPECT'
     assert result['item_count'] == 60
     assert result['baseline_items'] == 100.0
@@ -152,17 +152,23 @@ def test_store_count_drop_flags_failed():
     for d in baseline_dates(MONDAY):
         stores[str(d)] = 100
     result = check_source(_runner_with_counts(counts, store_counts=stores),
-                          'wastage', 'DB.S.WASTAGE', MONDAY)
+                          'wastage', 'DB.S.WASTAGE', MONDAY, include_shape=True)
     assert result['status'] == 'FAILED'
     assert result['metric_status']['stores'] == 'FAILED'
 
 
-def test_shape_query_can_be_disabled_per_call():
+def test_shape_metrics_are_off_by_default_so_gate_semantics_are_unchanged():
+    """The in-pipeline quality gate calls check_source without include_shape;
+    a store/item-count collapse must NOT change its verdict (it skips
+    detectors on FAILED — that escalation needs an explicit decision)."""
     counts = {str(MONDAY): 100}
     for d in baseline_dates(MONDAY):
         counts[str(d)] = 100
-    result = check_source(_runner_with_counts(counts), 'osa', 'DB.S.OSA', MONDAY,
-                          shape=(None, None))
+    stores = {str(MONDAY): 10}
+    for d in baseline_dates(MONDAY):
+        stores[str(d)] = 100
+    result = check_source(_runner_with_counts(counts, store_counts=stores),
+                          'osa', 'DB.S.OSA', MONDAY)
     assert 'store_count' not in result
     assert result['status'] == 'OK'
 
