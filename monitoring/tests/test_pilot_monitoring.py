@@ -92,6 +92,18 @@ def test_schedule_stale_success_is_warn():
     assert 'SOURCE_VOLUME_CHECK_TASK no success' in details
 
 
+def test_schedule_predecessors_as_json_text_still_passes():
+    """SHOW TASKS returns predecessors as JSON text via as_dict() — decode it,
+    don't iterate characters (Copilot finding on PR #27)."""
+    rows = _all_started_tasks()
+    for r in rows:
+        import json
+        r['predecessors'] = json.dumps(r['predecessors'])
+    status, details, _ = pm.classify_schedule_integrity(
+        rows, set(pm.EXPECTED_TASKS))
+    assert status == 'OK', details
+
+
 def test_schedule_task_names_match_case_insensitively():
     rows = [{**r, 'name': r['name'].lower()} for r in _all_started_tasks()]
     status, _, _ = pm.classify_schedule_integrity(rows, set(pm.EXPECTED_TASKS))

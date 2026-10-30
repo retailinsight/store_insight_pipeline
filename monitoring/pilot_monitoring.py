@@ -605,7 +605,15 @@ def classify_schedule_integrity(show_tasks_rows: list[dict],
             continue  # a stopped task can't have fresh successes to judge
         parent = spec.get('after')
         if parent:
-            preds = {str(p).upper() for p in (task.get('predecessors') or [])}
+            # SHOW TASKS returns predecessors as JSON text via as_dict();
+            # decode it — iterating the raw string yields characters.
+            raw_preds = task.get('predecessors') or []
+            if isinstance(raw_preds, str):
+                try:
+                    raw_preds = json.loads(raw_preds)
+                except ValueError:
+                    raw_preds = [raw_preds]
+            preds = {str(p).upper() for p in raw_preds}
             if not any(parent in p for p in preds):
                 warns.append(f'{name} not chained AFTER {parent}')
         if name not in success_names:
@@ -620,10 +628,15 @@ def classify_schedule_integrity(show_tasks_rows: list[dict],
 def check_c10_schedule_integrity(runner, data_db, business_date):
     show_rows = runner(f"SHOW TASKS IN SCHEMA {data_db}.PUBLIC")
     names = ', '.join(f"'{n}'" for n in EXPECTED_TASKS)
+    # DATABASE_NAME/SCHEMA_NAME args scope history to prod — unqualified,
+    # TASK_HISTORY returns same-named tasks across the account (a dev success
+    # could mask a stale prod task). COMPLETED_TIME_RANGE (not SCHEDULED) so a
+    # run that finished just inside 24h still counts when this check runs late.
     success_rows = runner(
         f"SELECT DISTINCT NAME FROM TABLE({data_db}.INFORMATION_SCHEMA.TASK_HISTORY("
-        f"SCHEDULED_TIME_RANGE_START => DATEADD('hour', -{SCHED_SUCCESS_HOURS}, "
-        f"CURRENT_TIMESTAMP()))) "
+        f"COMPLETED_TIME_RANGE_START => DATEADD('hour', -{SCHED_SUCCESS_HOURS}, "
+        f"CURRENT_TIMESTAMP()), "
+        f"DATABASE_NAME => '{data_db}', SCHEMA_NAME => 'PUBLIC')) "
         f"WHERE NAME IN ({names}) AND STATE = 'SUCCEEDED'"
     )
     success_names = {str(r['NAME']).upper() for r in success_rows}
