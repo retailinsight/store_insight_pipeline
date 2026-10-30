@@ -15,7 +15,7 @@ Smart Action Cards for store managers.
 - **First scheduled run**: 2026-07-17 14:47 BST — 1,165 rule-based cards, all IDs distinct, 0 errors
 - Scheduled runs use **rule-based** narratives; **Cortex** is available as a manual option.
 
-See `DEPLOYMENT_PLAN.md` for the full deployment checklist and `DEPLOYMENT_SUMMARY.md` for a complete summary of what was built and what remains.
+See `docs/DEPLOYMENT_SUMMARY.md` for a complete summary of what was built and what remains.
 
 ## Repository structure
 
@@ -25,11 +25,8 @@ See `DEPLOYMENT_PLAN.md` for the full deployment checklist and `DEPLOYMENT_SUMMA
 | `pipeline/tests/` | Automated **pytest unit tests** (445 tests) for pipeline logic. Run offline — no Snowflake connection needed: `python -m pytest pipeline/tests/ -q` |
 | `pipeline/qc/` | Jupyter notebooks for manual QC of pipeline outputs. |
 | `scripts/` | **Operational helper scripts** run manually against live Snowflake (connectivity check, deployment state, daily run validation, Cortex model checks). Require VPN + credentials. See `scripts/README.md`. |
-| `docs/` | Repo-level docs: Snowflake connection status, project context notes. |
-| `api2/` | Store Insight API backend (FastAPI) serving alerts to the UI. |
-| `ui/` | Store Insight frontend. |
-| `pipeline_ui/` | Pipeline management/review UI (backend + frontend). |
-| `mcp/` | MCP server exposing pipeline data to AI assistants. |
+| `docs/` | Repo-level docs: contracts, project context notes, historical summaries. |
+| `mcp/` | MCP server exposing pipeline data to AI assistants (live Railway deployment). |
 | `kpi/` | KPI batch jobs and QC notebooks (availability KPIs). |
 | `prds/` | Product requirement documents. |
 | `archive/` | *Gitignored.* One-off debug scripts and message drafts kept locally. |
@@ -38,7 +35,8 @@ See `DEPLOYMENT_PLAN.md` for the full deployment checklist and `DEPLOYMENT_SUMMA
 
 | File | Purpose |
 |---|---|
-| `CHANGES_LOG.md` | Chronological log of all significant changes. |
+| `TODO.md` | Current work log and pending items. |
+| `AGENTS.md` / `CONTEXT-MAP.md` | Operating notes for agents and context map. |
 | `pyproject.toml` / `setup.py` | Package definition (`store_insight`). |
 | `requirements-dev.txt` | Dev/test dependencies. |
 | `.local/credentials/snowflake_credentials.py` | *Gitignored.* Local Snowflake credentials (PAT for `SVC_STOREINSIGHT`). Never commit. |
@@ -148,10 +146,8 @@ Python helpers:
 - `measurement.py` — SQL builders for funnel summary per run and per-store action
   rates, plus `create_kpi_summary_view()`.
 
-FastAPI endpoints (in `pipeline_ui/backend/app/main.py`):
-- `POST /customers/{client}/alerts/{alert_id}/events` — record an event.
-- `GET /customers/{client}/lifecycle/kpis` — funnel summary per run.
-- `GET /customers/{client}/lifecycle/stores` — per-store action rates.
+The live API is the .NET repo `retailinsight/store-insight-api`; lifecycle
+endpoints are served from there.
 
 Create the events table once:
 

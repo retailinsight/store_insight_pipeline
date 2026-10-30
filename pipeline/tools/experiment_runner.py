@@ -3,7 +3,8 @@ Pipeline Runner
 ================
 Executes the alerts pipeline against Snowflake for an ad-hoc experiment
 (specific date + store(s), arbitrary in-memory ``cfg`` dict) and captures
-each stage's output for the UI.
+each stage's output. Used by ``backtest_thresholds.py``; formerly the backend
+of the retired Pipeline Experiments UI (``pipeline_ui/``).
 
 Crucially: this NEVER calls ``write_alerts``. The pipeline output is
 returned to the caller in JSON-friendly form and discarded once the

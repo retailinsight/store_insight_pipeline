@@ -42,9 +42,9 @@ def main() -> None:
         ROOT / "monitoring" / "CHANNEL_GUIDE.md",
         ROOT / "monitoring" / "RUNBOOK.md",
         ROOT / "monitoring" / "SCHEDULE_AND_GAPS.md",
-        ROOT / "PILOT_MONITORING_ONE_PAGER.md",
+        ROOT / "docs" / "PILOT_MONITORING_ONE_PAGER.md",
         ROOT / "prds" / "prd-pilot-monitoring-and-stability.md",
-        ROOT / "RISK_VALIDATION.md",
+        ROOT / "docs" / "RISK_VALIDATION.md",
     ]
     for doc in doc_files:
         if doc.exists():

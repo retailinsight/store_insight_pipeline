@@ -1,8 +1,8 @@
 """
 Backtest threshold changes against a subset of stores.
 
-This CLI wraps the same pipeline stages used by the Pipeline Experiments UI
-(``pipeline_ui/backend/app/runner.py``) so threshold changes can be evaluated
+This CLI wraps the in-memory experiment runner
+(``pipeline/tools/experiment_runner.py``) so threshold changes can be evaluated
 without running the full store base or writing to the production output table.
 
 Usage
@@ -39,7 +39,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -53,18 +52,10 @@ from snowflake.snowpark import Session
 
 _HERE = Path(__file__).resolve().parent
 _PIPELINE_DIR = _HERE.parent
-_REPO_ROOT = _PIPELINE_DIR.parent
-
-# pipeline_ui is not part of the installed store_insight package, so we need
-# to add the repository parent directory to sys.path to import runner.py.
-_SYS_PATH_REPO = _REPO_ROOT.parent
-if str(_SYS_PATH_REPO) not in sys.path:
-    sys.path.insert(0, str(_SYS_PATH_REPO))
 
 from store_insight.pipeline.config.loader import load_config  # noqa: E402
 from store_insight.pipeline.config.models import PipelineConfig  # noqa: E402
-
-from pipeline_ui.backend.app.runner import run_experiment  # noqa: E402
+from store_insight.pipeline.tools.experiment_runner import run_experiment  # noqa: E402
 
 _ENV_PATH = _PIPELINE_DIR / ".env"
 
