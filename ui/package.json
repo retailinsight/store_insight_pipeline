@@ -14,7 +14,7 @@
     "axios": "^1.16.0",
     "jwt-decode": "^4.0.0",
     "react-redux": "^9.2.0",
-    "zod": "^3.25.76"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@hookform/resolvers": "^5.2.1",
