@@ -1,5 +1,9 @@
 [tool.pytest.ini_options]
 testpaths = ["pipeline/tests"]
+# importlib mode avoids pytest inserting the checkout's PARENT dir on sys.path
+# (the root __init__.py makes the repo look like a package). Without this a
+# sibling checkout named store_insight shadows this repo's code in tests.
+addopts = "--import-mode=importlib"
 
 [tool.ruff]
 line-length = 100

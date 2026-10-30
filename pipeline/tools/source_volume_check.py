@@ -51,6 +51,21 @@ SOURCE_LAG_DAYS = {
     'wastage': 3,
 }
 
+# Shape metrics per source on the adapter views: (store column, item column).
+# Added 2026-10-30 after the Databricks migration silently dropped landed rows
+# (Item -2,157 / PPG -21,938 / Wastage -45 with no notice): row count alone is
+# a blunt instrument, so distinct store and item counts are checked against
+# their own same-weekday medians too.
+SOURCE_SHAPE = {
+    'osa':            ('STORE_ID', 'ITEM_CODE'),
+    'feedback':       ('STORE_ID', 'ITEM_CODE'),
+    'markdown_log':   ('STORE_ID', 'UPC'),
+    'markdown_sales': ('STORE_ID', 'UPC'),
+    'wastage':        ('STORE_ID', 'EAN'),
+}
+
+_STATUS_RANK = {'OK': 0, 'UNKNOWN': 1, 'SUSPECT': 2, 'FAILED': 3}
+
 
 def check_dates_for(sources: dict[str, str], base_date: datetime.date,
                     lag_days: dict[str, int] | None = None) -> dict[str, datetime.date]:
@@ -84,30 +99,60 @@ def baseline_dates(check_date: datetime.date, weeks: int = BASELINE_WEEKS) -> li
 
 def check_source(runner, source_name: str, table_fqn: str, check_date: datetime.date,
                  suspect_fraction: float = SUSPECT_FRACTION,
-                 failed_fraction: float = FAILED_FRACTION) -> dict:
-    """Check one source's latest-day row count against its same-weekday median.
+                 failed_fraction: float = FAILED_FRACTION,
+                 shape: tuple[str, str] | None = None) -> dict:
+    """Check one source's latest-day counts against same-weekday medians.
+
+    Compares row count plus, when `shape` gives (store_col, item_col), distinct
+    store and item counts — each metric against its own median. Overall status
+    is the worst per-metric status.
 
     runner : callable(sql) -> list of dict rows (see check_health.snowflake_runner)
     """
+    store_col, item_col = shape or SOURCE_SHAPE.get(source_name) or (None, None)
+    metric_cols = ['COUNT(*) AS ROW_COUNT']
+    if store_col:
+        metric_cols.append(f'COUNT(DISTINCT {store_col}) AS STORE_COUNT')
+    if item_col:
+        metric_cols.append(f'COUNT(DISTINCT {item_col}) AS ITEM_COUNT')
     dates = [check_date, *baseline_dates(check_date)]
     date_list = ', '.join(f"'{d}'" for d in dates)
     rows = runner(
-        f'SELECT DATE, COUNT(*) AS ROW_COUNT FROM {table_fqn} '
+        f"SELECT DATE, {', '.join(metric_cols)} FROM {table_fqn} "
         f'WHERE DATE IN ({date_list}) GROUP BY DATE'
     )
-    counts = {str(r['DATE']): int(r['ROW_COUNT']) for r in rows}
-    observed = counts.get(str(check_date), 0)
-    history = [counts[str(d)] for d in baseline_dates(check_date) if str(d) in counts]
-    baseline = float(statistics.median(history)) if history else None
-    status = classify(observed, baseline, suspect_fraction, failed_fraction)
-    return {
+    by_date = {str(r['DATE']): r for r in rows}
+    base_days = [str(d) for d in baseline_dates(check_date)]
+
+    def _metric(key: str) -> tuple[int, float | None]:
+        observed = int(by_date.get(str(check_date), {}).get(key, 0))
+        history = [int(by_date[d][key]) for d in base_days
+                   if d in by_date and key in by_date[d]]
+        return observed, float(statistics.median(history)) if history else None
+
+    observed_rows, baseline_rows = _metric('ROW_COUNT')
+    metric_status = {'rows': classify(observed_rows, baseline_rows,
+                                      suspect_fraction, failed_fraction)}
+    result = {
         'source_name': source_name,
         'table_fqn': table_fqn,
         'check_date': str(check_date),
-        'row_count': observed,
-        'baseline_rows': baseline,
-        'status': status,
+        'row_count': observed_rows,
+        'baseline_rows': baseline_rows,
     }
+    for label, key in (('stores', 'STORE_COUNT'), ('items', 'ITEM_COUNT')):
+        # Only score the metric when the query returned the column — callers
+        # with a leaner runner (fakes, other drivers) keep the old behaviour.
+        if any(key in c for c in metric_cols[1:]) and \
+                any(key in r for r in by_date.values()):
+            obs, base = _metric(key)
+            result[f'{label[:-1]}_count'] = obs
+            result[f'baseline_{label}'] = base
+            metric_status[label] = classify(obs, base, suspect_fraction,
+                                            failed_fraction)
+    result['metric_status'] = metric_status
+    result['status'] = max(metric_status.values(), key=_STATUS_RANK.get)
+    return result
 
 
 def run_check(runner, sources: dict[str, str], check_date: datetime.date | None,
@@ -156,8 +201,14 @@ def build_email(results: list[dict], check_date: datetime.date) -> tuple[str, st
     ]
     for r in bad:
         base = 'no baseline' if r['baseline_rows'] is None else f"baseline {r['baseline_rows']:.0f}"
+        shape = ''
+        for label in ('store', 'item'):
+            if f'{label}_count' in r:
+                b = r.get(f'baseline_{label}s')
+                b_txt = 'no baseline' if b is None else f"baseline {b:.0f}"
+                shape += f", {r[f'{label}_count']} {label}s vs {b_txt}"
         lines.append(f"- {r['source_name']} ({r['check_date']}): {r['status']} — "
-                     f"{r['row_count']} rows vs {base} ({r['table_fqn']})")
+                     f"{r['row_count']} rows vs {base}{shape} ({r['table_fqn']})")
     lines += ['', 'Log: DATA_QUALITY_LOG. First step: check the source feed for the day shown.']
     return subject, '\n'.join(lines)
 
