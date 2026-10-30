@@ -100,16 +100,18 @@ def baseline_dates(check_date: datetime.date, weeks: int = BASELINE_WEEKS) -> li
 def check_source(runner, source_name: str, table_fqn: str, check_date: datetime.date,
                  suspect_fraction: float = SUSPECT_FRACTION,
                  failed_fraction: float = FAILED_FRACTION,
-                 shape: tuple[str, str] | None = None) -> dict:
+                 include_shape: bool = False) -> dict:
     """Check one source's latest-day counts against same-weekday medians.
 
-    Compares row count plus, when `shape` gives (store_col, item_col), distinct
-    store and item counts — each metric against its own median. Overall status
-    is the worst per-metric status.
+    Default: row count only — this is what the in-pipeline quality gate uses,
+    and its FAILED verdict skips detectors, so its semantics must not change
+    without an explicit decision. With include_shape=True (the warn-only 11:30
+    check), distinct store and item counts from SOURCE_SHAPE are scored too,
+    and overall status is the worst per-metric status.
 
     runner : callable(sql) -> list of dict rows (see check_health.snowflake_runner)
     """
-    store_col, item_col = shape or SOURCE_SHAPE.get(source_name) or (None, None)
+    store_col, item_col = (SOURCE_SHAPE.get(source_name) or (None, None)) if include_shape         else (None, None)
     metric_cols = ['COUNT(*) AS ROW_COUNT']
     if store_col:
         metric_cols.append(f'COUNT(DISTINCT {store_col}) AS STORE_COUNT')
@@ -158,16 +160,18 @@ def check_source(runner, source_name: str, table_fqn: str, check_date: datetime.
 def run_check(runner, sources: dict[str, str], check_date: datetime.date | None,
               suspect_fraction: float = SUSPECT_FRACTION,
               failed_fraction: float = FAILED_FRACTION,
-              check_dates: dict[str, datetime.date] | None = None) -> list[dict]:
+              check_dates: dict[str, datetime.date] | None = None,
+              include_shape: bool = False) -> list[dict]:
     """Check every source. sources maps source_name -> table FQN.
 
     check_date applies to every source (manual override); a per-source
-    check_dates mapping wins over it when provided.
+    check_dates mapping wins over it when provided. include_shape adds the
+    store/item distinct-count metrics (warn-only 11:30 check only).
     """
     dates = check_dates or {}
     return [
         check_source(runner, name, fqn, dates.get(name, check_date),
-                     suspect_fraction, failed_fraction)
+                     suspect_fraction, failed_fraction, include_shape=include_shape)
         for name, fqn in sources.items()
     ]
 
@@ -231,11 +235,12 @@ def run_and_log(session, sources: dict[str, str], log_table: str,
     today = datetime.date.today()
     if check_date:
         cd = datetime.date.fromisoformat(check_date)
-        results = run_check(runner, sources, cd)
+        results = run_check(runner, sources, cd, include_shape=True)
     else:
         cd = today
         results = run_check(runner, sources, None,
-                            check_dates=check_dates_for(sources, today))
+                            check_dates=check_dates_for(sources, today),
+                            include_shape=True)
     write_log(runner, results, log_table, run_date=today)
 
     email = build_email(results, cd)
@@ -279,10 +284,11 @@ def main() -> int:
 
     if args.check_date:
         cd = datetime.date.fromisoformat(args.check_date)
-        results = run_check(runner, sources, cd)
+        results = run_check(runner, sources, cd, include_shape=True)
     else:
         results = run_check(runner, sources, None,
-                            check_dates=check_dates_for(sources, datetime.date.today()))
+                            check_dates=check_dates_for(sources, datetime.date.today()),
+                            include_shape=True)
     for r in results:
         base = '—' if r['baseline_rows'] is None else f"{r['baseline_rows']:.0f}"
         print(f"{r['status']:8} {r['source_name']:16} ({r['check_date']}) "
