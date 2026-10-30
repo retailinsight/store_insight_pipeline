@@ -1,27 +1,45 @@
 version: 2
+# Grouped updates: each ecosystem produces ONE batched PR per week instead of
+# one PR per dependency (the ungrouped config opened 15 PRs at once on merge).
 updates:
-  # Python deps — requirements-dev.txt and pipeline/deploy/requirements.txt
+  # Dev/test deps (requirements-dev.txt)
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
+    groups:
+      dev-dependencies:
+        dependency-type: "development"
 
+  # Live MCP service deps — small and reviewable
   - package-ecosystem: "pip"
     directory: "/mcp"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
+    groups:
+      mcp-dependencies:
+        patterns: ["*"]
 
+  # SP runtime deps (pipeline/deploy/requirements.txt) — what the stored
+  # procedures actually run on. Grouped AND capped at 1 PR: every bump here
+  # changes deployed SP behaviour on next deploy, so it always needs review.
   - package-ecosystem: "pip"
     directory: "/pipeline/deploy"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 1
+    groups:
+      sp-runtime-dependencies:
+        patterns: ["*"]
 
   # Keep SHA-pinned actions fresh
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
+    groups:
+      actions:
+        patterns: ["*"]
