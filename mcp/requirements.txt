@@ -1,4 +1,4 @@
-mcp[cli]>=1.2.0
+mcp[cli]>=2.3.0
 uvicorn[standard]==0.29.0
 snowflake-snowpark-python==1.47.0
 python-dotenv==1.2.2
