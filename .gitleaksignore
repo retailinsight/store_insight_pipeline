@@ -1,0 +1,4 @@
+# gitleaks fingerprints of reviewed false positives.
+# api2/.env.example L7 — placeholder key "STORE_INSIGHT_API_KEY=123456" in an
+# example file, committed 2025 and the file has since been deleted. Not a real secret.
+0f2338ca34337493b0cdbc2a1b905732459c7923:api2/.env.example:generic-api-key:7
