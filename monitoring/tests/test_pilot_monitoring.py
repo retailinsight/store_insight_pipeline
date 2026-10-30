@@ -41,6 +41,75 @@ def test_task_still_running_is_warn():
     assert status == 'WARN'
 
 
+# ── classify_schedule_integrity (C10) ────────────────────────────────────────
+
+def _all_started_tasks():
+    return [
+        {'name': n, 'state': 'started',
+         'predecessors': [s['after']] if s['after'] else []}
+        for n, s in pm.EXPECTED_TASKS.items()
+    ]
+
+
+def test_schedule_all_started_and_fresh_is_ok():
+    status, details, _ = pm.classify_schedule_integrity(
+        _all_started_tasks(), set(pm.EXPECTED_TASKS))
+    assert status == 'OK'
+    assert 'started and fresh' in details
+
+
+def test_schedule_missing_task_is_fail():
+    rows = [r for r in _all_started_tasks() if r['name'] != 'MONITORING_TASK']
+    status, details, _ = pm.classify_schedule_integrity(
+        rows, set(pm.EXPECTED_TASKS))
+    assert status == 'FAIL'
+    assert 'MONITORING_TASK missing' in details
+
+
+def test_schedule_suspended_task_is_fail():
+    """The deploy-replaced-it-without---resume case: must fail loudly."""
+    rows = _all_started_tasks()
+    rows[0]['state'] = 'suspended'
+    status, details, _ = pm.classify_schedule_integrity(
+        rows, set(pm.EXPECTED_TASKS))
+    assert status == 'FAIL'
+    assert 'suspended' in details
+
+
+def test_schedule_broken_chain_is_warn_not_fail():
+    rows = _all_started_tasks()
+    rows[1]['predecessors'] = []  # KPI task lost its AFTER link
+    status, details, _ = pm.classify_schedule_integrity(
+        rows, set(pm.EXPECTED_TASKS))
+    assert status == 'WARN'
+    assert 'not chained AFTER' in details
+
+
+def test_schedule_stale_success_is_warn():
+    status, details, _ = pm.classify_schedule_integrity(
+        _all_started_tasks(), set(pm.EXPECTED_TASKS) - {'SOURCE_VOLUME_CHECK_TASK'})
+    assert status == 'WARN'
+    assert 'SOURCE_VOLUME_CHECK_TASK no success' in details
+
+
+def test_schedule_predecessors_as_json_text_still_passes():
+    """SHOW TASKS returns predecessors as JSON text via as_dict() — decode it,
+    don't iterate characters (Copilot finding on PR #27)."""
+    rows = _all_started_tasks()
+    for r in rows:
+        import json
+        r['predecessors'] = json.dumps(r['predecessors'])
+    status, details, _ = pm.classify_schedule_integrity(
+        rows, set(pm.EXPECTED_TASKS))
+    assert status == 'OK', details
+
+
+def test_schedule_task_names_match_case_insensitively():
+    rows = [{**r, 'name': r['name'].lower()} for r in _all_started_tasks()]
+    status, _, _ = pm.classify_schedule_integrity(rows, set(pm.EXPECTED_TASKS))
+    assert status == 'OK'
+
+
 # ── classify_volume_mix (C4) ─────────────────────────────────────────────────
 
 def test_volume_normal_is_ok():
