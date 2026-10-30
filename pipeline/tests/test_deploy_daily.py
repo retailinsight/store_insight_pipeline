@@ -2,7 +2,6 @@ import inspect
 import zipfile
 
 import pytest
-
 from store_insight.pipeline.config.loader import load_config
 from store_insight.pipeline.deploy import deploy, handler
 from store_insight.pipeline.deploy.handler import (
@@ -291,6 +290,26 @@ def test_zip_package_contains_importable_store_insight_package(tmp_path):
     assert "store_insight/pipeline/__init__.py" in names
     assert "store_insight/pipeline/deploy/__init__.py" in names
     assert "store_insight/pipeline/deploy/handler.py" in names
+
+
+@pytest.mark.parametrize("checkout_name", ["store_insight", "store_insight_pipeline", "custom-checkout"])
+def test_zip_package_paths_do_not_depend_on_checkout_name(tmp_path, monkeypatch, checkout_name):
+    package_dir = tmp_path / checkout_name
+    package_dir.mkdir()
+    (package_dir / "__init__.py").write_text("", encoding="utf-8")
+    pipeline_dir = package_dir / "pipeline"
+    pipeline_dir.mkdir()
+    (pipeline_dir / "__init__.py").write_text("", encoding="utf-8")
+    monkeypatch.setattr(deploy, "_SI_PKG", package_dir)
+    zip_path = tmp_path / "store_insight.zip"
+
+    deploy._zip_package(str(zip_path))
+
+    with zipfile.ZipFile(zip_path) as archive:
+        assert set(archive.namelist()) == {
+            "store_insight/__init__.py",
+            "store_insight/pipeline/__init__.py",
+        }
 
 
 def test_upload_zip_uses_file_uri(tmp_path):

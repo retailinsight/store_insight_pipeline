@@ -8,7 +8,6 @@ and top-N sorting.
 from __future__ import annotations
 
 import pytest
-
 from store_insight.pipeline.stages._3_facts.gatherers import straight_to_bin_facts
 
 

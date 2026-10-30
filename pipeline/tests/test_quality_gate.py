@@ -9,7 +9,6 @@ import datetime
 import types
 
 import pytest
-
 from store_insight.pipeline.stages._0_quality.quality_gate import (
     GatePlan,
     detector_sources,

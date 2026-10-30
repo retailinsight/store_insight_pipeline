@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from snowflake.snowpark import functions as F
-
 from store_insight.pipeline.pipeline._shared import (
     actionable_window_metrics as window_metrics,
 )

@@ -25,7 +25,6 @@ Public API
 from collections import defaultdict
 
 from snowflake.snowpark import functions as F
-
 from store_insight.pipeline.pipeline._shared import sunday_first_dow
 from store_insight.pipeline.stages._1_detect.detector_info import DetectorInfo
 from store_insight.pipeline.stages._1_detect.signals import make_osa_recurring_slot_signal

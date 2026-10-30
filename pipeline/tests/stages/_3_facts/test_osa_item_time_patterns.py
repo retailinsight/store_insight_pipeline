@@ -12,7 +12,6 @@ from __future__ import annotations
 import datetime
 
 import pytest
-
 from store_insight.pipeline.stages._3_facts.gatherers import osa_item_time_patterns as g
 
 

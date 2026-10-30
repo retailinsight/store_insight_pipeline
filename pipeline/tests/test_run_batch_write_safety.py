@@ -2,7 +2,6 @@ import sys
 from types import SimpleNamespace
 
 import pytest
-
 from store_insight.pipeline.pipeline import run_batch
 
 

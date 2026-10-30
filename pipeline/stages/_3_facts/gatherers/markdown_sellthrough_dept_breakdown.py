@@ -21,7 +21,6 @@ Public API
 from collections import defaultdict
 
 from snowflake.snowpark import functions as F
-
 from store_insight.pipeline.stages._3_facts.config import GathererInfo
 
 METADATA = GathererInfo(

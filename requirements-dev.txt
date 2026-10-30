@@ -9,4 +9,4 @@ pydantic>=2.0
 
 # Test + lint tooling
 pytest>=8.0
-ruff>=0.6
+ruff>=0.6,<0.17  # pinned band: 0.16+ changed isort judgement (I001); bump deliberately

@@ -10,7 +10,6 @@ import datetime
 
 import pytest
 from snowflake.snowpark import Session
-
 from store_insight.pipeline.stages._3_facts.gatherers import (
     binned_waste_spike_facts,
     binned_waste_trend_facts,

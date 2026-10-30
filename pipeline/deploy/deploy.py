@@ -53,7 +53,6 @@ from pathlib import Path
 _HERE = Path(__file__).parent  # store_insight/pipeline/deploy/
 _PKG_DIR = _HERE.parent  # store_insight/pipeline/
 _SI_PKG = _PKG_DIR.parent  # store_insight/
-_ZIP_ROOT = _SI_PKG.parent  # workspace parent (zip arcname root)
 
 _ENV_PATH = _PKG_DIR / ".env"
 _CLIENTS_DIR = _PKG_DIR / "config" / "clients"
@@ -105,7 +104,7 @@ def _zip_package(dest_path: str) -> None:
             if any(ex in path.parts for ex in excludes):
                 continue
             if path.is_file():
-                arcname = path.relative_to(_ZIP_ROOT)
+                arcname = Path('store_insight') / path.relative_to(_SI_PKG)
                 zf.write(path, arcname)
     print(f'[deploy] Zipped store_insight/ -> {dest_path}')
 

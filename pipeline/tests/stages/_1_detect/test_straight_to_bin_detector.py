@@ -8,7 +8,6 @@ The detector accepts a Snowpark-like canonical DataFrame and only calls
 from __future__ import annotations
 
 import pytest
-
 from store_insight.pipeline.stages._1_detect.detectors.straight_to_bin import (
     value_threshold,
 )

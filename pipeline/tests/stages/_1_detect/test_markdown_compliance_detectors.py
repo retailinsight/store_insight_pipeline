@@ -8,7 +8,6 @@ The detectors accept a Snowpark-like canonical DataFrame and only call
 from __future__ import annotations
 
 import pytest
-
 from store_insight.pipeline.stages._1_detect.detectors.markdown_compliance import (
     vs_chain,
     wow,

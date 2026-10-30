@@ -10,7 +10,6 @@ branches (triggers, chain/WoW specifics, optional facts).
 from __future__ import annotations
 
 import pytest
-
 from store_insight.pipeline.stages._4_investigate.rule_based import _clean_item_name, generate
 
 

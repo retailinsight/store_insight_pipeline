@@ -21,7 +21,6 @@ Public API
 """
 
 from snowflake.snowpark import functions as F
-
 from store_insight.pipeline.stages._1_detect.detector_info import DetectorInfo
 from store_insight.pipeline.stages._1_detect.detectors.markdown_sellthrough import cohort
 from store_insight.pipeline.stages._1_detect.signals import make_markdown_sellthrough_signal

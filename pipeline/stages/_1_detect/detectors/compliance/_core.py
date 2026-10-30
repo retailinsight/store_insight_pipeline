@@ -7,7 +7,6 @@ Used by:
 """
 
 from snowflake.snowpark import functions as F
-
 from store_insight.pipeline.stages._1_detect.signals import make_compliance_signal
 
 _VOLUME_CHANGE_THRESHOLD = 10.0  # pp

@@ -13,7 +13,6 @@ SOURCE_WMD_MARKDOWN_LOG_CONVERTED (denominator).
 """
 
 from snowflake.snowpark import functions as F
-
 from store_insight.pipeline.stages_testing.core.metric import RateMetricSpec
 
 

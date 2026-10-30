@@ -6,7 +6,6 @@ from snowflake.snowpark.mock import patch as snowpark_mock_patch
 from snowflake.snowpark.mock._functions import ColumnEmulator
 from snowflake.snowpark.mock._snowflake_data_type import ColumnType
 from snowflake.snowpark.types import LongType
-
 from store_insight.pipeline.stages._3_facts.gatherers import (
     osa_store_actionable_day_periods as periods_g,
 )

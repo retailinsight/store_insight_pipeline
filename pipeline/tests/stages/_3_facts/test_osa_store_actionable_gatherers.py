@@ -1,5 +1,4 @@
 import pytest
-
 from store_insight.pipeline.stages._3_facts.gatherers import (
     osa_store_actionable_chain_drift as chain_g,
 )

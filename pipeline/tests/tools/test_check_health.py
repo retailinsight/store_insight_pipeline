@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from store_insight.pipeline.tools.check_health import HealthReport, check_health
 
 # ---------------------------------------------------------------------------

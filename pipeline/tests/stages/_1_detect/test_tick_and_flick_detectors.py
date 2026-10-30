@@ -1,5 +1,4 @@
 import pytest
-
 from store_insight.pipeline.stages._1_detect.detectors.compliance import (
     tick_and_flick_vs_chain,
     tick_and_flick_wow,

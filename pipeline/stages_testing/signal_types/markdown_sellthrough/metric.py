@@ -12,7 +12,6 @@ Data sources: SOURCE_WMD_MARKDOWN_SALES (sold) and SOURCE_WMD_WASTAGE (wasted).
 """
 
 from snowflake.snowpark import functions as F
-
 from store_insight.pipeline.stages_testing.core.metric import RateMetricSpec
 
 
