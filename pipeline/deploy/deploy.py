@@ -94,11 +94,10 @@ def _zip_package(dest_path: str) -> None:
     ``store_insight/...`` — matching the import path
     ``store_insight.pipeline.*`` used at runtime in the SP.
     Only pipeline/ and the top-level __init__.py are included to keep
-    the zip small; other subpackages (api, ui, etc.) are excluded.
+    the zip small; other repo-level folders are excluded.
     """
     excludes = {'__pycache__', '.pyc', '.ipynb_checkpoints', '.env',
-                'pipeline_2', 'pipeline_ui', 'api', 'api2', 'ui', 'mcp',
-                'experiments', 'docs', 'prds', '.devin', '.windsurf'}
+                'mcp', 'experiments', 'docs', 'prds', '.devin', '.windsurf'}
     with zipfile.ZipFile(dest_path, 'w', zipfile.ZIP_DEFLATED) as zf:
         for path in _SI_PKG.rglob('*'):
             if any(ex in path.parts for ex in excludes):
