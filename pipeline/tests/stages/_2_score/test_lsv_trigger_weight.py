@@ -8,7 +8,6 @@ a pre-built context dict instead of running gather().
 from __future__ import annotations
 
 import pytest
-
 from store_insight.pipeline.stages._2_score.scorers import (
     compliance,
     markdown_override,

@@ -13,7 +13,6 @@ import types
 
 import pytest
 from snowflake.snowpark import Session
-
 from store_insight.pipeline.pipeline.run_batch import (
     RANGING_MAX_STALENESS_DAYS,
     filter_not_ranged,

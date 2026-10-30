@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from store_insight.pipeline.stages._4_investigate import rule_based
 
 

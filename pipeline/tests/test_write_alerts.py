@@ -17,7 +17,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
-
 from store_insight.pipeline.pipeline import pipeline as pipeline_module
 
 # ---------------------------------------------------------------------------

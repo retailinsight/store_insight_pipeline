@@ -12,7 +12,6 @@ import datetime
 
 import pytest
 from snowflake.snowpark import Session
-
 from store_insight.pipeline.stages._1_detect.detectors.binned_waste import (
     spike,
     trend,

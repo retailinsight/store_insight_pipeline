@@ -3,7 +3,6 @@ import datetime
 import pytest
 from snowflake.snowpark import Session
 from snowflake.snowpark import functions as F
-
 from store_insight.pipeline.pipeline._shared import actionable_window_metrics
 from store_insight.pipeline.stages._1_detect.detectors.osa_store_actionable import (
     vs_chain,

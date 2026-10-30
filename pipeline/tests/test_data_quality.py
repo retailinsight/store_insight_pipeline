@@ -11,7 +11,6 @@ import datetime
 from unittest.mock import MagicMock
 
 import pytest
-
 from store_insight.pipeline.pipeline.data_quality import (
     _NON_NEGATIVE_COLUMNS,
     SourceDataQualityError,

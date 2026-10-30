@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from store_insight.pipeline.stages._1_detect.detect import _merge_signals
 from store_insight.pipeline.stages._1_detect.detectors.expiry_date_compliance import (
     trailing_7d,

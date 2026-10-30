@@ -5,7 +5,6 @@ Tests for `score.score_all` — stamps signal['score'] in place via the scorer r
 from __future__ import annotations
 
 import pytest
-
 from store_insight.pipeline.stages._2_score.score import score_all
 
 _WEEK = dict(this_week_start='2025-01-06', this_week_end='2025-01-12')

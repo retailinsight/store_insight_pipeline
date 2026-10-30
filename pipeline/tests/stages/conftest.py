@@ -11,7 +11,6 @@ from __future__ import annotations
 from types import ModuleType, SimpleNamespace
 
 import pytest
-
 from store_insight.pipeline.stages._1_detect.detector_info import DetectorInfo
 from store_insight.pipeline.stages._3_facts.config import GathererInfo
 

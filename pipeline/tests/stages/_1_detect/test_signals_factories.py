@@ -8,7 +8,6 @@ lock the dict keys against the corresponding TypedDict and cover the defaults.
 from __future__ import annotations
 
 import pytest
-
 from store_insight.pipeline.stages._1_detect import signals as S
 
 # ---------------------------------------------------------------------------

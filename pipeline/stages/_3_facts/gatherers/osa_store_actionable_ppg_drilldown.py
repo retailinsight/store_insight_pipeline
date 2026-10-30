@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections import defaultdict
 
 from snowflake.snowpark import functions as F
-
 from store_insight.pipeline.pipeline._shared import (
     attributed_values,
     build_store_dept_filter,

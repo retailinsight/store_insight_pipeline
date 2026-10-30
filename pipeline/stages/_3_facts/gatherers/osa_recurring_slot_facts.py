@@ -19,7 +19,6 @@ Facts keys   : slot_history, recurring_slot_share_pct,
 from collections import defaultdict
 
 from snowflake.snowpark import functions as F
-
 from store_insight.pipeline.pipeline._shared import sunday_first_dow
 from store_insight.pipeline.stages._3_facts.config import GathererInfo
 

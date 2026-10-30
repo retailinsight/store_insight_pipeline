@@ -8,7 +8,6 @@ import json
 from unittest.mock import MagicMock
 
 import pytest
-
 from store_insight.pipeline.stages._4_investigate import cortex as cortex_mod
 from store_insight.pipeline.stages._4_investigate.cortex_budget import (
     CortexBudget,

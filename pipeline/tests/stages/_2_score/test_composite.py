@@ -8,7 +8,6 @@ No Snowflake / Snowpark required.
 from __future__ import annotations
 
 import pytest
-
 from store_insight.pipeline.stages._2_score import composite
 from store_insight.pipeline.stages._2_score.dimensions import (
     financial_severity,

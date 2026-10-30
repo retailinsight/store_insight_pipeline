@@ -2,7 +2,6 @@ import inspect
 import zipfile
 
 import pytest
-
 from store_insight.pipeline.config.loader import load_config
 from store_insight.pipeline.deploy import deploy, handler
 from store_insight.pipeline.deploy.handler import (

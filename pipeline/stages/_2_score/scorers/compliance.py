@@ -33,7 +33,6 @@ Public API
 """
 
 from snowflake.snowpark import functions as F
-
 from store_insight.pipeline.stages._2_score.config import ScorerInfo
 
 METADATA = ScorerInfo(
