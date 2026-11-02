@@ -97,6 +97,8 @@ def _zip_package(dest_path: str) -> None:
     the zip small; other repo-level folders are excluded.
     """
     excludes = {'__pycache__', '.pyc', '.ipynb_checkpoints', '.env',
+                '.git', '.github', '.pytest_cache', '.ruff_cache',
+                'store_insight.egg-info', 'archive', 'nul',
                 'mcp', 'experiments', 'docs', 'prds', '.devin', '.windsurf'}
     with zipfile.ZipFile(dest_path, 'w', zipfile.ZIP_DEFLATED) as zf:
         for path in _SI_PKG.rglob('*'):
