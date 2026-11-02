@@ -19,7 +19,7 @@ Facts keys   : slot_history, recurring_slot_share_pct,
 from collections import defaultdict
 
 from snowflake.snowpark import functions as F
-from store_insight.pipeline.pipeline._shared import sunday_first_dow
+from store_insight.pipeline.pipeline._shared import pick_display_code, sunday_first_dow
 from store_insight.pipeline.stages._3_facts.config import GathererInfo
 
 METADATA = GathererInfo(
@@ -126,7 +126,7 @@ def gather(
             upcs = sorted(ids['upcs'])
             eans = sorted(ids['eans'])
             item_identifiers[code] = {
-                'upc': upcs[0] if upcs else None,
+                'upc': pick_display_code(eans, upcs),
                 'ean': eans[0] if eans else None,
             }
 
