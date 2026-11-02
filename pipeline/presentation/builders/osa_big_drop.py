@@ -1,6 +1,7 @@
 """Presentation builder for OSA_BIG_DROP smart-action cards."""
 from __future__ import annotations
 
+from store_insight.pipeline.pipeline._shared import pick_display_code
 from store_insight.pipeline.presentation.models import (
     AlertPresentation,
     MatrixColumn,
@@ -98,10 +99,9 @@ def build_osa_big_drop_presentation(signal: dict, narrative: dict) -> AlertPrese
                 items=[
                     RankedListItem(
                         label=str(item.get("item_name") or item.get("item_code") or "Unknown"),
-                        secondary_label=str(
-                            ((item.get("eans") or item.get("upcs") or [None])[0]) or ""
-                        )
-                        or None,
+                        secondary_label=pick_display_code(
+                            item.get("eans"), item.get("upcs")
+                        ),
                         value=float(
                             (item.get("latest_week_lsv") or {}).get("store_controlled", 0)
                         ),

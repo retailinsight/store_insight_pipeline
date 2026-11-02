@@ -12,6 +12,24 @@ def sunday_first_dow(date_col):
     return (F.call_function('DAYOFWEEKISO', date_col) % F.lit(7)) + F.lit(1)
 
 
+def pick_display_code(eans: list[str] | None, upcs: list[str] | None) -> str | None:
+    """
+    Choose the barcode shown on a card when an item has several.
+
+    Prefers 13-digit codes that are not EoE-internal ('70'-prefixed);
+    falls back to the previously-used sorted-first code so behaviour is
+    deterministic even when every code is internal. EANs win over UPCs.
+    """
+    ean_codes = [str(c) for c in (eans or []) if c is not None]
+    upc_codes = [str(c) for c in (upcs or []) if c is not None]
+    for codes in (ean_codes, upc_codes):
+        gs1 = sorted(c for c in codes if len(c) == 13 and not c.startswith('70'))
+        if gs1:
+            return gs1[0]
+    candidates = ean_codes or upc_codes
+    return min(candidates) if candidates else None
+
+
 def osa_score_col(sales_col, lsv_col):
     """
     Snowpark column expression: sales / (sales + lost_sales_volume), or 0.

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from store_insight.pipeline.pipeline._shared import build_store_dept_filter
+from store_insight.pipeline.pipeline._shared import build_store_dept_filter, pick_display_code
 from store_insight.pipeline.pipeline.config import DetectorConfig
 from store_insight.pipeline.pipeline.pipeline import (
     _build_card,
@@ -493,3 +493,34 @@ def test_investigation_failure_skips_one_signal_in_parallel(monkeypatch, capsys)
     assert 'WARNING: investigation skipped' in warning
     assert 'store_id=1' in warning
     assert "KeyError: 'department'" in warning
+
+
+class TestPickDisplayCode:
+    def test_prefers_gs1_ean_over_internal_70_code(self):
+        assert pick_display_code(
+            eans=["7000003890601", "7798039590342", "7000006670514"],
+            upcs=None,
+        ) == "7798039590342"
+
+    def test_falls_back_to_sorted_first_when_all_internal(self):
+        assert pick_display_code(eans=["7000006670514", "7000003890601"], upcs=None) == "7000003890601"
+
+    def test_single_code_returned(self):
+        assert pick_display_code(eans=["7798039590342"], upcs=None) == "7798039590342"
+
+    def test_upcs_used_when_no_eans(self):
+        assert pick_display_code(eans=None, upcs=["7798039590342"]) == "7798039590342"
+
+    def test_gs1_ean_beats_upc_when_both_lists_populated(self):
+        assert pick_display_code(
+            eans=["7798039590342"], upcs=["5000435010778"]
+        ) == "7798039590342"
+
+    def test_fallback_prefers_ean_before_upc(self):
+        assert pick_display_code(
+            eans=["7000003890601"], upcs=["12345"]
+        ) == "7000003890601"
+
+    def test_none_when_no_codes(self):
+        assert pick_display_code(eans=None, upcs=None) is None
+        assert pick_display_code(eans=[], upcs=[]) is None
