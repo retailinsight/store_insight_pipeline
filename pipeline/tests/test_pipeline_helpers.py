@@ -511,6 +511,16 @@ class TestPickDisplayCode:
     def test_upcs_used_when_no_eans(self):
         assert pick_display_code(eans=None, upcs=["7798039590342"]) == "7798039590342"
 
+    def test_gs1_ean_beats_upc_when_both_lists_populated(self):
+        assert pick_display_code(
+            eans=["7798039590342"], upcs=["5000435010778"]
+        ) == "7798039590342"
+
+    def test_fallback_prefers_ean_before_upc(self):
+        assert pick_display_code(
+            eans=["7000003890601"], upcs=["12345"]
+        ) == "7000003890601"
+
     def test_none_when_no_codes(self):
         assert pick_display_code(eans=None, upcs=None) is None
         assert pick_display_code(eans=[], upcs=[]) is None

@@ -20,11 +20,14 @@ def pick_display_code(eans: list[str] | None, upcs: list[str] | None) -> str | N
     falls back to the previously-used sorted-first code so behaviour is
     deterministic even when every code is internal. EANs win over UPCs.
     """
-    candidates = [str(c) for c in (eans or []) + (upcs or []) if c is not None]
-    if not candidates:
-        return None
-    gs1 = sorted(c for c in candidates if len(c) == 13 and not c.startswith('70'))
-    return gs1[0] if gs1 else sorted(candidates)[0]
+    ean_codes = [str(c) for c in (eans or []) if c is not None]
+    upc_codes = [str(c) for c in (upcs or []) if c is not None]
+    for codes in (ean_codes, upc_codes):
+        gs1 = sorted(c for c in codes if len(c) == 13 and not c.startswith('70'))
+        if gs1:
+            return gs1[0]
+    candidates = ean_codes or upc_codes
+    return min(candidates) if candidates else None
 
 
 def osa_score_col(sales_col, lsv_col):
