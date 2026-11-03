@@ -19,6 +19,8 @@ output:
   emit_affected_products: true
   top_n_per_store: 3
   max_per_type_per_store: 2
+  # Mirror of eastofengland: same-morning availability dedupe (1/dept/run).
+  max_per_section_per_store: 1
 
 queue:
   enabled: true
