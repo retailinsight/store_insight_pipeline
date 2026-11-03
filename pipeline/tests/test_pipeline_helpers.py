@@ -300,6 +300,7 @@ def test_run_pipeline_from_signals_writes_debug_tables_when_logging_enabled(
             alerts = 'DB.SCHEMA.ALERTS_PIPELINE'
             top_n_per_store = 0
             max_per_type_per_store = 0
+            max_per_section_per_store = 0
             signal_type_buckets = {}
         class scoring:
             score_weights = None
@@ -356,6 +357,7 @@ def test_run_pipeline_from_signals_skips_debug_tables_when_logging_disabled(
             alerts = 'DB.SCHEMA.ALERTS_PIPELINE'
             top_n_per_store = 0
             max_per_type_per_store = 0
+            max_per_section_per_store = 0
             signal_type_buckets = {}
         class scoring:
             score_weights = None
@@ -408,6 +410,7 @@ def test_run_pipeline_from_signals_returns_intermediates_when_requested(
             alerts = 'DB.SCHEMA.ALERTS_PIPELINE'
             top_n_per_store = 0
             max_per_type_per_store = 0
+            max_per_section_per_store = 0
             signal_type_buckets = {}
         class scoring:
             score_weights = None
@@ -470,6 +473,7 @@ def test_investigation_failure_skips_one_signal_in_parallel(monkeypatch, capsys)
             alerts = 'DB.SCHEMA.ALERTS_PIPELINE'
             top_n_per_store = 0
             max_per_type_per_store = 0
+            max_per_section_per_store = 0
             signal_type_buckets = {}
         class scoring:
             score_weights = None
