@@ -1003,7 +1003,9 @@ def run_pipeline_from_signals(
         else int((cfg.output.top_n_per_store if cfg else 0) or 0) or None
     )
     max_per_type = int((cfg.output.max_per_type_per_store if cfg else 0) or 0) or None
-    max_per_section = int((cfg.output.max_per_section_per_store if cfg else 0) or 0)
+    max_per_section = int(
+        (getattr(cfg.output, "max_per_section_per_store", 0) if cfg else 0) or 0
+    )
     if max_per_section:
         before = len(signals)
         from store_insight.pipeline.stages._2_score.score import apply_availability_section_dedupe
