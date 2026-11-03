@@ -1,0 +1,23 @@
+# Daily store-email recipients (spec §9: mailbox list lives in the email
+# process, not Snowflake). Placeholders — EoE must supply the 14 trial
+# shared-inbox addresses before enabled: true.
+
+enabled: false
+sender: notification@ri-team.com
+app_base_url: ""          # Store Insight app home; filled at deploy time
+
+mailboxes:
+  445: {email: ""}  # Parkfields
+  508: {email: ""}  # Coggeshall Supermarket
+  517: {email: ""}  # Greenstead
+  535: {email: ""}  # Chesterwell
+  497: {email: ""}  # Riverside
+  239: {email: ""}
+  463: {email: ""}
+  464: {email: ""}
+  479: {email: ""}
+  641: {email: ""}
+  204: {email: ""}
+  211: {email: ""}
+  412: {email: ""}
+  418: {email: ""}
