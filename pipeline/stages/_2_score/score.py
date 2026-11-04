@@ -203,6 +203,47 @@ def apply_top_n_filter(
     return result
 
 
+_AVAILABILITY_SECTION_TYPES = frozenset({'OSA_STORE_ACTIONABLE', 'OSA_BIG_DROP'})
+
+# Dave (3 Nov 2026): store-actionable beats big-drop for the same
+# store+department in the same run — the benefit is more compelling.
+_AVAILABILITY_TYPE_PRECEDENCE = {'OSA_STORE_ACTIONABLE': 0, 'OSA_BIG_DROP': 1}
+
+
+def apply_availability_section_dedupe(signals: list[dict], max_per_section: int) -> list[dict]:
+    """
+    Same-morning dedupe for availability cards: cap the number of
+    OSA_STORE_ACTIONABLE + OSA_BIG_DROP signals per (store_id, department).
+
+    Signals outside those two types are untouched. Within a department the
+    ordering key is (type precedence, score desc): a store-actionable always
+    wins over a big-drop. The loser is dropped only for this run — it
+    re-qualifies on the next run, so a genuine big drop on a later day is
+    unaffected. Runs after workflow suppression, before apply_top_n_filter,
+    so a dropped card's slot refills from the next-best signal.
+    """
+    if not max_per_section:
+        return list(signals)
+    seen: dict[tuple, int] = {}
+    result = []
+    for sig in sorted(
+        signals,
+        key=lambda s: (
+            _AVAILABILITY_TYPE_PRECEDENCE.get(s.get('signal_type', ''), 9),
+            -s.get('score', 0),
+        ),
+    ):
+        if sig.get('signal_type') not in _AVAILABILITY_SECTION_TYPES:
+            result.append(sig)
+            continue
+        key = (sig['store_id'], sig.get('department'))
+        if seen.get(key, 0) >= max_per_section:
+            continue
+        seen[key] = seen.get(key, 0) + 1
+        result.append(sig)
+    return result
+
+
 _STRUCTURAL_TRIGGERS = frozenset({'VS_CHAIN', 'REPEAT', 'TICK_AND_FLICK',
                                    'REPEAT_REQUEST', 'EXCESSIVE_OVERRIDE'})
 

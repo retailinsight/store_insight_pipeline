@@ -29,6 +29,10 @@ output:
   # is broken only when a store has no other signal types to fill top_n
   # (see apply_top_n_filter).
   max_per_type_per_store: 2
+  # Same-morning dedupe (Dave, 3 Nov 2026): at most one availability card
+  # (OSA_STORE_ACTIONABLE or OSA_BIG_DROP) per store+department per run.
+  # STORE_ACTIONABLE wins over BIG_DROP. Other clients keep 0 = off.
+  max_per_section_per_store: 1
 
 queue:
   enabled: true

@@ -300,6 +300,7 @@ def test_run_pipeline_from_signals_writes_debug_tables_when_logging_enabled(
             alerts = 'DB.SCHEMA.ALERTS_PIPELINE'
             top_n_per_store = 0
             max_per_type_per_store = 0
+            max_per_section_per_store = 0
             signal_type_buckets = {}
         class scoring:
             score_weights = None
@@ -356,6 +357,7 @@ def test_run_pipeline_from_signals_skips_debug_tables_when_logging_disabled(
             alerts = 'DB.SCHEMA.ALERTS_PIPELINE'
             top_n_per_store = 0
             max_per_type_per_store = 0
+            max_per_section_per_store = 0
             signal_type_buckets = {}
         class scoring:
             score_weights = None
@@ -408,6 +410,7 @@ def test_run_pipeline_from_signals_returns_intermediates_when_requested(
             alerts = 'DB.SCHEMA.ALERTS_PIPELINE'
             top_n_per_store = 0
             max_per_type_per_store = 0
+            max_per_section_per_store = 0
             signal_type_buckets = {}
         class scoring:
             score_weights = None
@@ -470,6 +473,7 @@ def test_investigation_failure_skips_one_signal_in_parallel(monkeypatch, capsys)
             alerts = 'DB.SCHEMA.ALERTS_PIPELINE'
             top_n_per_store = 0
             max_per_type_per_store = 0
+            max_per_section_per_store = 0
             signal_type_buckets = {}
         class scoring:
             score_weights = None
@@ -493,6 +497,108 @@ def test_investigation_failure_skips_one_signal_in_parallel(monkeypatch, capsys)
     assert 'WARNING: investigation skipped' in warning
     assert 'store_id=1' in warning
     assert "KeyError: 'department'" in warning
+
+
+def _dedupe_test_cfg(max_per_section, top_n=3):
+    class Cfg:
+        class output:
+            alerts = 'DB.SCHEMA.ALERTS_PIPELINE'
+            top_n_per_store = top_n
+            max_per_type_per_store = 0
+            max_per_section_per_store = max_per_section
+            signal_type_buckets = {}
+        class scoring:
+            score_weights = None
+        class investigation:
+            max_workers = 1
+        class logging:
+            write_signals = False
+            write_enriched = False
+            write_run_log = False
+
+    return Cfg()
+
+
+def _dedupe_signal(store_id, department, signal_type, score):
+    sig = make_osa_signal(
+        store_id=store_id, department=department,
+        trigger_types=['WOW'], this_week_lsv=100.0,
+    )
+    sig['signal_type'] = signal_type
+    sig['score'] = score
+    return sig
+
+
+def _stub_pipeline_stages(monkeypatch, signals_out):
+    monkeypatch.setattr(
+        'store_insight.pipeline.pipeline.pipeline._resolve_config',
+        lambda *a, **k: DetectorConfig(),
+    )
+    monkeypatch.setattr('store_insight.pipeline.pipeline.pipeline.score_all', lambda *a, **k: None)
+    monkeypatch.setattr(
+        'store_insight.pipeline.pipeline.pipeline.enrich_signals',
+        lambda signals, *a, **k: list(signals),
+    )
+    monkeypatch.setattr('store_insight.pipeline.pipeline.pipeline.investigate', lambda *a, **k: {
+        'issue': 'i', 'explanation': 'e', 'cost_if_not_fixed': 'c',
+        'recommended_action': 'r', '_engine': 'rule_based',
+    })
+
+
+def _run_dedupe_pipeline(signals, cfg):
+    return run_pipeline_from_signals(
+        signals, osa=None,
+        last_week_start='2025-01-06', last_week_end='2025-01-12',
+        this_week_start='2025-01-13', this_week_end='2025-01-19',
+        session=None, run_date='2025-01-19', cfg=cfg,
+    )
+
+
+class TestAvailabilitySectionDedupeWiring:
+    """Pipeline-level test for max_per_section_per_store: exercises the
+    dedupe inside run_pipeline_from_signals, ordered after workflow
+    suppression and before apply_top_n_filter — the seams that unit tests
+    of the dedupe helper alone do not cover."""
+
+    def test_removed_duplicate_lets_next_best_fill_top_n(self, monkeypatch):
+        # Store 1: ACTIONABLE + BIG_DROP same dept (BIG_DROP deduped away),
+        # plus a COMPLIANCE card that only fits the top-N slot once the
+        # duplicate is gone.
+        actionable = _dedupe_signal(1, 'D', 'OSA_STORE_ACTIONABLE', 0.9)
+        big_drop = _dedupe_signal(1, 'D', 'OSA_BIG_DROP', 0.8)
+        compliance = _dedupe_signal(1, 'D', 'COMPLIANCE', 0.7)
+        other = _dedupe_signal(1, 'E', 'OSA_STORE_ACTIONABLE', 0.6)
+        third = _dedupe_signal(1, 'F', 'OSA_STORE_ACTIONABLE', 0.5)
+        signals = [actionable, big_drop, compliance, other, third]
+        _stub_pipeline_stages(monkeypatch, signals)
+
+        cards = _run_dedupe_pipeline(list(signals), _dedupe_test_cfg(1, top_n=3))
+
+        by_type = {c['signal_type'] for c in cards}
+        assert 'OSA_BIG_DROP' not in by_type
+        assert len(cards) == 3
+        # The freed third slot went to the next-best survivor, not to a
+        # second availability card in department 'D'.
+        assert [c['signal_type'] for c in cards].count('COMPLIANCE') == 1
+
+    def test_suppressed_actionable_leaves_big_drop_eligible(self, monkeypatch):
+        # If the actionable was already removed by workflow suppression,
+        # its big-drop counterpart must not be deduped in its absence.
+        big_drop = _dedupe_signal(1, 'D', 'OSA_BIG_DROP', 0.8)
+        _stub_pipeline_stages(monkeypatch, [big_drop])
+
+        cards = _run_dedupe_pipeline([big_drop], _dedupe_test_cfg(1, top_n=3))
+
+        assert [c['signal_type'] for c in cards] == ['OSA_BIG_DROP']
+
+    def test_cap_off_leaves_pair_untouched(self, monkeypatch):
+        actionable = _dedupe_signal(1, 'D', 'OSA_STORE_ACTIONABLE', 0.9)
+        big_drop = _dedupe_signal(1, 'D', 'OSA_BIG_DROP', 0.8)
+        _stub_pipeline_stages(monkeypatch, [actionable, big_drop])
+
+        cards = _run_dedupe_pipeline([actionable, big_drop], _dedupe_test_cfg(0, top_n=3))
+
+        assert {c['signal_type'] for c in cards} == {'OSA_STORE_ACTIONABLE', 'OSA_BIG_DROP'}
 
 
 class TestPickDisplayCode:
