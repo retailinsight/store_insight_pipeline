@@ -89,6 +89,13 @@ class OutputConfig(BaseModel):
     # STORE_ACTIONABLE wins over BIG_DROP; loser re-qualifies tomorrow.
     max_per_section_per_store: int = 0
     emit_affected_products: bool = False
+
+    @field_validator("max_per_section_per_store")
+    @classmethod
+    def _section_cap_non_negative(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("max_per_section_per_store must be non-negative")
+        return v
     signal_type_buckets: dict[str, AlertBucket] = {
         "OSA": AlertBucket.AVAILABILITY,
         "OSA_STORE_ACTIONABLE": AlertBucket.AVAILABILITY,
