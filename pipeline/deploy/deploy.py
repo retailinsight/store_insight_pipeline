@@ -193,6 +193,23 @@ EXECUTE AS CALLER
 """
     session.sql(ddl).collect()
     print(f"[deploy] Stored Procedure registered: {sp_fqn}")
+
+    email_fqn = f"{db}.{schema}.RUN_DAILY_STORE_EMAIL"
+    session.sql(f"""
+CREATE OR REPLACE PROCEDURE {email_fqn}(
+    SEND_PROC_FQN STRING
+)
+RETURNS STRING
+LANGUAGE PYTHON
+RUNTIME_VERSION = '3.11'
+PACKAGES = ('snowflake-snowpark-python', 'snowflake-ml-python', 'pyyaml', 'pydantic')
+IMPORTS   = ('@{stage}/{_ZIP_NAME}')
+HANDLER   = 'store_insight.pipeline.email.run_daily_email.main'
+COMMENT = 'Daily store email job (new actions + reminders). Pass the send procedure FQN (e.g. STORE_INSIGHT_DEV.PUBLIC.SP_SEND_EMAIL) to send for real; pass NULL to dry-run (EMAIL_SEND_LOG only). Recipients yaml enabled flag remains the final gate.'
+EXECUTE AS CALLER
+""").collect()
+    print(f"[deploy] Stored Procedure registered: {email_fqn}")
+
     role = os.environ.get('SNOWFLAKE_ROLE', 'PUBLIC')
     try:
         session.sql(f"GRANT READ ON STAGE {stage} TO ROLE {role}").collect()
