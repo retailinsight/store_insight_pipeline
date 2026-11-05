@@ -1,0 +1,23 @@
+# Daily store-email recipients (spec §9: mailbox list lives in the email
+# process, not Snowflake). Placeholders — EoE must supply the 14 trial
+# shared-inbox addresses before enabled: true.
+
+enabled: false
+sender: storeinsight@notifications.retailinsight.co.uk
+app_base_url: "https://eoewebsiapp-crt.ri-team.com/"  # Store Insight app home (Dave, 5 Nov)
+
+mailboxes:
+  445: {email: "parkfieldsfs@eastofengland.coop"}  # Parkfields
+  508: {email: "coggeshallfsm@eastofengland.coop"}  # Coggeshall Supermarket
+  239: {email: "greensteadfs@eastofengland.coop"}  # Greenstead
+  535: {email: "chesterwellfs@eastofengland.coop"}  # Chesterwell
+  497: {email: "riversidefs@eastofengland.coop"}  # Riverside
+  517: {email: "aclefsm@eastofengland.coop"}
+  463: {email: "lstrattonfs@eastofengland.coop"}
+  464: {email: "marthamfs@eastofengland.coop"}
+  479: {email: "lavenhamfs@eastofengland.coop"}
+  641: {email: "eastbergholtfs@eastofengland.coop"}
+  440: {email: "hasketonrdfs@eastofengland.coop"}
+  426: {email: "heathrdfs@eastofengland.coop"}
+  634: {email: "ipswichstfs@eastofengland.coop"}
+  501: {email: "wickhammktfsm@eastofengland.coop"}
