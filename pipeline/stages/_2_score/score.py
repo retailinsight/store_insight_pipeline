@@ -51,7 +51,20 @@ from store_insight.pipeline.pipeline.dispatch import matching_kwargs
 from store_insight.pipeline.stages._2_score import composite as _composite
 from store_insight.pipeline.stages._2_score import registry as _registry
 
-_MULTIPLIERS: list[Callable[[dict], float]] = []
+
+def _weakest_department_multiplier(signal: dict) -> float:
+    # 'your weakest department' filler cards (Dan, 3 Nov): deliberately low
+    # score so they only fill slots when nothing stronger qualifies. Only
+    # pure weakest signals are deranked — a real actionable card that merged
+    # with a weakest signal for the same department keeps its score.
+    if (signal.get('trigger_types') or []) == ['WEAKEST_DEPARTMENT']:
+        return WEAKEST_DEPARTMENT_SCORE_FACTOR
+    return 1.0
+
+
+WEAKEST_DEPARTMENT_SCORE_FACTOR = 0.05
+
+_MULTIPLIERS: list[Callable[[dict], float]] = [_weakest_department_multiplier]
 
 
 def score_all(
