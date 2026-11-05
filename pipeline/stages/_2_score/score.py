@@ -229,8 +229,11 @@ def apply_availability_section_dedupe(signals: list[dict], max_per_section: int)
     OSA_STORE_ACTIONABLE + OSA_BIG_DROP signals per (store_id, department).
 
     Signals outside those two types are untouched. Within a department the
-    ordering key is (type precedence, score desc): a store-actionable always
-    wins over a big-drop. The loser is dropped only for this run — it
+    ordering key is (pure-weakest flag, type precedence, score desc): a
+    store-actionable always wins over a big-drop, and a pure
+    WEAKEST_DEPARTMENT filler card loses to both — it is deliberately
+    low-value filler, so a genuine same-department card of either type
+    keeps the slot. The loser is dropped only for this run — it
     re-qualifies on the next run, so a genuine big drop on a later day is
     unaffected. Runs after workflow suppression, before apply_top_n_filter,
     so a dropped card's slot refills from the next-best signal.
@@ -242,6 +245,7 @@ def apply_availability_section_dedupe(signals: list[dict], max_per_section: int)
     for sig in sorted(
         signals,
         key=lambda s: (
+            (s.get('trigger_types') or []) == ['WEAKEST_DEPARTMENT'],
             _AVAILABILITY_TYPE_PRECEDENCE.get(s.get('signal_type', ''), 9),
             -s.get('score', 0),
         ),

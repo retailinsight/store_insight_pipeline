@@ -61,7 +61,7 @@ def detect(
         gap = float(row['STORE_STORE_OSA'] or 0) - float(row['CHAIN_STORE_OSA'] or 0)
         store_id = int(row['STORE_ID'])
         lsv = float(row['STORE_STORE_LSV'] or 0)
-        candidates.setdefault(store_id, []).append((gap, lsv, row))
+        candidates.setdefault(store_id, []).append((gap, lsv, row, store_quality, chain_quality))
 
     signals = []
     for store_id, depts in candidates.items():
@@ -69,7 +69,7 @@ def detect(
         eligible = [d for d in depts[:weakest_top_departments] if d[0] < -min_weakest_chain_gap]
         if not eligible:
             continue
-        gap, lsv, row = min(eligible, key=lambda d: d[0])
+        gap, lsv, row, store_quality, chain_quality = min(eligible, key=lambda d: d[0])
         signals.append(make_osa_store_actionable_signal(
             store_id=store_id,
             department=row[section],

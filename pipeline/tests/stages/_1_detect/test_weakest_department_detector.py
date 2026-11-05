@@ -87,6 +87,29 @@ def test_quality_suppression_skips_dept(monkeypatch):
 
 
 
+def test_pure_weakest_loses_dedupe_to_genuine_availability():
+    dept = 'MILK'
+    weakest = {'signal_type': 'OSA_STORE_ACTIONABLE', 'store_id': 1,
+               'department': dept, 'trigger_types': ['WEAKEST_DEPARTMENT'], 'score': 0.0}
+    big_drop = {'signal_type': 'OSA_BIG_DROP', 'store_id': 1,
+                'department': dept, 'trigger_types': ['BIG_DROP'], 'score': 0.0}
+    actionable = {'signal_type': 'OSA_STORE_ACTIONABLE', 'store_id': 1,
+                  'department': dept, 'trigger_types': ['WOW'], 'score': 0.0}
+    # pure weakest must not steal the slot from a genuine big drop
+    out = score.apply_availability_section_dedupe([weakest, big_drop], 1)
+    assert out == [big_drop]
+    # nor from a real actionable
+    out = score.apply_availability_section_dedupe([weakest, actionable], 1)
+    assert out == [actionable]
+    # but a weakest merged into a real trigger keeps actionable precedence
+    merged = {**actionable, 'trigger_types': ['VS_CHAIN', 'WEAKEST_DEPARTMENT']}
+    out = score.apply_availability_section_dedupe([merged, big_drop], 1)
+    assert out == [merged]
+    # weakest still wins the slot when it's the only candidate
+    out = score.apply_availability_section_dedupe([weakest], 1)
+    assert out == [weakest]
+
+
 def test_weakest_trigger_gets_score_multiplier():
     sig = {'trigger_types': ['WEAKEST_DEPARTMENT']}
     assert score._weakest_department_multiplier(sig) == score.WEAKEST_DEPARTMENT_SCORE_FACTOR
