@@ -64,7 +64,7 @@ def connect():
 def q(cur, sql, params=None):
     cur.execute(sql, params or {})
     cols = [c[0].lower() for c in cur.description]
-    return [dict(zip(cols, r)) for r in cur.fetchall()]
+    return [dict(zip(cols, r, strict=True)) for r in cur.fetchall()]
 
 
 def _pct(v):
@@ -143,7 +143,8 @@ def main():
             # window start -> a weekly (not daily) division diff
             end_date = dates[0]
             cutoff = end_date[:10]
-            from datetime import date as _date, timedelta as _td
+            from datetime import date as _date
+            from datetime import timedelta as _td
             cutoff = str(
                 _date.fromisoformat(cutoff) - _td(days=DAYS)
             )

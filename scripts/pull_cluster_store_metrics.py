@@ -55,7 +55,7 @@ def connect():
 def q(cur, sql, params=None):
     cur.execute(sql, params or {})
     cols = [c[0].lower() for c in cur.description]
-    return [dict(zip(cols, r)) for r in cur.fetchall()]
+    return [dict(zip(cols, r, strict=True)) for r in cur.fetchall()]
 
 
 def main():

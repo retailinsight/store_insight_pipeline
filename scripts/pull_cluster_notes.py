@@ -76,7 +76,7 @@ def main():
             {"days": DAYS},
         )
         cols = [c[0].lower() for c in cur.description]
-        actions = [dict(zip(cols, r)) for r in cur.fetchall()]
+        actions = [dict(zip(cols, r, strict=True)) for r in cur.fetchall()]
 
         cur.execute(
             """
@@ -90,7 +90,7 @@ def main():
         ncols = [c[0].lower() for c in cur.description]
         notes_by_alert = {}
         for r in cur.fetchall():
-            n = dict(zip(ncols, r))
+            n = dict(zip(ncols, r, strict=True))
             n["timestamp"] = str(n["timestamp"])
             notes_by_alert.setdefault(n.pop("alert_id"), []).append(n)
 

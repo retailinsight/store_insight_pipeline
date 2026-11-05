@@ -20,11 +20,10 @@ Defaults: newest out/cluster_store_metrics_*.json; UI at
 from __future__ import annotations
 
 import argparse
-import glob
 import json
 import re
 import sys
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
