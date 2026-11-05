@@ -81,3 +81,4 @@ run_log.txt
 venv_store_insight/
 .venv-store-insight/
 store_insight.egg-info/
+scripts/out/
