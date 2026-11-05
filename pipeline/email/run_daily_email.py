@@ -64,7 +64,7 @@ def uk_day_utc_bounds(day: datetime.date) -> tuple[datetime.datetime, datetime.d
     """Spec: reminder day boundaries are UK-local midnight, stored as UTC."""
     start = datetime.datetime(day.year, day.month, day.day, tzinfo=UK).astimezone(datetime.timezone.utc)  # noqa: UP017
     next_day = day + datetime.timedelta(days=1)
-    end = datetime.datetime(next_day.year, next_day.month, next_day.day, tzinfo=UK).astimezone(datetime.UTC)
+    end = datetime.datetime(next_day.year, next_day.month, next_day.day, tzinfo=UK).astimezone(datetime.timezone.utc)  # noqa: UP017
     return start.replace(tzinfo=None), end.replace(tzinfo=None)
 
 
@@ -121,7 +121,7 @@ def run(runner, run_date: str, recipients_cfg: dict, day: datetime.date | None =
                           app_base_url)
         if res.message is not None:
             res.message.tag = EMAIL_TAG
-            res.status = sender.send(runner, res.message)["status"]
+            res.status = sender.send(runner, res.message, store_id=sid)["status"]
         else:
             runner(
                 f"""INSERT INTO {tables['log_table']}
@@ -131,3 +131,33 @@ def run(runner, run_date: str, recipients_cfg: dict, day: datetime.date | None =
             )
         results.append(res)
     return results
+
+
+def _runner(session):
+    def run_sql(sql: str, params: dict | None = None):
+        return session.sql(sql, params=params or {}).collect()
+    return run_sql
+
+
+def main(session, send_proc_fqn: str | None = None) -> str:
+    """Stored-procedure entry point (HANDLER for RUN_DAILY_STORE_EMAIL).
+
+    Runs today's email job. `send_proc_fqn` switches the sender from the
+    dry-run LogSender to the real SendGrid procedure — the yaml `enabled`
+    flag remains the final gate either way.
+    """
+    try:
+        cfg = load_recipients()
+    except (NotADirectoryError, FileNotFoundError):
+        import pkgutil
+        cfg = yaml.safe_load(
+            pkgutil.get_data('store_insight.pipeline', 'config/email_recipients.yaml')) or {}
+    run_date = str(session.sql("SELECT CURRENT_DATE()::string").collect()[0][0])
+    sender = None
+    if send_proc_fqn:
+        from .senders import AgentEmailSender
+        sender = AgentEmailSender(proc_fqn=send_proc_fqn,
+                                  verified_sender=cfg.get("sender", ""))
+    results = run(_runner(session), run_date, cfg, sender=sender)
+    lines = [f"store={r.store_id} status={getattr(r, 'status', None) or r.skipped_reason or 'sent'}" for r in results]
+    return f"daily email job: {len(results)} stores\n" + "\n".join(lines)
