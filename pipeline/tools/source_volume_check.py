@@ -45,7 +45,9 @@ DAILY_SOURCES = ['osa', 'feedback', 'markdown_log', 'markdown_sales', 'wastage']
 DEFAULT_LAG_DAYS = 1
 SOURCE_LAG_DAYS = {
     'osa': 1,
-    'markdown_log': 1,
+    # D+1 since 22 Oct (WASTE-9940/SD-70220): day X's file now lands ~11:00 on
+    # X+1, so at check time the freshest complete day is 2 back, not 1.
+    'markdown_log': 2,
     'feedback': 3,
     'markdown_sales': 3,
     'wastage': 3,
