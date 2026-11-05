@@ -146,7 +146,12 @@ def main(session, send_proc_fqn: str | None = None) -> str:
     dry-run LogSender to the real SendGrid procedure — the yaml `enabled`
     flag remains the final gate either way.
     """
-    cfg = load_recipients()
+    try:
+        cfg = load_recipients()
+    except (NotADirectoryError, FileNotFoundError):
+        import pkgutil
+        cfg = yaml.safe_load(
+            pkgutil.get_data('store_insight.pipeline', 'config/email_recipients.yaml')) or {}
     run_date = str(session.sql("SELECT CURRENT_DATE()::string").collect()[0][0])
     sender = None
     if send_proc_fqn:
@@ -154,5 +159,5 @@ def main(session, send_proc_fqn: str | None = None) -> str:
         sender = AgentEmailSender(proc_fqn=send_proc_fqn,
                                   verified_sender=cfg.get("sender", ""))
     results = run(_runner(session), run_date, cfg, sender=sender)
-    lines = [f"store={r.store_id} status={r.status or r.skipped_reason}" for r in results]
+    lines = [f"store={r.store_id} status={getattr(r, 'status', None) or r.skipped_reason or 'sent'}" for r in results]
     return f"daily email job: {len(results)} stores\n" + "\n".join(lines)
