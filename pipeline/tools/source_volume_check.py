@@ -45,6 +45,10 @@ DAILY_SOURCES = ['osa', 'feedback', 'markdown_log', 'markdown_sales', 'wastage']
 DEFAULT_LAG_DAYS = 1
 SOURCE_LAG_DAYS = {
     'osa': 1,
+    # NOTE (22 Oct, WASTE-9940/SD-70220): markdown_log moved to D+1 — day X's
+    # file lands ~11:00 on X+1. This 11:30 check runs after that landing, so
+    # lag 1 still checks the correct day. The 06:00 gate handles the earlier
+    # timing separately via GATE_LAG_DAYS = 2 in _0_quality/quality_gate.py.
     'markdown_log': 1,
     'feedback': 3,
     'markdown_sales': 3,
