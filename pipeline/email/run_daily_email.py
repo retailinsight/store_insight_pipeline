@@ -134,8 +134,14 @@ def run(runner, run_date: str, recipients_cfg: dict, day: datetime.date | None =
 
 
 def _runner(session):
+    import re
     def run_sql(sql: str, params: dict | None = None):
-        return session.sql(sql, params=params or {}).collect()
+        params = params or {}
+        # session.sql binds are positional; translate %(name)s in order
+        names = re.findall(r'%\((\w+)\)s', sql)
+        sql_q = re.sub(r'%\(\w+\)s', '?', sql)
+        vals = [params[name] for name in names]
+        return [r.as_dict() for r in session.sql(sql_q, params=vals).collect()]
     return run_sql
 
 
@@ -159,7 +165,8 @@ def main(session, send_proc_fqn: str | None = None) -> str:
         sender = AgentEmailSender(proc_fqn=send_proc_fqn,
                                   verified_sender=cfg.get("sender", ""))
     results = run(_runner(session), run_date, cfg, sender=sender,
-                  tables={k: f"STORE_INSIGHT_DB.PUBLIC.{v}" for k, v in DEFAULT_TABLES.items()},
+                  tables={**{k: f"STORE_INSIGHT_DB.PUBLIC.{v}" for k, v in DEFAULT_TABLES.items()},
+                          'log_table': DEFAULT_TABLES['log_table']},  # audit log stays in DEV
                   pipeline_db="STORE_INSIGHT_DB")
     lines = [f"store={r.store_id} status={getattr(r, 'status', None) or r.skipped_reason or 'sent'}" for r in results]
     return f"daily email job: {len(results)} stores\n" + "\n".join(lines)
