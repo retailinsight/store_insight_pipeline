@@ -64,7 +64,7 @@ def uk_day_utc_bounds(day: datetime.date) -> tuple[datetime.datetime, datetime.d
     """Spec: reminder day boundaries are UK-local midnight, stored as UTC."""
     start = datetime.datetime(day.year, day.month, day.day, tzinfo=UK).astimezone(datetime.timezone.utc)  # noqa: UP017
     next_day = day + datetime.timedelta(days=1)
-    end = datetime.datetime(next_day.year, next_day.month, next_day.day, tzinfo=UK).astimezone(datetime.timezone.utc)
+    end = datetime.datetime(next_day.year, next_day.month, next_day.day, tzinfo=UK).astimezone(datetime.UTC)
     return start.replace(tzinfo=None), end.replace(tzinfo=None)
 
 
