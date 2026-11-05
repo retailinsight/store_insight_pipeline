@@ -144,15 +144,18 @@ def score_all(
 
         cost *= (score_weights or {}).get(stype, 1.0)
 
-        for m in _MULTIPLIERS:
-            cost *= m(signal)
-
         signal['projected_cost'] = round(cost, 2)
 
+        # Ranking multipliers adjust `score` only — projected_cost is real £
+        # and feeds downstream value fields (e.g. estimated_value_recovered).
+        rank_cost = cost
+        for m in _MULTIPLIERS:
+            rank_cost *= m(signal)
+
         if scoring_cfg is not None and _composite._get(scoring_cfg, 'composite_weights'):
-            signal['score'] = round(_composite.composite_score(signal, cost, scoring_cfg), 4)
+            signal['score'] = round(_composite.composite_score(signal, rank_cost, scoring_cfg), 4)
         else:
-            signal['score'] = signal['projected_cost']
+            signal['score'] = round(rank_cost, 2)
 
         # Scorers may pin a fixed score via a FIXED_SCORE module constant —
         # used when a signal type has no meaningful cost basis but must still

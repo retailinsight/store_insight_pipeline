@@ -117,3 +117,19 @@ def test_weakest_trigger_gets_score_multiplier():
     assert score._weakest_department_multiplier({'trigger_types': ['VS_CHAIN', 'WEAKEST_DEPARTMENT', 'WOW']}) == 1.0
     assert score._weakest_department_multiplier({'trigger_types': ['WOW']}) == 1.0
     assert score._weakest_department_multiplier({}) == 1.0
+
+
+def test_multiplier_scales_score_not_projected_cost(monkeypatch):
+    # £40 real lost sales must stay £40 in projected_cost — stage 5 uses it as
+    # estimated_value_recovered; only the ranking score is deranked.
+    class _Scorer:
+        @staticmethod
+        def projected_cost(signal, context):
+            return 40.0
+    monkeypatch.setitem(score._registry.SIGNAL_TYPE_SCORERS,
+                        'OSA_STORE_ACTIONABLE', _Scorer)
+    sig = {'signal_type': 'OSA_STORE_ACTIONABLE',
+           'trigger_types': ['WEAKEST_DEPARTMENT']}
+    score.score_all([sig], '2026-10-28', '2026-11-03')
+    assert sig['projected_cost'] == 40.0
+    assert sig['score'] == round(40.0 * score.WEAKEST_DEPARTMENT_SCORE_FACTOR, 2)
