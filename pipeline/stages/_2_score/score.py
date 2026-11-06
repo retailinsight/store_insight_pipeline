@@ -203,19 +203,25 @@ def apply_top_n_filter(
     return result
 
 
-_AVAILABILITY_SECTION_TYPES = frozenset({'OSA_STORE_ACTIONABLE', 'OSA_BIG_DROP'})
+_AVAILABILITY_SECTION_TYPES = frozenset(
+    {'OSA_STORE_ACTIONABLE', 'OSA_BIG_DROP', 'OSA_RECURRING_SLOT'})
 
 # Dave (3 Nov 2026): store-actionable beats big-drop for the same
 # store+department in the same run — the benefit is more compelling.
-_AVAILABILITY_TYPE_PRECEDENCE = {'OSA_STORE_ACTIONABLE': 0, 'OSA_BIG_DROP': 1}
+# Dan (6 Nov 2026): a store-actionable or big-drop also beats any
+# recurring-slot card for the same store+dept — store feedback (Riverside)
+# found 3 same-department TOBACCO cards read as repetition, not signal.
+_AVAILABILITY_TYPE_PRECEDENCE = {'OSA_STORE_ACTIONABLE': 0, 'OSA_BIG_DROP': 1,
+                               'OSA_RECURRING_SLOT': 2}
 
 
 def apply_availability_section_dedupe(signals: list[dict], max_per_section: int) -> list[dict]:
     """
     Same-morning dedupe for availability cards: cap the number of
-    OSA_STORE_ACTIONABLE + OSA_BIG_DROP signals per (store_id, department).
+    OSA_STORE_ACTIONABLE + OSA_BIG_DROP + OSA_RECURRING_SLOT signals per
+    (store_id, department).
 
-    Signals outside those two types are untouched. Within a department the
+    Signals outside those types are untouched. Within a department the
     ordering key is (type precedence, score desc): a store-actionable always
     wins over a big-drop. The loser is dropped only for this run — it
     re-qualifies on the next run, so a genuine big drop on a later day is

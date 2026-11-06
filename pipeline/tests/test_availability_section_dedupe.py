@@ -46,15 +46,28 @@ class TestAvailabilitySectionDedupe:
         out = apply_availability_section_dedupe(signals, 1)
         types = {s['signal_type'] for s in out}
         assert out[0]['signal_type'] == 'OSA_STORE_ACTIONABLE'
-        assert 'OSA_RECURRING_SLOT' in types and 'COMPLIANCE' in types
+        assert 'COMPLIANCE' in types
         assert 'OSA_BIG_DROP' not in types
+        assert 'OSA_RECURRING_SLOT' not in types
 
-    def test_recurring_slot_never_collides_with_availability(self):
-        signals = [sig(1, 'SOFT DRINKS', 'OSA_RECURRING_SLOT', 5),
-                   sig(1, 'SOFT DRINKS', 'OSA_STORE_ACTIONABLE', 5),
-                   sig(1, 'SOFT DRINKS', 'OSA_BIG_DROP', 5)]
+    def test_recurring_slot_loses_to_availability_same_dept(self):
+        # Riverside feedback (6 Nov 2026): actionable + 2 slot cards for
+        # TOBACCO read as repetition — actionable wins, slot cards drop.
+        signals = [sig(1, 'TOBACCO', 'OSA_RECURRING_SLOT', 85),
+                   sig(1, 'TOBACCO', 'OSA_STORE_ACTIONABLE', 607),
+                   sig(1, 'TOBACCO', 'OSA_RECURRING_SLOT', 63)]
         out = apply_availability_section_dedupe(signals, 1)
-        assert len(out) == 2  # recurring slot + one availability card
+        assert len(out) == 1
+        assert out[0]['signal_type'] == 'OSA_STORE_ACTIONABLE'
+
+    def test_recurring_slot_survives_without_availability(self):
+        signals = [sig(1, 'TOBACCO', 'OSA_RECURRING_SLOT', 85),
+                   sig(1, 'TOBACCO', 'OSA_RECURRING_SLOT', 63),
+                   sig(1, 'COMPLIANCE', 'COMPLIANCE', 5)]
+        out = apply_availability_section_dedupe(signals, 1)
+        types = {s['signal_type'] for s in out}
+        assert 'OSA_RECURRING_SLOT' in types and 'COMPLIANCE' in types
+        assert sum(1 for s in out if s['signal_type'] == 'OSA_RECURRING_SLOT') == 1
 
     def test_dropped_not_returned(self):
         # dropped signals must not survive into the result (cap filter runs after)
