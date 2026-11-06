@@ -765,11 +765,11 @@ def _generate_osa_store_actionable(signal: dict) -> dict:
 
     ppg_name = _osa_leading_ppg_name(facts)
     if ppg_name:
-        explanation.append(f'{ppg_name} is the worst performing PPG.')
+        explanation.append(f'{ppg_name} is the worst performing Sub Department.')
 
     subtitle = explanation[0]
     if ppg_name:
-        subtitle += f' {ppg_name} is the worst performing PPG.'
+        subtitle += f' {ppg_name} is the worst performing Sub Department.'
 
     return {
         'issue': issue,
@@ -790,7 +790,7 @@ def _generate_osa_big_drop(signal: dict) -> dict:
 
     The card title is an investigation prompt naming the department and the
     two compared trading days; the subtitle names the top three contributing
-    PPGs on the drop day.
+    Sub Departments on the drop day.
     """
     dept = signal['department']
     facts = signal.get('facts') or {}
@@ -840,7 +840,7 @@ def _generate_osa_big_drop(signal: dict) -> dict:
         ppg = ppgs[0]
         name = ppg.get('ppg')
         value = float(ppg.get('store_controlled_lsv') or 0)
-        explanation.append(f'On {day_word} the leading PPG was {name} (£{value:,.2f} store-controlled lost sales).')
+        explanation.append(f'On {day_word} the leading Sub Department was {name} (£{value:,.2f} store-controlled lost sales).')
 
     items = facts.get('item_lsv') or []
     if items:
@@ -863,7 +863,7 @@ def _generate_osa_big_drop(signal: dict) -> dict:
 
     ppg_names = [ppg['ppg'] for ppg in ppgs[:3] if ppg.get('ppg')]
     subtitle = (
-        f'The top contributing PPGs were {_join_names(ppg_names)}.'
+        f'The top contributing Sub Departments were {_join_names(ppg_names)}.'
         if ppg_names else drop_sentence
     )
 
