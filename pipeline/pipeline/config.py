@@ -40,6 +40,9 @@ class DetectorConfig:
     min_actionable_lsv: float = 200.0
     min_actionable_positive_rows: int = 10
     max_actionable_unknown_row_pct: float = 10.0
+    min_weakest_chain_gap: float = 0.01
+    weakest_top_departments: int = 5
+    min_weakest_lsv: float = 0.0
 
     # ---- OSA BIG DROP ---------------------------------------------------
     min_actionable_big_drop: float = 0.05

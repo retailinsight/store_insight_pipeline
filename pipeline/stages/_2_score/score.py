@@ -51,7 +51,20 @@ from store_insight.pipeline.pipeline.dispatch import matching_kwargs
 from store_insight.pipeline.stages._2_score import composite as _composite
 from store_insight.pipeline.stages._2_score import registry as _registry
 
-_MULTIPLIERS: list[Callable[[dict], float]] = []
+
+def _weakest_department_multiplier(signal: dict) -> float:
+    # 'your weakest department' filler cards (Dan, 3 Nov): deliberately low
+    # score so they only fill slots when nothing stronger qualifies. Only
+    # pure weakest signals are deranked — a real actionable card that merged
+    # with a weakest signal for the same department keeps its score.
+    if (signal.get('trigger_types') or []) == ['WEAKEST_DEPARTMENT']:
+        return WEAKEST_DEPARTMENT_SCORE_FACTOR
+    return 1.0
+
+
+WEAKEST_DEPARTMENT_SCORE_FACTOR = 0.05
+
+_MULTIPLIERS: list[Callable[[dict], float]] = [_weakest_department_multiplier]
 
 
 def score_all(
@@ -131,15 +144,18 @@ def score_all(
 
         cost *= (score_weights or {}).get(stype, 1.0)
 
-        for m in _MULTIPLIERS:
-            cost *= m(signal)
-
         signal['projected_cost'] = round(cost, 2)
 
+        # Ranking multipliers adjust `score` only — projected_cost is real £
+        # and feeds downstream value fields (e.g. estimated_value_recovered).
+        rank_cost = cost
+        for m in _MULTIPLIERS:
+            rank_cost *= m(signal)
+
         if scoring_cfg is not None and _composite._get(scoring_cfg, 'composite_weights'):
-            signal['score'] = round(_composite.composite_score(signal, cost, scoring_cfg), 4)
+            signal['score'] = round(_composite.composite_score(signal, rank_cost, scoring_cfg), 4)
         else:
-            signal['score'] = signal['projected_cost']
+            signal['score'] = round(rank_cost, 2)
 
         # Scorers may pin a fixed score via a FIXED_SCORE module constant —
         # used when a signal type has no meaningful cost basis but must still
@@ -221,9 +237,12 @@ def apply_availability_section_dedupe(signals: list[dict], max_per_section: int)
     OSA_STORE_ACTIONABLE + OSA_BIG_DROP + OSA_RECURRING_SLOT signals per
     (store_id, department).
 
-    Signals outside those types are untouched. Within a department the
-    ordering key is (type precedence, score desc): a store-actionable always
-    wins over a big-drop. The loser is dropped only for this run — it
+    Signals outside those two types are untouched. Within a department the
+    ordering key is (pure-weakest flag, type precedence, score desc): a
+    store-actionable always wins over a big-drop, and a pure
+    WEAKEST_DEPARTMENT filler card loses to both — it is deliberately
+    low-value filler, so a genuine same-department card of either type
+    keeps the slot. The loser is dropped only for this run — it
     re-qualifies on the next run, so a genuine big drop on a later day is
     unaffected. Runs after workflow suppression, before apply_top_n_filter,
     so a dropped card's slot refills from the next-best signal.
@@ -235,6 +254,7 @@ def apply_availability_section_dedupe(signals: list[dict], max_per_section: int)
     for sig in sorted(
         signals,
         key=lambda s: (
+            (s.get('trigger_types') or []) == ['WEAKEST_DEPARTMENT'],
             _AVAILABILITY_TYPE_PRECEDENCE.get(s.get('signal_type', ''), 9),
             -s.get('score', 0),
         ),

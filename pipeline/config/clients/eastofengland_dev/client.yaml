@@ -30,6 +30,7 @@ detectors:
   enabled:
     - osa_store_actionable.wow
     - osa_store_actionable.vs_chain
+    - osa_store_actionable.weakest_department
     - osa_big_drop.big_drop
     - osa_recurring_slot.recurring_slot
     - compliance.tick_and_flick_wow
@@ -52,6 +53,12 @@ detector_config:
       min_actionable_lsv:             50.0
       min_actionable_positive_rows:   3
       max_actionable_unknown_row_pct: 10.0
+      # Weakest-department filler (Dan/Dave, 3 Nov; Trello #88): at most one
+      # card/store, worst chain-gap dept within the store's top-N depts by
+      # store-controlled LSV; low score multiplier keeps it behind real signals.
+      min_weakest_chain_gap:          0.01
+      weakest_top_departments:        5
+      min_weakest_lsv:                10.0
 
     OSA_BIG_DROP:
       min_actionable_big_drop:        0.02

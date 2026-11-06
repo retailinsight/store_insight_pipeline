@@ -189,6 +189,13 @@ class ThresholdsConfig(BaseModel):
             raise ValueError(
                 "OSA_STORE_ACTIONABLE.max_actionable_unknown_row_pct must be between 0 and 100"
             )
+        if "min_weakest_chain_gap" in v and not 0.0 <= v["min_weakest_chain_gap"] <= 1.0:
+            raise ValueError("OSA_STORE_ACTIONABLE.min_weakest_chain_gap must be between 0.0 and 1.0")
+        if "min_weakest_lsv" in v and v["min_weakest_lsv"] < 0:
+            raise ValueError("OSA_STORE_ACTIONABLE.min_weakest_lsv must be non-negative")
+        top = v.get("weakest_top_departments")
+        if top is not None and (not isinstance(top, int) or top < 1):
+            raise ValueError("OSA_STORE_ACTIONABLE.weakest_top_departments must be a positive integer")
         return v
 
     @field_validator("COMPLIANCE")
