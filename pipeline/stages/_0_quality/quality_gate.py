@@ -46,12 +46,14 @@ from store_insight.pipeline.tools.source_volume_check import (
 # Daily source dataframe parameters a detector can declare in detect().
 SOURCE_PARAMS = frozenset(DAILY_SOURCES)
 
-# The gate runs at 06:00, before the daily feed load (~11:00). osa and
-# markdown_log land at X+1 by 11:00, so at 06:00 their freshest COMPLETE day
-# is X-2, not X-1 — the 11:30 check's SOURCE_LAG_DAYS of 1 would false-FAIL
-# them every morning and skip their detectors (seen 2026-09-03: only 16
-# Compliance alerts shipped). feedback/markdown_sales/wastage at lag 3 are
-# already complete by 06:00, so they keep the shared lag.
+# The gate runs at 06:00, before the daily feed load (~11:00). osa lands at
+# X+1 by 11:00; markdown_log moved to D+1 delivery on 22 Oct (WASTE-9940 /
+# SD-70220: day X's file lands ~11:00 on X+1), so at 06:00 their freshest
+# COMPLETE day is X-2, not X-1 — a lag of 1 would false-FAIL them every
+# morning and skip their detectors (seen 2026-09-03: only 16 Compliance
+# alerts shipped; seen again 22 Oct–4 Nov after the D+1 switch). feedback/
+# markdown_sales/wastage at lag 3 are already complete by 06:00, so they keep
+# the shared lag.
 GATE_LAG_DAYS = {
     'osa': 2,
     'markdown_log': 2,

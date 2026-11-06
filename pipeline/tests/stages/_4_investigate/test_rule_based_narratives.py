@@ -787,7 +787,7 @@ def test_osa_store_actionable_worst_ppg_sentence():
     out = generate(_osa_store_actionable(facts={
         'ppg_lsv_changes': [{'ppg': 'Vodka', 'latest_week_lsv': {'store_controlled': 120.0}}],
     }))
-    assert 'Vodka is the worst performing PPG.' in out['explanation']
+    assert 'Vodka is the worst performing Sub Department.' in out['explanation']
 
 
 # ---------------------------------------------------------------------------
@@ -841,13 +841,13 @@ def test_osa_big_drop_narrative_names_trading_days():
     assert 'Store-controlled OSCA in SPIRITS dropped 7.0pp in a single day — from 95.0% on Saturday to 88.0% on Sunday.' in out['explanation']
     assert 'lost sales on Sunday while recorded inventory was positive.' in out['explanation']
     assert 'upstream context' not in out['explanation']
-    assert 'On Sunday the leading PPG was Vodka (£120.00 store-controlled lost sales).' in out['explanation']
+    assert 'On Sunday the leading Sub Department was Vodka (£120.00 store-controlled lost sales).' in out['explanation']
     assert out['cost_if_not_fixed'] == (
         "If Sunday's rate continued, the store could lose approximately "
         "£14,000.00 in sales over the next 4 weeks."
     )
     assert out['recommended_action'] == (
-        'The top contributing PPGs were Vodka, Gin and Whisky.'
+        'The top contributing Sub Departments were Vodka, Gin and Whisky.'
     )
 
 
