@@ -6,7 +6,7 @@
 -- Rules preserved verbatim from ComplianceQueries.classified:
 --   state ∈ {completed, partial, couldnt_complete, in_progress, reminder_set,
 --            NOT_ACTIONED}; in_progress needs the action window to still be
---   open at read time — uses CURRENT_TIMESTAMP so the report's "now" is the
+--   open at read time — uses SYSDATE() (UTC NTZ) so classification is session-tz-independent
 --   view's read time. Update if the report rules ever change (V3.0 §5).
 
 CREATE OR REPLACE VIEW STORE_INSIGHT_DB.PUBLIC.CLUSTER_COMPLIANCE_V1 AS
@@ -45,12 +45,12 @@ SELECT e.*, CASE
     WHEN OUTCOME = 'expired' THEN 'NOT_ACTIONED'
     WHEN STATUS = 'completed' AND UPDATED_LOCAL >= SENT_DATE::TIMESTAMP_NTZ
          AND UPDATED_LOCAL < DATEADD(day, 7, SENT_DATE)::TIMESTAMP_NTZ
-         AND UPDATED_UTC <= CURRENT_TIMESTAMP()
+         AND UPDATED_UTC <= SYSDATE()
          AND OUTCOME IN ('completed', 'partial', 'couldnt_complete') THEN OUTCOME
     WHEN STATUS = 'in_progress' AND UPDATED_LOCAL >= SENT_DATE::TIMESTAMP_NTZ
          AND UPDATED_LOCAL < DATEADD(day, 7, SENT_DATE)::TIMESTAMP_NTZ
-         AND UPDATED_UTC <= CURRENT_TIMESTAMP()
-         AND CONVERT_TIMEZONE('UTC', 'Europe/London', CURRENT_TIMESTAMP())
+         AND UPDATED_UTC <= SYSDATE()
+         AND CONVERT_TIMEZONE('UTC', 'Europe/London', SYSDATE())
              < DATEADD(day, 7, SENT_DATE)::TIMESTAMP_NTZ
         THEN 'in_progress'
     WHEN NOT HAS_STATUS AND HAS_REMINDER THEN 'reminder_set'
